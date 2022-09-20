@@ -9,7 +9,8 @@ edition = "2021"
 include = ["src/**/*.rs", "Cargo.toml", "build.rs", "Lib/**/*.py"]
 
 [features]
-default = ["compiler"]
+default = ["compiler", "gc"]
+gc = []
 importlib = []
 encodings = ["importlib"]
 vm-tracing-logging = []
