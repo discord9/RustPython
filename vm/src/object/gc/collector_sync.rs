@@ -8,9 +8,12 @@ use std::{
 use crate::object::gc::trace::GcObjPtr;
 use crate::object::gc::header::Color;
 
+// static GlobalCollector: CcSync = CcSync::default();
+
 #[derive(Debug, Default)]
 pub struct CcSync {
     roots: Mutex<Vec<NonNull<dyn GcObjPtr>>>,
+    pub pause: Mutex<()>
 }
 type ObjRef<'a> = &'a dyn GcObjPtr;
 type ObjPtr = NonNull<dyn GcObjPtr>;
@@ -20,8 +23,6 @@ unsafe fn drop_value(ptr: ObjPtr) {
 }
 
 unsafe fn free(ptr: ObjPtr) {
-    dbg!();
-    println!("free({:?})", ptr);
     debug_assert!(ptr.as_ref().header().rc() == 0);
     debug_assert!(!ptr.as_ref().header().buffered());
     // Box::from_raw(ptr.as_ptr());
@@ -83,14 +84,18 @@ impl CcSync {
     }
 
     fn collect_cycles(&self) {
-        dbg!("collect_cycles(&self)");
+        let lock = self.pause.lock().unwrap();
         self.mark_roots();
         self.scan_roots();
+        // drop lock in here (where the lock should be check in every deref() for ObjectRef)
+        // to not stop the world,  drop() for object can happen
+        // also what's left fro collection should already be in garbage cycle, 
+        // no mutator will operate on them
+        drop(lock);
         self.collect_roots();
     }
 
     fn mark_roots(&self) {
-        dbg!("mark_roots(&self)");
         dbg!(&self.roots);
         let roots: Vec<_> = { self.roots.lock().unwrap().drain(..).collect() };
         *self.roots.lock().unwrap() = roots
@@ -114,7 +119,6 @@ impl CcSync {
             .collect();
     }
     fn scan_roots(&self) {
-        dbg!("scan_roots(&self)");
         self.roots
             .lock()
             .unwrap()
@@ -124,11 +128,8 @@ impl CcSync {
                 self.scan(obj);
             })
             .count();
-        dbg!("end: scan_roots(&self)");
     }
     fn collect_roots(&self) {
-        dbg!("collect_roots(&self)");
-
         // Collecting the nodes into this Vec is difference from the original
         // Bacon-Rajan paper. We need this because we have destructors(RAII) and
         // running them during traversal will cause cycles to be broken which
@@ -143,7 +144,6 @@ impl CcSync {
                 self.collect_white(obj, &mut white);
             })
             .count();
-        dbg!("Should collect: ", &white);
         // Run drop on each of nodes.
         for i in &white {
             // Calling drop() will decrement the reference count on any of our live children.
@@ -173,15 +173,10 @@ impl CcSync {
             obj.trace(&mut |ch| self.collect_white(ch, white));
             // because during trial deletion the reference count was already decremented.
             // and drop() dec once more, so inc it to balance out
-            white.push(unsafe { obj.as_ptr() });
+            white.push(obj.as_ptr() );
         }
     }
     fn mark_gray(&self, obj: ObjRef) {
-        dbg!(
-            "mark_gray(&self, obj: ObjRef)",
-            obj.as_ptr(),
-            obj.header().color()
-        );
         if obj.header().color() != Color::Gray {
             obj.header().set_color(Color::Gray);
             obj.trace(&mut |ch| {
@@ -191,26 +186,21 @@ impl CcSync {
         }
     }
     fn scan(&self, obj: ObjRef) {
-        dbg!("scan(&self, obj: ObjRef)");
         if obj.header().color() == Color::Gray {
             if obj.rc() > 0 {
                 self.scan_black(obj)
             } else {
                 obj.header().set_color(Color::White);
                 obj.trace(&mut |ch| {
-                    dbg!("Trace in scan");
                     self.scan(ch);
                 });
             }
         }
-        dbg!("end: scan(&self, obj: ObjRef)");
     }
     fn scan_black(&self, obj: ObjRef) {
-        dbg!("scan_black(&self, obj: ObjRef)");
         obj.header().set_color(Color::Black);
         dbg!();
         obj.trace(&mut |ch| {
-            dbg!("Trace in scan_black");
             ch.header().inc();
             if ch.header().color() != Color::Black {
                 self.scan_black(ch)
