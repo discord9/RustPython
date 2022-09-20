@@ -1,11 +1,11 @@
 use core::ptr::NonNull;
-
+use crate::object::gc::header::GcHeader;
 pub trait GcObjPtr: GcTrace {
     fn inc(&self);
     fn dec(&self);
     fn rc(&self) -> usize;
     /// return object header
-    ///fn header(&self) -> &GcHeader;
+    fn header(&self) -> &GcHeader;
     fn as_ptr(&self) -> NonNull<dyn GcObjPtr>;
 }
 
