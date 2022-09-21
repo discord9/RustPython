@@ -8,6 +8,7 @@ use std::{
 
 use crate::object::gc::header::Color;
 use crate::object::gc::trace::GcObjPtr;
+use crate::object::gc::GcStatus;
 
 /// only use for roots's pointer to object, mark as safe to send
 #[repr(transparent)]
@@ -81,6 +82,7 @@ impl CcSync {
     /// if the last ref to a object call decrement() on object,
     /// then this object should be considered freed.
     pub unsafe fn decrement(&self, obj: ObjRef) {
+        // TODO: change to return status if not buffered
         if obj.header().rc() > 0 {
             // prevent RAII Drop to drop below zero
             let rc = obj.header().dec();
@@ -192,6 +194,8 @@ impl CcSync {
                     ch.header().inc();
                 }
             });
+            // so to allow drop() to drop by itself
+            obj.header().set_buffered(false);
             unsafe {
                 drop_value(*i);
             }

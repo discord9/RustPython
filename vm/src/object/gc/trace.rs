@@ -3,7 +3,7 @@ use crate::object::gc::header::GcHeader;
 
 /// indicate what to do with the object afer calling dec()
 #[derive(PartialEq, Eq)]
-pub enum Status{
+pub enum GcStatus{
     /// should be drop by caller
     ShouldDrop,
     /// already buffered, will be drop by collector, no more action is required at caller
@@ -13,7 +13,7 @@ pub enum Status{
 }
 pub trait GcObjPtr: GcTrace {
     fn inc(&self);
-    fn dec(&self)->Status;
+    fn dec(&self)->GcStatus;
     fn rc(&self) -> usize;
     /// return object header
     fn header(&self) -> &GcHeader;
