@@ -10,7 +10,7 @@ use crate::object::gc::header::Color;
 use crate::object::gc::trace::GcObjPtr;
 use crate::object::gc::GcStatus;
 
-/// only use for roots's pointer to object, mark as safe to send
+/// only use for roots's pointer to object, mark `NonNull` as safe to send
 #[repr(transparent)]
 pub(crate) struct WrappedPtr<T: ?Sized>(NonNull<T>);
 unsafe impl<T: ?Sized> Send for WrappedPtr<T> {}
@@ -48,6 +48,8 @@ pub static GLOBAL_COLLECTOR: Lazy<Arc<CcSync>> = Lazy::new(||Arc::new(CcSync {
 #[derive(Debug, Default)]
 pub struct CcSync {
     roots: Mutex<Vec<WrappedPtr<dyn GcObjPtr>>>,
+    /// for stop the world, will be try to check lock every time deref ObjecteRef
+    /// to achive pausing
     pub pause: Mutex<()>,
 }
 type ObjRef<'a> = &'a dyn GcObjPtr;
@@ -81,20 +83,24 @@ impl CcSync {
     /// # Safety
     /// if the last ref to a object call decrement() on object,
     /// then this object should be considered freed.
-    pub unsafe fn decrement(&self, obj: ObjRef) {
+    pub unsafe fn decrement(&self, obj: ObjRef)->GcStatus {
         // TODO: change to return status if not buffered
         if obj.header().rc() > 0 {
             // prevent RAII Drop to drop below zero
             let rc = obj.header().dec();
             if rc == 0 {
-                self.release(obj);
+                self.release(obj)
             } else {
                 self.possible_root(obj);
+                GcStatus::ShouldKeep
             }
+        }else{
+            // FIXME(discord9): confirm if rc==0 then should drop
+            GcStatus::ShouldDrop
         }
     }
 
-    unsafe fn release(&self, obj: ObjRef) {
+    unsafe fn release(&self, obj: ObjRef)->GcStatus {
         // because drop obj itself will drop all ObjRef store by object itself once more,
         // so balance out in here
         // by doing nothing
@@ -103,9 +109,13 @@ impl CcSync {
         // self.decrement(ch);
         //});
         obj.header().set_color(Color::Black);
-        // TODO make it do nothing
+        // before it is free in here, 
+        // but now change to passing message to allow it to drop outside
         if !obj.header().buffered() {
-            unsafe { free(obj.as_ptr()) }
+            GcStatus::ShouldDrop
+            // unsafe { free(obj.as_ptr()) }
+        }else{
+            GcStatus::Buffered
         }
     }
 
@@ -133,7 +143,6 @@ impl CcSync {
     }
 
     fn mark_roots(&self) {
-        dbg!(&self.roots);
         let roots: Vec<_> = { self.roots.lock().unwrap().drain(..).collect() };
         *self.roots.lock().unwrap() = roots
             .into_iter()
@@ -146,6 +155,7 @@ impl CcSync {
                     obj.header().set_buffered(false);
                     if obj.header().color() == Color::Black && obj.rc() == 0 {
                         unsafe {
+                            drop_value(ptr.0);
                             free(ptr.0);
                             // obj is dangling after this line?
                         }
@@ -238,13 +248,11 @@ impl CcSync {
     }
     fn scan_black(&self, obj: ObjRef) {
         obj.header().set_color(Color::Black);
-        dbg!();
         obj.trace(&mut |ch| {
             ch.header().inc();
             if ch.header().color() != Color::Black {
                 self.scan_black(ch)
             }
         });
-        dbg!();
     }
 }
