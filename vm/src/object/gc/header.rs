@@ -1,10 +1,12 @@
 use std::sync::{
-    atomic::{AtomicUsize, Ordering},
+    atomic::Ordering,
     Mutex,
 };
+
+use rustpython_common::atomic::PyAtomic;
 #[cfg(feature = "threading")]
 pub struct GcHeader {
-    ref_cnt: AtomicUsize,
+    ref_cnt: PyAtomic<usize>,
     color: Mutex<Color>,
     buffered: Mutex<bool>,
     // log_ptr: Mutex<Option<LogPointer>>,
