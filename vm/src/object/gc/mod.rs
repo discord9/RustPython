@@ -7,4 +7,4 @@ mod gc_obj;
 
 use header::GcHeader;
 use collector_sync::CcSync;
-use trace::{GcObjPtr, GcTrace};
+use trace::{GcObjPtr, GcTrace, TracerFn};

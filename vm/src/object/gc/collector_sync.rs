@@ -1,19 +1,18 @@
 use std::{
-    ptr::{NonNull, self},
-    sync::{
-        Mutex,
-    }, alloc::{dealloc, Layout},
+    alloc::{dealloc, Layout},
+    ptr::{self, NonNull},
+    sync::Mutex,
 };
 
-use crate::object::gc::trace::GcObjPtr;
 use crate::object::gc::header::Color;
+use crate::object::gc::trace::GcObjPtr;
 
 // static GlobalCollector: CcSync = CcSync::default();
 
 #[derive(Debug, Default)]
 pub struct CcSync {
     roots: Mutex<Vec<NonNull<dyn GcObjPtr>>>,
-    pub pause: Mutex<()>
+    pub pause: Mutex<()>,
 }
 type ObjRef<'a> = &'a dyn GcObjPtr;
 type ObjPtr = NonNull<dyn GcObjPtr>;
@@ -43,16 +42,17 @@ impl CcSync {
         obj.header().set_color(Color::Black);
     }
 
-    pub fn decrement(&self, obj: ObjRef) {
-        unsafe {
-            if obj.header().rc() > 0 {
-                // prevent RAII Drop to drop below zero
-                let rc = obj.header().dec();
-                if rc == 0 {
-                    self.release(obj);
-                } else {
-                    self.possible_root(obj);
-                }
+    /// # Safety
+    /// if the last ref to a object call decrement() on object,
+    /// then this object should be considered freed.
+    pub unsafe fn decrement(&self, obj: ObjRef) {
+        if obj.header().rc() > 0 {
+            // prevent RAII Drop to drop below zero
+            let rc = obj.header().dec();
+            if rc == 0 {
+                self.release(obj);
+            } else {
+                self.possible_root(obj);
             }
         }
     }
@@ -89,7 +89,7 @@ impl CcSync {
         self.scan_roots();
         // drop lock in here (where the lock should be check in every deref() for ObjectRef)
         // to not stop the world,  drop() for object can happen
-        // also what's left for collection should already be in garbage cycle, 
+        // also what's left for collection should already be in garbage cycle,
         // no mutator will operate on them
         drop(lock);
         self.collect_roots();
@@ -161,10 +161,10 @@ impl CcSync {
                 drop_value(*i);
             }
         }
-        // drop first, deallocate later so to avoid heap corruption 
+        // drop first, deallocate later so to avoid heap corruption
         // cause by access pointer of already dropped value's mem?
         for i in &white {
-            unsafe {free(*i)}
+            unsafe { free(*i) }
         }
     }
     fn collect_white(&self, obj: ObjRef, white: &mut Vec<NonNull<dyn GcObjPtr>>) {
@@ -173,7 +173,7 @@ impl CcSync {
             obj.trace(&mut |ch| self.collect_white(ch, white));
             // because during trial deletion the reference count was already decremented.
             // and drop() dec once more, so inc it to balance out
-            white.push(obj.as_ptr() );
+            white.push(obj.as_ptr());
         }
     }
     fn mark_gray(&self, obj: ObjRef) {
