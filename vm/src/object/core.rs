@@ -13,8 +13,9 @@
 
 use super::{
     ext::{AsObject, PyResult},
-    payload::PyObjectPayload,
+    payload::PyObjectPayload
 };
+use crate::object::gc::{GcHeader, CcSync, GLOBAL_COLLECTOR};
 use crate::common::{
     atomic::{OncePtr, PyAtomic, Radium},
     linked_list::{Link, LinkedList, Pointers},
@@ -34,7 +35,7 @@ use std::{
     marker::PhantomData,
     mem::ManuallyDrop,
     ops::Deref,
-    ptr::{self, NonNull},
+    ptr::{self, NonNull}, sync::Arc,
 };
 
 // so, PyObjectRef is basically equivalent to `PyRc<PyInner<dyn PyObjectPayload>>`, except it's
@@ -107,7 +108,11 @@ impl PyObjVTable {
 /// payload can be a rust float or rust int in case of float and int objects.
 #[repr(C)]
 struct PyInner<T> {
+    //#[cfg(not(feature = "gc"))]
     ref_count: RefCount,
+    //#[cfg(feature = "gc")]
+    header: GcHeader,
+    gc: Arc<CcSync>,
     // TODO: move typeid into vtable once TypeId::of is const
     typeid: TypeId,
     vtable: &'static PyObjVTable,
@@ -432,6 +437,8 @@ impl<T: PyObjectPayload> PyInner<T> {
         let member_count = typ.slots.member_count;
         Box::new(PyInner {
             ref_count: RefCount::new(),
+            header: GcHeader::new(),
+            gc: GLOBAL_COLLECTOR.clone(),
             typeid: TypeId::of::<T>(),
             vtable: PyObjVTable::of::<T>(),
             typ: PyRwLock::new(typ),
@@ -1136,6 +1143,8 @@ pub(crate) fn init_type_hierarchy() -> (PyTypeRef, PyTypeRef, PyTypeRef) {
         let type_type_ptr = Box::into_raw(Box::new(partially_init!(
             PyInner::<PyType> {
                 ref_count: RefCount::new(),
+                header: GcHeader::new(),
+                gc: GLOBAL_COLLECTOR.clone(),
                 typeid: TypeId::of::<PyType>(),
                 vtable: PyObjVTable::of::<PyType>(),
                 dict: None,
@@ -1148,6 +1157,8 @@ pub(crate) fn init_type_hierarchy() -> (PyTypeRef, PyTypeRef, PyTypeRef) {
         let object_type_ptr = Box::into_raw(Box::new(partially_init!(
             PyInner::<PyType> {
                 ref_count: RefCount::new(),
+                header: GcHeader::new(),
+                gc: GLOBAL_COLLECTOR.clone(),
                 typeid: TypeId::of::<PyType>(),
                 vtable: PyObjVTable::of::<PyType>(),
                 dict: None,

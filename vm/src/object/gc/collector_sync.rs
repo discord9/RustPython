@@ -1,17 +1,52 @@
 use std::{
     alloc::{dealloc, Layout},
+    fmt,
+    ops::Deref,
     ptr::{self, NonNull},
-    sync::Mutex,
+    sync::{Mutex, Arc},
 };
 
 use crate::object::gc::header::Color;
 use crate::object::gc::trace::GcObjPtr;
 
-// static GlobalCollector: CcSync = CcSync::default();
+/// only use for roots's pointer to object, mark as safe to send
+#[repr(transparent)]
+pub(crate) struct WrappedPtr<T: ?Sized>(NonNull<T>);
+unsafe impl<T: ?Sized> Send for WrappedPtr<T> {}
+impl<T: ?Sized> Deref for WrappedPtr<T> {
+    type Target = NonNull<T>;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T: ?Sized> fmt::Debug for WrappedPtr<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.0)
+    }
+}
+
+impl<T: ?Sized> From<NonNull<T>> for WrappedPtr<T> {
+    fn from(ptr: NonNull<T>) -> Self {
+        Self(ptr)
+    }
+}
+
+impl<T: ?Sized> From<WrappedPtr<T>> for NonNull<T> {
+    fn from(w: WrappedPtr<T>) -> Self {
+        w.0
+    }
+}
+use once_cell::sync::Lazy;
+/// The global collector, might change it to allow custom collector?
+pub static GLOBAL_COLLECTOR: Lazy<Arc<CcSync>> = Lazy::new(||Arc::new(CcSync {
+    roots: Mutex::new(Vec::new()),
+    pause: Mutex::new(()),
+}));
 
 #[derive(Debug, Default)]
 pub struct CcSync {
-    roots: Mutex<Vec<NonNull<dyn GcObjPtr>>>,
+    roots: Mutex<Vec<WrappedPtr<dyn GcObjPtr>>>,
     pub pause: Mutex<()>,
 }
 type ObjRef<'a> = &'a dyn GcObjPtr;
@@ -66,7 +101,7 @@ impl CcSync {
         // self.decrement(ch);
         //});
         obj.header().set_color(Color::Black);
-
+        // TODO make it do nothing
         if !obj.header().buffered() {
             unsafe { free(obj.as_ptr()) }
         }
@@ -78,7 +113,7 @@ impl CcSync {
             if !obj.header().buffered() {
                 obj.header().set_buffered(true);
                 let mut roots = self.roots.lock().unwrap();
-                roots.push(obj.as_ptr());
+                roots.push(obj.as_ptr().into());
             }
         }
     }
@@ -109,7 +144,7 @@ impl CcSync {
                     obj.header().set_buffered(false);
                     if obj.header().color() == Color::Black && obj.rc() == 0 {
                         unsafe {
-                            free(*ptr);
+                            free(ptr.0);
                             // obj is dangling after this line?
                         }
                     }

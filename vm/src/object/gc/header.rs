@@ -28,27 +28,30 @@ impl GcHeader {
     pub fn color(&self) -> Color {
         *self.color.lock().unwrap()
     }
-    pub(in crate::object::gc)fn set_color(&self, new_color: Color) {
+    pub fn set_color(&self, new_color: Color) {
         // dbg!(new_color);
         *self.color.lock().unwrap() = new_color;
     }
     pub fn buffered(&self) -> bool {
         *self.buffered.lock().unwrap()
     }
-    pub(in crate::object::gc) fn set_buffered(&self, buffered: bool) {
+    pub  fn set_buffered(&self, buffered: bool) {
         dbg!(buffered);
         *self.buffered.lock().unwrap() = buffered;
     }
     /// simple RC += 1
-    pub(in crate::object::gc)fn inc(&self) -> usize {
+    pub fn inc(&self) -> usize {
         self.ref_cnt.fetch_add(1, Ordering::Relaxed) + 1
     }
     /// simple RC -= 1
-    pub(in crate::object::gc)fn dec(&self) -> usize {
+    pub fn dec(&self) -> usize {
         self.ref_cnt.fetch_sub(1, Ordering::Relaxed) - 1
     }
-    pub(in crate::object::gc) fn rc(&self) -> usize {
+    pub fn rc(&self) -> usize {
         self.ref_cnt.load(Ordering::Relaxed)
+    }
+    pub fn get(&self) -> usize {
+        self.rc()
     }
 }
 
