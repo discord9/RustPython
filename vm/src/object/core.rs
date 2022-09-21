@@ -72,8 +72,10 @@ use std::{
 // concrete type to work with before we ever access the `payload` field**
 
 /// A type to just represent "we've erased the type of this object, cast it before you use it"
+#[derive(Debug)]
 struct Erased;
-
+#[cfg(feature = "gc")]
+impl PyObjectPayload for Erased{}
 struct PyObjVTable {
     drop_dealloc: unsafe fn(*mut PyObject),
     debug: unsafe fn(&PyObject, &mut fmt::Formatter) -> fmt::Result,
@@ -107,9 +109,7 @@ impl PyObjVTable {
 /// payload can be a rust float or rust int in case of float and int objects.
 #[repr(C)]
 struct PyInner<T> {
-    //#[cfg(not(feature = "gc"))]
     ref_count: RefCount,
-    //#[cfg(feature = "gc")]
     header: GcHeader,
     gc: Arc<CcSync>,
     // TODO: move typeid into vtable once TypeId::of is const
@@ -124,31 +124,33 @@ struct PyInner<T> {
     payload: T,
 }
 
+#[cfg(feature = "gc")]
 impl<T: PyObjectPayload> GcTrace for PyInner<T> {
     fn trace(&self, tracer_fn: &mut super::gc::TracerFn) {
         // TODO(discord9): cast it into payload using TypeId, then call corrsponding trace()
     }
 }
 
+#[cfg(feature = "gc")]
 impl<T: PyObjectPayload> GcObjPtr for PyInner<T> {
     fn inc(&self) {
         self.gc.increment(self)
     }
 
     fn dec(&self)->GcStatus {
-        todo!()
+        unsafe {self.gc.decrement(self)}
     }
 
     fn rc(&self) -> usize {
-        todo!()
+        self.header().rc()
     }
 
     fn header(&self) -> &GcHeader {
-        todo!()
+        &self.header
     }
 
     fn as_ptr(&self) -> NonNull<dyn GcObjPtr> {
-        todo!()
+        NonNull::from(self)
     }
 }
 
@@ -511,6 +513,15 @@ impl Deref for PyObjectRef {
     type Target = PyObject;
     #[inline(always)]
     fn deref(&self) -> &PyObject {
+        #[cfg(feature = "gc")]
+        {
+            let obj = unsafe { self.ptr.as_ref() };
+            {
+                let _lock = obj.0.gc.pause.lock().unwrap();
+            }
+            obj
+        }
+        #[cfg(not(feature = "gc"))]
         unsafe { self.ptr.as_ref() }
     }
 }
@@ -856,6 +867,9 @@ impl Borrow<PyObject> for PyObjectRef {
 impl AsRef<PyObject> for PyObjectRef {
     #[inline(always)]
     fn as_ref(&self) -> &PyObject {
+        #[cfg(feature = "gc")]
+        unsafe {self.ptr.as_ref()}
+        #[cfg(not(feature = "gc"))]
         self
     }
 }
@@ -877,6 +891,14 @@ impl<'a, T: PyObjectPayload> From<&'a Py<T>> for &'a PyObject {
 impl Drop for PyObjectRef {
     #[inline]
     fn drop(&mut self) {
+        #[cfg(feature = "gc")]
+        {
+            if self.as_ref().0.dec() == GcStatus::ShouldDrop {
+                unsafe { PyObject::drop_slow(self.ptr) }
+            }
+        }
+        
+        #[cfg(not(feature = "gc"))]
         if self.0.ref_count.dec() {
             unsafe { PyObject::drop_slow(self.ptr) }
         }
