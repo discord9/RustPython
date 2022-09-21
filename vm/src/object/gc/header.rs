@@ -38,7 +38,6 @@ impl GcHeader {
         *self.buffered.lock().unwrap()
     }
     pub  fn set_buffered(&self, buffered: bool) {
-        dbg!(buffered);
         *self.buffered.lock().unwrap() = buffered;
     }
     /// simple RC += 1
