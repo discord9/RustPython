@@ -134,10 +134,12 @@ impl<T: PyObjectPayload> GcTrace for PyInner<T> {
 
 #[cfg(feature = "gc")]
 impl<T: PyObjectPayload> GcObjPtr for PyInner<T> {
+    /// call increment() of gc
     fn inc(&self) {
         self.gc.increment(self)
     }
 
+    /// call decrement() of gc
     fn dec(&self) -> GcStatus {
         unsafe { self.gc.decrement(self) }
     }
@@ -219,7 +221,12 @@ impl WeakRefList {
         if is_generic {
             if let Some(generic_weakref) = inner.generic_weakref {
                 let generic_weakref = unsafe { generic_weakref.as_ref() };
-                if generic_weakref.0.ref_count.get() != 0 {
+
+                if if cfg!(feature = "gc") {
+                    generic_weakref.0.rc() != 0
+                } else {
+                    generic_weakref.0.ref_count.get() != 0
+                } {
                     return generic_weakref.to_owned();
                 }
             }
@@ -321,7 +328,13 @@ impl WeakRefList {
 
 impl WeakListInner {
     fn iter(&self) -> impl Iterator<Item = &Py<PyWeak>> {
-        self.list.iter().filter(|wr| wr.0.ref_count.get() > 0)
+        self.list.iter().filter(|wr| {
+            if cfg!(feature = "gc") {
+                wr.0.rc() > 0
+            } else {
+                wr.0.ref_count.get() > 0
+            }
+        })
     }
 }
 
@@ -376,7 +389,11 @@ impl PyWeak {
         let guard = unsafe { self.parent.as_ref().lock() };
         let obj_ptr = guard.obj?;
         unsafe {
-            if !obj_ptr.as_ref().0.ref_count.safe_inc() {
+            if if cfg!(feature = "gc") {
+                !obj_ptr.as_ref().0.header().safe_inc()
+            } else {
+                !obj_ptr.as_ref().0.ref_count.safe_inc()
+            } {
                 return None;
             }
             Some(PyObjectRef::from_raw(obj_ptr.as_ptr()))
@@ -534,7 +551,12 @@ impl ToOwned for PyObject {
 
     #[inline(always)]
     fn to_owned(&self) -> Self::Owned {
-        self.0.ref_count.inc();
+        if cfg!(feature = "gc") {
+            self.0.inc();
+        } else {
+            self.0.ref_count.inc();
+        }
+        
         PyObjectRef {
             ptr: NonNull::from(self),
         }
@@ -783,7 +805,12 @@ impl PyObject {
 
     #[inline(always)]
     pub fn strong_count(&self) -> usize {
-        self.0.ref_count.get()
+        if cfg!(feature = "gc") {
+            self.0.rc()
+        } else {
+            self.0.ref_count.get()
+        }
+        
     }
 
     #[inline]
@@ -806,12 +833,23 @@ impl PyObject {
             slot_del: fn(&PyObject, &VirtualMachine) -> PyResult<()>,
         ) -> Result<(), ()> {
             let ret = crate::vm::thread::with_vm(zelf, |vm| {
-                zelf.0.ref_count.inc();
+                if cfg!(feature = "gc") {
+                    zelf.0.inc();
+                } else {
+                    zelf.0.ref_count.inc();
+                }
+                
                 if let Err(e) = slot_del(zelf, vm) {
                     let del_method = zelf.get_class_attr(identifier!(vm, __del__)).unwrap();
                     vm.run_unraisable(e, None, del_method);
                 }
-                zelf.0.ref_count.dec()
+                if cfg!(feature = "gc") {
+                    // FIXME(discord9): figure out if Buffered should drop.
+                    zelf.0.dec() == GcStatus::ShouldDrop || zelf.0.dec() == GcStatus::Buffered
+                } else {
+                    zelf.0.ref_count.dec()
+                }
+                
             });
             match ret {
                 // the decref right above set ref_count back to 0
@@ -852,11 +890,21 @@ impl PyObject {
     /// # Safety
     /// This call will make the object live forever.
     pub(crate) unsafe fn mark_intern(&self) {
-        self.0.ref_count.leak();
+        if cfg!(feature = "gc") {
+            self.0.header().leak();
+        } else {
+            self.0.ref_count.leak();
+        }
+        
     }
 
     pub(crate) fn is_interned(&self) -> bool {
-        self.0.ref_count.is_leaked()
+        if cfg!(feature = "gc") {
+            self.0.header().is_leaked()
+        } else {
+            self.0.ref_count.is_leaked()
+        }
+        
     }
 
     pub(crate) fn get_slot(&self, offset: usize) -> Option<PyObjectRef> {
@@ -899,7 +947,7 @@ impl<'a, T: PyObjectPayload> From<&'a Py<T>> for &'a PyObject {
 impl Drop for PyObjectRef {
     #[inline]
     fn drop(&mut self) {
-        /* 
+        /*
         #[cfg(feature = "gc")]
         {
             if self.as_ref().0.dec() == GcStatus::ShouldDrop {
@@ -909,7 +957,12 @@ impl Drop for PyObjectRef {
 
         #[cfg(not(feature = "gc"))]
         */
-        if self.0.ref_count.dec() {
+        
+        if if cfg!(feature = "gc") {
+            self.0.dec() == GcStatus::ShouldDrop
+        } else {
+            self.0.ref_count.dec()
+        } {
             unsafe { PyObject::drop_slow(self.ptr) }
         }
     }
@@ -944,7 +997,11 @@ impl<T: PyObjectPayload> ToOwned for Py<T> {
 
     #[inline(always)]
     fn to_owned(&self) -> Self::Owned {
-        self.0.ref_count.inc();
+        if cfg!(feature = "gc") {
+            self.0.inc();
+        } else {
+            self.0.ref_count.inc();
+        }
         PyRef {
             ptr: NonNull::from(self),
         }
@@ -1018,7 +1075,11 @@ impl<T: PyObjectPayload> fmt::Debug for PyRef<T> {
 impl<T: PyObjectPayload> Drop for PyRef<T> {
     #[inline]
     fn drop(&mut self) {
-        if self.0.ref_count.dec() {
+        if if cfg!(feature = "gc") {
+            self.0.dec() == GcStatus::ShouldDrop
+        } else {
+            self.0.ref_count.dec()
+        } {
             unsafe { PyObject::drop_slow(self.ptr.cast::<PyObject>()) }
         }
     }
@@ -1132,7 +1193,9 @@ where
             obj
         }
         #[cfg(not(feature = "gc"))]
-        unsafe { self.ptr.as_ref() }
+        unsafe {
+            self.ptr.as_ref()
+        }
     }
 }
 
@@ -1247,12 +1310,21 @@ pub(crate) fn init_type_hierarchy() -> (PyTypeRef, PyTypeRef, PyTypeRef) {
             type_type_ptr as *mut MaybeUninit<PyInner<PyType>> as *mut PyInner<PyType>;
 
         unsafe {
-            (*type_type_ptr).ref_count.inc();
+            if cfg!(feature = "gc") {
+                (*type_type_ptr).inc();
+            } else {
+                (*type_type_ptr).ref_count.inc();
+            }
+            
             ptr::write(
                 &mut (*object_type_ptr).typ as *mut PyRwLock<PyTypeRef> as *mut UninitRef<PyType>,
                 PyRwLock::new(NonNull::new_unchecked(type_type_ptr)),
             );
-            (*type_type_ptr).ref_count.inc();
+            if cfg!(feature = "gc") {
+                (*type_type_ptr).inc();
+            } else {
+                (*type_type_ptr).ref_count.inc();
+            }
             ptr::write(
                 &mut (*type_type_ptr).typ as *mut PyRwLock<PyTypeRef> as *mut UninitRef<PyType>,
                 PyRwLock::new(NonNull::new_unchecked(type_type_ptr)),
