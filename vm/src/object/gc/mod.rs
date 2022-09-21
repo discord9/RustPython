@@ -5,6 +5,6 @@ mod collector_sync;
 mod header;
 mod gc_obj;
 
-use header::GcHeader;
-use collector_sync::CcSync;
-use trace::{GcObjPtr, GcTrace, TracerFn};
+pub use header::GcHeader;
+pub use collector_sync::{CcSync, GLOBAL_COLLECTOR};
+pub use trace::{GcObjPtr, GcTrace, TracerFn};
