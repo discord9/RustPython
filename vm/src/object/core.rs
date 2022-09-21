@@ -15,7 +15,7 @@ use super::{
     ext::{AsObject, PyResult},
     payload::PyObjectPayload
 };
-use crate::object::gc::{GcHeader, CcSync, GLOBAL_COLLECTOR};
+use crate::object::gc::{GcHeader, CcSync, GLOBAL_COLLECTOR, GcObjPtr, GcTrace};
 use crate::common::{
     atomic::{OncePtr, PyAtomic, Radium},
     linked_list::{Link, LinkedList, Pointers},
@@ -122,6 +122,12 @@ struct PyInner<T> {
     slots: Box<[PyRwLock<Option<PyObjectRef>>]>,
 
     payload: T,
+}
+
+impl<T: PyObjectPayload> GcTrace for PyInner<T> {
+    fn trace(&self, tracer_fn: &mut super::gc::TracerFn) {
+        // TODO(discord9): cast it into payload using TypeId, then call corrsponding trace()
+    }
 }
 
 impl<T: fmt::Debug> fmt::Debug for PyInner<T> {

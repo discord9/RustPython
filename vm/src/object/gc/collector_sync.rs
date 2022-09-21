@@ -38,7 +38,7 @@ impl<T: ?Sized> From<WrappedPtr<T>> for NonNull<T> {
     }
 }
 use once_cell::sync::Lazy;
-/// The global collector, might change it to allow custom collector?
+/// The global cycle collector, which collect cycle references for PyInner<T>
 pub static GLOBAL_COLLECTOR: Lazy<Arc<CcSync>> = Lazy::new(||Arc::new(CcSync {
     roots: Mutex::new(Vec::new()),
     pause: Mutex::new(()),
