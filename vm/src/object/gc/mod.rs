@@ -3,6 +3,7 @@ mod trace;
 /// #[cfg(not(feature = "threading"))]
 mod collector_sync;
 mod header;
+mod gc_obj;
 
 use header::GcHeader;
 use collector_sync::CcSync;
