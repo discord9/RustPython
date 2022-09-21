@@ -900,6 +900,7 @@ impl<'a, T: PyObjectPayload> From<&'a Py<T>> for &'a PyObject {
 impl Drop for PyObjectRef {
     #[inline]
     fn drop(&mut self) {
+        /* 
         #[cfg(feature = "gc")]
         {
             if self.as_ref().0.dec() == GcStatus::ShouldDrop {
@@ -908,6 +909,7 @@ impl Drop for PyObjectRef {
         }
 
         #[cfg(not(feature = "gc"))]
+        */
         if self.0.ref_count.dec() {
             unsafe { PyObject::drop_slow(self.ptr) }
         }
