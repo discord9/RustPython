@@ -155,8 +155,13 @@ impl CcSync {
                     obj.header().set_buffered(false);
                     if obj.header().color() == Color::Black && obj.rc() == 0 {
                         unsafe {
+                            // can drop directly because no one is refering it
+                            // (unlike in collect_white where drop_in_place first and deallocate later)
+                            Box::from_raw(ptr.0.as_ptr());
+                            /*
                             drop_value(ptr.0);
                             free(ptr.0);
+                             */
                             // obj is dangling after this line?
                         }
                     }
@@ -211,7 +216,8 @@ impl CcSync {
             }
         }
         // drop first, deallocate later so to avoid heap corruption
-        // cause by access pointer of already dropped value's mem?
+        // cause by circular ref and therefore
+        // access pointer of already dropped value's mem?
         for i in &white {
             unsafe { free(*i) }
         }
