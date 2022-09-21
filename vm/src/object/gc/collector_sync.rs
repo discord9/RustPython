@@ -89,7 +89,7 @@ impl CcSync {
         self.scan_roots();
         // drop lock in here (where the lock should be check in every deref() for ObjectRef)
         // to not stop the world,  drop() for object can happen
-        // also what's left fro collection should already be in garbage cycle, 
+        // also what's left for collection should already be in garbage cycle, 
         // no mutator will operate on them
         drop(lock);
         self.collect_roots();
