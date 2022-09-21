@@ -13,15 +13,15 @@
 
 use super::{
     ext::{AsObject, PyResult},
-    payload::PyObjectPayload
+    payload::PyObjectPayload,
 };
-use crate::object::gc::{GcHeader, CcSync, GLOBAL_COLLECTOR, GcObjPtr, GcTrace, GcStatus};
 use crate::common::{
     atomic::{OncePtr, PyAtomic, Radium},
     linked_list::{Link, LinkedList, Pointers},
     lock::{PyMutex, PyMutexGuard, PyRwLock},
     refcount::RefCount,
 };
+use crate::object::gc::{CcSync, GcHeader, GcObjPtr, GcStatus, GcTrace, GLOBAL_COLLECTOR};
 use crate::{
     builtins::{PyDictRef, PyTypeRef},
     vm::VirtualMachine,
@@ -35,7 +35,8 @@ use std::{
     marker::PhantomData,
     mem::ManuallyDrop,
     ops::Deref,
-    ptr::{self, NonNull}, sync::Arc,
+    ptr::{self, NonNull},
+    sync::Arc,
 };
 
 // so, PyObjectRef is basically equivalent to `PyRc<PyInner<dyn PyObjectPayload>>`, except it's
@@ -75,7 +76,7 @@ use std::{
 #[derive(Debug)]
 struct Erased;
 #[cfg(feature = "gc")]
-impl PyObjectPayload for Erased{}
+impl PyObjectPayload for Erased {}
 struct PyObjVTable {
     drop_dealloc: unsafe fn(*mut PyObject),
     debug: unsafe fn(&PyObject, &mut fmt::Formatter) -> fmt::Result,
@@ -137,8 +138,8 @@ impl<T: PyObjectPayload> GcObjPtr for PyInner<T> {
         self.gc.increment(self)
     }
 
-    fn dec(&self)->GcStatus {
-        unsafe {self.gc.decrement(self)}
+    fn dec(&self) -> GcStatus {
+        unsafe { self.gc.decrement(self) }
     }
 
     fn rc(&self) -> usize {
@@ -522,7 +523,9 @@ impl Deref for PyObjectRef {
             obj
         }
         #[cfg(not(feature = "gc"))]
-        unsafe { self.ptr.as_ref() }
+        unsafe {
+            self.ptr.as_ref()
+        }
     }
 }
 
@@ -539,6 +542,14 @@ impl ToOwned for PyObject {
 }
 
 impl PyObjectRef {
+    /// access inner object even in gc pausing
+    ///
+    /// The rationale here is to use as a escape hatch when gc pausing `deref` access
+    #[cfg(feature = "gc")]
+    pub fn no_pausing_ref(&self) -> &PyObject {
+        unsafe { self.ptr.as_ref() }
+    }
+
     #[inline(always)]
     pub fn into_raw(self) -> *const PyObject {
         let ptr = self.as_raw();
@@ -867,9 +878,6 @@ impl Borrow<PyObject> for PyObjectRef {
 impl AsRef<PyObject> for PyObjectRef {
     #[inline(always)]
     fn as_ref(&self) -> &PyObject {
-        #[cfg(feature = "gc")]
-        unsafe {self.ptr.as_ref()}
-        #[cfg(not(feature = "gc"))]
         self
     }
 }
@@ -897,7 +905,7 @@ impl Drop for PyObjectRef {
                 unsafe { PyObject::drop_slow(self.ptr) }
             }
         }
-        
+
         #[cfg(not(feature = "gc"))]
         if self.0.ref_count.dec() {
             unsafe { PyObject::drop_slow(self.ptr) }
@@ -946,6 +954,11 @@ impl<T: PyObjectPayload> Deref for Py<T> {
 
     #[inline(always)]
     fn deref(&self) -> &Self::Target {
+        // stop the world for garbage collector
+        #[cfg(feature = "gc")]
+        {
+            let _lock = self.0.gc.pause.lock().unwrap();
+        }
         &self.0.payload
     }
 }
@@ -1108,6 +1121,15 @@ where
 
     #[inline(always)]
     fn deref(&self) -> &Py<T> {
+        #[cfg(feature = "gc")]
+        {
+            let obj = unsafe { self.ptr.as_ref() };
+            {
+                let _lock = obj.0.gc.pause.lock().unwrap();
+            }
+            obj
+        }
+        #[cfg(not(feature = "gc"))]
         unsafe { self.ptr.as_ref() }
     }
 }
