@@ -15,12 +15,12 @@ use super::{
     ext::{AsObject, PyResult},
     payload::PyObjectPayload,
 };
-use crate::common::{
+use crate::{common::{
     atomic::{OncePtr, PyAtomic, Radium},
     linked_list::{Link, LinkedList, Pointers},
     lock::{PyMutex, PyMutexGuard, PyRwLock},
     refcount::RefCount,
-};
+} };
 use crate::object::gc::{GcHeader, GcObjPtr, GcStatus, GcTrace, TracerFn};
 use crate::{
     builtins::{PyDictRef, PyTypeRef},
@@ -126,7 +126,22 @@ struct PyInner<T> {
 #[cfg(feature = "gc")]
 impl<T: PyObjectPayload> GcTrace for PyInner<T> {
     fn trace(&self, tracer_fn: &mut TracerFn) {
+        // Optional trait bound(Like a ?GcTrace) require specialization
+        // https://stackoverflow.com/questions/68701910/function-optional-trait-bound-in-rust
+        // fall back to use TypeId for now
         // TODO(discord9): cast it into payload using TypeId, then call corrsponding trace()
+        use crate::builtins::{PyList, PyDict};
+        macro_rules! optional_trace {
+            ($($TY: ty),*) => {
+                $(
+                    if TypeId::of::<$TY>() == self.typeid{
+                        let inner: &PyInner<$TY> = unsafe { std::mem::transmute(self) };
+                        inner.payload.trace(tracer_fn);
+                    }
+                )else*
+            };
+        }
+        optional_trace!(PyList);
     }
 }
 
@@ -134,7 +149,6 @@ impl<T: PyObjectPayload> GcTrace for PyInner<T> {
 impl<T: PyObjectPayload> GcTrace for Py<T> {
     fn trace(&self, tracer_fn: &mut TracerFn) {
         self.0.trace(tracer_fn)
-        // TODO(discord9): cast it into payload using TypeId, then call corrsponding trace()
     }
 }
 
@@ -142,7 +156,6 @@ impl<T: PyObjectPayload> GcTrace for Py<T> {
 impl GcTrace for PyObject {
     fn trace(&self, tracer_fn: &mut TracerFn) {
         self.0.trace(tracer_fn)
-        // TODO(discord9): cast it into payload using TypeId, then call corrsponding trace()
     }
 }
 
