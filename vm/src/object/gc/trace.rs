@@ -1,4 +1,5 @@
 use core::ptr::NonNull;
+use crate::object::PyObjectPayload;
 use crate::object::gc::header::GcHeader;
 
 /// indicate what to do with the object afer calling dec()
@@ -20,7 +21,7 @@ pub trait GcObjPtr: GcTrace {
     fn as_ptr(&self) -> NonNull<dyn GcObjPtr>;
 }
 
-
+/// use `trace()` to call on all owned ObjectRef
 pub trait GcTrace {
     /// call tracer_fn for every GcOjbect owned by a dyn GcTrace Object
     /// # API Contract
@@ -31,6 +32,8 @@ pub trait GcTrace {
 /// A `TracerFn` is a callback function that is invoked for each `PyGcObjectRef` owned
 /// by an instance of something.
 pub type TracerFn<'a> = dyn FnMut(&dyn GcObjPtr) + 'a;
+
+
 
 use crate::builtins::PyList;
 
