@@ -531,12 +531,7 @@ impl Deref for PyObjectRef {
         #[cfg(feature = "gc")]
         {
             let obj = unsafe { self.ptr.as_ref() };
-            {
-                if obj.0.header().gc.pause.try_lock().is_err(){
-                    warn!("World is stop by gc")
-                }
-                let _lock = obj.0.header().gc.pause.lock().unwrap();
-            }
+            obj.0.header().is_pausing();
             obj
         }
         #[cfg(not(feature = "gc"))]
@@ -959,9 +954,9 @@ impl Drop for PyObjectRef {
         */
         
         if if cfg!(feature = "gc") {
-            self.0.dec() == GcStatus::ShouldDrop
+            self.no_pausing_ref().0.dec() == GcStatus::ShouldDrop
         } else {
-            self.0.ref_count.dec()
+            self.no_pausing_ref().0.ref_count.dec()
         } {
             unsafe { PyObject::drop_slow(self.ptr) }
         }
@@ -1015,9 +1010,7 @@ impl<T: PyObjectPayload> Deref for Py<T> {
     fn deref(&self) -> &Self::Target {
         // stop the world for garbage collector
         #[cfg(feature = "gc")]
-        {
-            let _lock = self.0.header().gc.pause.lock().unwrap();
-        }
+        self.0.header().is_pausing();
         &self.0.payload
     }
 }
@@ -1076,9 +1069,9 @@ impl<T: PyObjectPayload> Drop for PyRef<T> {
     #[inline]
     fn drop(&mut self) {
         if if cfg!(feature = "gc") {
-            self.0.dec() == GcStatus::ShouldDrop
+            self.no_pausing_ref().0.dec() == GcStatus::ShouldDrop
         } else {
-            self.0.ref_count.dec()
+            self.no_pausing_ref().0.ref_count.dec()
         } {
             unsafe { PyObject::drop_slow(self.ptr.cast::<PyObject>()) }
         }
@@ -1093,6 +1086,14 @@ impl<T: PyObjectPayload> Clone for PyRef<T> {
 }
 
 impl<T: PyObjectPayload> PyRef<T> {
+    /// access inner object even in gc pausing
+    ///
+    /// The rationale here is to use as a escape hatch when gc pausing `deref` access
+    #[cfg(feature = "gc")]
+    pub fn no_pausing_ref(&self) -> &PyObject {
+        unsafe { self.ptr.cast::<PyObject>().as_ref() }
+    }
+
     #[inline(always)]
     unsafe fn from_raw(raw: *const Py<T>) -> Self {
         Self {
@@ -1187,9 +1188,7 @@ where
         #[cfg(feature = "gc")]
         {
             let obj = unsafe { self.ptr.as_ref() };
-            {
-                let _lock = obj.0.header().gc.pause.lock().unwrap();
-            }
+            obj.0.header().is_pausing();
             obj
         }
         #[cfg(not(feature = "gc"))]

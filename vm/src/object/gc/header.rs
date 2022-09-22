@@ -4,7 +4,8 @@ use std::sync::{
 };
 
 use rustpython_common::{atomic::PyAtomic, lock::{PyMutex, PyRwLock}, rc::PyRc};
-use crate::object::gc::{CcSync, GLOBAL_COLLECTOR};
+use crate::object::gc::{CcSync, GLOBAL_COLLECTOR, SAME_THREAD_WITH_GC};
+
 
 #[cfg(feature = "threading")]
 pub struct GcHeader {
@@ -30,6 +31,23 @@ impl GcHeader {
             buffered: PyMutex::new(false),
             gc: GLOBAL_COLLECTOR.clone()
         }
+    }
+    /// This function will block if is pausing by gc
+    pub fn is_pausing(&self){
+        if SAME_THREAD_WITH_GC.with(|v|v.get()){
+            // if is same thread, then this thread is already stop by gc itself,
+            // no need to block.
+            // and any call to is_pausing is probably from drop() or what so allow it to continue execute.
+            return;
+        }
+        if let Err(err) = self.gc.pause.try_lock(){
+            debug!("is_pausing is blocked by gc:{:?}", err);
+            if matches!(err, std::sync::TryLockError::WouldBlock){
+                let bt = backtrace::Backtrace::new();
+                println!("{:?}", bt);
+            }
+        }
+        let _lock = self.gc.pause.lock().unwrap();
     }
     pub fn color(&self) -> Color {
         *self.color.lock()
