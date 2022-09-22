@@ -10,6 +10,7 @@ use crate::common::lock::OnceCell;
 use crate::common::lock::PyMutex;
 use crate::convert::ToPyObject;
 use crate::function::ArgMapping;
+use crate::object::gc::GcObjPtr;
 use crate::{
     bytecode,
     class::PyClassImpl,
@@ -34,6 +35,23 @@ pub struct PyFunction {
     qualname: PyMutex<PyStrRef>,
     #[cfg(feature = "jit")]
     jitted_code: OnceCell<CompiledCode>,
+}
+
+impl crate::object::gc::GcTrace for PyFunction {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        tracer_fn(&*self.globals);
+        let inner = {
+            let inner = self.defaults_and_kwdefaults.lock();
+            (
+                inner.0.as_ref().map(|v| v.as_ptr()),
+                inner.1.as_ref().map(|v| v.as_ptr()),
+            )
+        };
+        for v in [inner.0, inner.1].into_iter().flatten() {
+            tracer_fn(unsafe { v.as_ref() });
+        }
+        // TODO(discord9): call trace() on other elems
+    }
 }
 
 impl PyFunction {
