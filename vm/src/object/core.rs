@@ -21,7 +21,7 @@ use crate::common::{
     lock::{PyMutex, PyMutexGuard, PyRwLock},
     refcount::RefCount,
 };
-use crate::object::gc::{GcHeader, GcObjPtr, GcStatus, GcTrace};
+use crate::object::gc::{GcHeader, GcObjPtr, GcStatus, GcTrace, TracerFn};
 use crate::{
     builtins::{PyDictRef, PyTypeRef},
     vm::VirtualMachine,
@@ -125,7 +125,23 @@ struct PyInner<T> {
 
 #[cfg(feature = "gc")]
 impl<T: PyObjectPayload> GcTrace for PyInner<T> {
-    fn trace(&self, tracer_fn: &mut super::gc::TracerFn) {
+    fn trace(&self, tracer_fn: &mut TracerFn) {
+        // TODO(discord9): cast it into payload using TypeId, then call corrsponding trace()
+    }
+}
+
+#[cfg(feature = "gc")]
+impl<T: PyObjectPayload> GcTrace for Py<T> {
+    fn trace(&self, tracer_fn: &mut TracerFn) {
+        self.0.trace(tracer_fn)
+        // TODO(discord9): cast it into payload using TypeId, then call corrsponding trace()
+    }
+}
+
+#[cfg(feature = "gc")]
+impl GcTrace for PyObject {
+    fn trace(&self, tracer_fn: &mut TracerFn) {
+        self.0.trace(tracer_fn)
         // TODO(discord9): cast it into payload using TypeId, then call corrsponding trace()
     }
 }
@@ -152,6 +168,56 @@ impl<T: PyObjectPayload> GcObjPtr for PyInner<T> {
 
     fn as_ptr(&self) -> NonNull<dyn GcObjPtr> {
         NonNull::from(self)
+    }
+}
+
+#[cfg(feature = "gc")]
+impl GcObjPtr for PyObject {
+    /// call increment() of gc
+    fn inc(&self) {
+        self.0.inc()
+    }
+
+    /// call decrement() of gc
+    fn dec(&self) -> GcStatus {
+        self.0.dec()
+    }
+
+    fn rc(&self) -> usize {
+        self.0.rc()
+    }
+
+    fn header(&self) -> &GcHeader {
+        self.0.header()
+    }
+
+    fn as_ptr(&self) -> NonNull<dyn GcObjPtr> {
+        self.0.as_ptr()
+    }
+}
+
+#[cfg(feature = "gc")]
+impl<T: PyObjectPayload> GcObjPtr for Py<T> {
+    /// call increment() of gc
+    fn inc(&self) {
+        self.0.inc()
+    }
+
+    /// call decrement() of gc
+    fn dec(&self) -> GcStatus {
+        self.0.dec()
+    }
+
+    fn rc(&self) -> usize {
+        self.0.rc()
+    }
+
+    fn header(&self) -> &GcHeader {
+        self.0.header()
+    }
+
+    fn as_ptr(&self) -> NonNull<dyn GcObjPtr> {
+        self.0.as_ptr()
     }
 }
 
@@ -955,9 +1021,9 @@ impl Drop for PyObjectRef {
         */
         
         if if cfg!(feature = "gc") {
-            self.no_pausing_ref().0.dec() == GcStatus::ShouldDrop
+            self.0.dec() == GcStatus::ShouldDrop
         } else {
-            self.no_pausing_ref().0.ref_count.dec()
+            self.0.ref_count.dec()
         } {
             unsafe { PyObject::drop_slow(self.ptr) }
         }
