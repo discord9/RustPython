@@ -18,6 +18,7 @@ pub trait GcObjPtr: GcTrace {
     fn rc(&self) -> usize;
     /// return object header
     fn header(&self) -> &GcHeader;
+    // as a NonNull pointer to a gc managed object
     fn as_ptr(&self) -> NonNull<dyn GcObjPtr>;
 }
 
@@ -25,7 +26,13 @@ pub trait GcObjPtr: GcTrace {
 pub trait GcTrace {
     /// call tracer_fn for every GcOjbect owned by a dyn GcTrace Object
     /// # API Contract
-    /// must make sure that every owned object is called with tracer_fn, or garbage collect won't act correctly.
+    /// must make sure that every owned object(Every stored `PyObjectRef` to be exactly) is called with tracer_fn once,
+    ///  or garbage collect won't act correctly and very likely to _**panic**_.
+    /// ```
+    /// for ch in childs:
+    ///     tracer_fn(ch)
+    /// ```
+    /// preferably not clone a `PyObjectRef`, use `as_ptr()` instead and operate on NonNull
     fn trace(&self, tracer_fn: &mut TracerFn);
 }
 
@@ -36,7 +43,7 @@ pub type TracerFn<'a> = dyn FnMut(&dyn GcObjPtr) + 'a;
 
 
 use crate::builtins::{PyList, PyDict};
-use crate::types::Iterable;
+
 impl GcTrace for PyList{
     fn trace(&self, tracer_fn: &mut TracerFn) {
         for elem in self.borrow_vec().iter(){
@@ -45,16 +52,3 @@ impl GcTrace for PyList{
     }
 }
 
-impl GcTrace for PyDict {
-    fn trace(&self, tracer_fn: &mut TracerFn) {
-        // TODO(discord9): elegant way to iterate over values instead of put pub(crate) everywhere to access it
-        let dict = self._as_dict_inner();
-        let entries = &dict.read().entries;
-        entries.iter().map(|v|{
-            if let Some(v) = v{
-                tracer_fn(v.key.as_ref());
-                tracer_fn(v.value.as_ref());
-            }
-        }).count();
-    }
-}
