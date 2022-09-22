@@ -41,14 +41,3 @@ pub trait GcTrace {
 pub type TracerFn<'a> = dyn FnMut(&dyn GcObjPtr) + 'a;
 
 
-
-use crate::builtins::{PyList, PyDict};
-
-impl GcTrace for PyList{
-    fn trace(&self, tracer_fn: &mut TracerFn) {
-        for elem in self.borrow_vec().iter(){
-            tracer_fn(elem.as_ref());
-        }
-    }
-}
-
