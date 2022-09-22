@@ -141,7 +141,7 @@ impl<T: PyObjectPayload> GcTrace for PyInner<T> {
                 )else*
             };
         }
-        optional_trace!(PyList);
+        optional_trace!(PyList, PyDict);
     }
 }
 

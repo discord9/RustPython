@@ -62,11 +62,11 @@ impl IndexEntry {
 }
 
 #[derive(Clone)]
-struct DictInner<T> {
+pub(crate) struct DictInner<T> {
     used: usize,
     filled: usize,
     indices: Vec<IndexEntry>,
-    entries: Vec<Option<DictEntry<T>>>,
+    pub(crate) entries: Vec<Option<DictEntry<T>>>,
 }
 
 impl<T: Clone> Clone for Dict<T> {
@@ -91,11 +91,11 @@ impl<T> Default for Dict<T> {
 }
 
 #[derive(Clone)]
-struct DictEntry<T> {
+pub(crate) struct DictEntry<T> {
     hash: HashValue,
-    key: PyObjectRef,
+    pub(crate) key: PyObjectRef,
     index: IndexIndex,
-    value: T,
+    pub(crate) value: T,
 }
 static_assertions::assert_eq_size!(DictEntry<PyObjectRef>, Option<DictEntry<PyObjectRef>>);
 
@@ -228,7 +228,8 @@ impl<T> DictInner<T> {
 type PopInnerResult<T> = ControlFlow<Option<DictEntry<T>>>;
 
 impl<T: Clone> Dict<T> {
-    fn read(&self) -> PyRwLockReadGuard<'_, DictInner<T>> {
+    
+    pub(crate) fn read(&self) -> PyRwLockReadGuard<'_, DictInner<T>> {
         self.inner.read()
     }
 
