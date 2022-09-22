@@ -21,7 +21,7 @@ use crate::common::{
     lock::{PyMutex, PyMutexGuard, PyRwLock},
     refcount::RefCount,
 };
-use crate::object::gc::{CcSync, GcHeader, GcObjPtr, GcStatus, GcTrace, GLOBAL_COLLECTOR};
+use crate::object::gc::{GcHeader, GcObjPtr, GcStatus, GcTrace};
 use crate::{
     builtins::{PyDictRef, PyTypeRef},
     vm::VirtualMachine,
@@ -35,8 +35,7 @@ use std::{
     marker::PhantomData,
     mem::ManuallyDrop,
     ops::Deref,
-    ptr::{self, NonNull},
-    sync::Arc,
+    ptr::{self, NonNull}
 };
 
 // so, PyObjectRef is basically equivalent to `PyRc<PyInner<dyn PyObjectPayload>>`, except it's
@@ -112,7 +111,6 @@ impl PyObjVTable {
 struct PyInner<T> {
     ref_count: RefCount,
     header: GcHeader,
-    gc: Arc<CcSync>,
     // TODO: move typeid into vtable once TypeId::of is const
     typeid: TypeId,
     vtable: &'static PyObjVTable,
@@ -136,12 +134,12 @@ impl<T: PyObjectPayload> GcTrace for PyInner<T> {
 impl<T: PyObjectPayload> GcObjPtr for PyInner<T> {
     /// call increment() of gc
     fn inc(&self) {
-        self.gc.increment(self)
+        self.header().gc.increment(self)
     }
 
     /// call decrement() of gc
     fn dec(&self) -> GcStatus {
-        unsafe { self.gc.decrement(self) }
+        unsafe { self.header().gc.decrement(self) }
     }
 
     fn rc(&self) -> usize {
@@ -485,7 +483,6 @@ impl<T: PyObjectPayload> PyInner<T> {
         Box::new(PyInner {
             ref_count: RefCount::new(),
             header: GcHeader::new(),
-            gc: GLOBAL_COLLECTOR.clone(),
             typeid: TypeId::of::<T>(),
             vtable: PyObjVTable::of::<T>(),
             typ: PyRwLock::new(typ),
@@ -535,7 +532,10 @@ impl Deref for PyObjectRef {
         {
             let obj = unsafe { self.ptr.as_ref() };
             {
-                let _lock = obj.0.gc.pause.lock().unwrap();
+                if obj.0.header().gc.pause.try_lock().is_err(){
+                    warn!("World is stop by gc")
+                }
+                let _lock = obj.0.header().gc.pause.lock().unwrap();
             }
             obj
         }
@@ -1016,7 +1016,7 @@ impl<T: PyObjectPayload> Deref for Py<T> {
         // stop the world for garbage collector
         #[cfg(feature = "gc")]
         {
-            let _lock = self.0.gc.pause.lock().unwrap();
+            let _lock = self.0.header().gc.pause.lock().unwrap();
         }
         &self.0.payload
     }
@@ -1188,7 +1188,7 @@ where
         {
             let obj = unsafe { self.ptr.as_ref() };
             {
-                let _lock = obj.0.gc.pause.lock().unwrap();
+                let _lock = obj.0.header().gc.pause.lock().unwrap();
             }
             obj
         }
@@ -1279,7 +1279,6 @@ pub(crate) fn init_type_hierarchy() -> (PyTypeRef, PyTypeRef, PyTypeRef) {
             PyInner::<PyType> {
                 ref_count: RefCount::new(),
                 header: GcHeader::new(),
-                gc: GLOBAL_COLLECTOR.clone(),
                 typeid: TypeId::of::<PyType>(),
                 vtable: PyObjVTable::of::<PyType>(),
                 dict: None,
@@ -1293,7 +1292,6 @@ pub(crate) fn init_type_hierarchy() -> (PyTypeRef, PyTypeRef, PyTypeRef) {
             PyInner::<PyType> {
                 ref_count: RefCount::new(),
                 header: GcHeader::new(),
-                gc: GLOBAL_COLLECTOR.clone(),
                 typeid: TypeId::of::<PyType>(),
                 vtable: PyObjVTable::of::<PyType>(),
                 dict: None,

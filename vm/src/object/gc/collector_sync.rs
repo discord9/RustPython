@@ -3,12 +3,23 @@ use std::{
     fmt,
     ops::Deref,
     ptr::{self, NonNull},
-    sync::{Mutex, Arc},
+    sync::{Arc, Mutex},
 };
 
 use crate::object::gc::header::Color;
 use crate::object::gc::trace::GcObjPtr;
 use crate::object::gc::GcStatus;
+
+use once_cell::sync::Lazy;
+use rustpython_common::rc::PyRc;
+
+/// The global cycle collector, which collect cycle references for PyInner<T>
+pub static GLOBAL_COLLECTOR: Lazy<PyRc<CcSync>> = Lazy::new(|| {
+    PyRc::new(CcSync {
+        roots: Mutex::new(Vec::new()),
+        pause: Mutex::new(()),
+    })
+});
 
 /// only use for roots's pointer to object, mark `NonNull` as safe to send
 #[repr(transparent)]
@@ -38,12 +49,7 @@ impl<T: ?Sized> From<WrappedPtr<T>> for NonNull<T> {
         w.0
     }
 }
-use once_cell::sync::Lazy;
-/// The global cycle collector, which collect cycle references for PyInner<T>
-pub static GLOBAL_COLLECTOR: Lazy<Arc<CcSync>> = Lazy::new(||Arc::new(CcSync {
-    roots: Mutex::new(Vec::new()),
-    pause: Mutex::new(()),
-}));
+
 
 #[derive(Debug, Default)]
 pub struct CcSync {
@@ -66,14 +72,19 @@ unsafe fn free(ptr: ObjPtr) {
     dealloc(ptr.cast().as_ptr(), Layout::for_value(ptr.as_ref()));
 }
 impl CcSync {
+    /// _suggest_(may or may not) collector to collect garbage.
     pub fn gc(&self) {
         if self.should_gc() {
+            // warn!("Start gc with len()={}", self.roots_len());
             self.collect_cycles();
         }
     }
+    fn roots_len(&self) -> usize {
+        self.roots.lock().unwrap().len()
+    }
     /// TODO: change to use roots'len or what to determine
     pub fn should_gc(&self) -> bool {
-        true
+        self.roots_len() > 100
     }
     pub fn increment(&self, obj: ObjRef) {
         obj.header().inc();
@@ -83,8 +94,9 @@ impl CcSync {
     /// # Safety
     /// if the last ref to a object call decrement() on object,
     /// then this object should be considered freed.
-    pub unsafe fn decrement(&self, obj: ObjRef)->GcStatus {
-        // TODO: change to return status if not buffered
+    pub unsafe fn decrement(&self, obj: ObjRef) -> GcStatus {
+        // TODO(discord9): find a better place for gc()
+        // self.gc();
         if obj.header().rc() > 0 {
             // prevent RAII Drop to drop below zero
             let rc = obj.header().dec();
@@ -94,13 +106,13 @@ impl CcSync {
                 self.possible_root(obj);
                 GcStatus::ShouldKeep
             }
-        }else{
+        } else {
             // FIXME(discord9): confirm if rc==0 then should drop
             GcStatus::ShouldDrop
         }
     }
 
-    unsafe fn release(&self, obj: ObjRef)->GcStatus {
+    unsafe fn release(&self, obj: ObjRef) -> GcStatus {
         // because drop obj itself will drop all ObjRef store by object itself once more,
         // so balance out in here
         // by doing nothing
@@ -109,12 +121,12 @@ impl CcSync {
         // self.decrement(ch);
         //});
         obj.header().set_color(Color::Black);
-        // before it is free in here, 
+        // before it is free in here,
         // but now change to passing message to allow it to drop outside
         if !obj.header().buffered() {
             GcStatus::ShouldDrop
             // unsafe { free(obj.as_ptr()) }
-        }else{
+        } else {
             GcStatus::Buffered
         }
     }

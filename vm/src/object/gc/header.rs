@@ -3,12 +3,15 @@ use std::sync::{
     Mutex,
 };
 
-use rustpython_common::atomic::PyAtomic;
+use rustpython_common::{atomic::PyAtomic, lock::{PyMutex, PyRwLock}, rc::PyRc};
+use crate::object::gc::{CcSync, GLOBAL_COLLECTOR};
+
 #[cfg(feature = "threading")]
 pub struct GcHeader {
     ref_cnt: PyAtomic<usize>,
-    color: Mutex<Color>,
-    buffered: Mutex<bool>,
+    color: PyMutex<Color>,
+    buffered: PyMutex<bool>,
+    pub gc: PyRc<CcSync>,
     // log_ptr: Mutex<Option<LogPointer>>,
 }
 
@@ -23,22 +26,23 @@ impl GcHeader {
     pub fn new() -> Self {
         Self {
             ref_cnt: 1.into(),
-            color: Mutex::new(Color::Black),
-            buffered: Mutex::new(false),
+            color: PyMutex::new(Color::Black),
+            buffered: PyMutex::new(false),
+            gc: GLOBAL_COLLECTOR.clone()
         }
     }
     pub fn color(&self) -> Color {
-        *self.color.lock().unwrap()
+        *self.color.lock()
     }
     pub fn set_color(&self, new_color: Color) {
         // dbg!(new_color);
-        *self.color.lock().unwrap() = new_color;
+        *self.color.lock() = new_color;
     }
     pub fn buffered(&self) -> bool {
-        *self.buffered.lock().unwrap()
+        *self.buffered.lock()
     }
     pub  fn set_buffered(&self, buffered: bool) {
-        *self.buffered.lock().unwrap() = buffered;
+        *self.buffered.lock() = buffered;
     }
     /// simple RC += 1
     pub fn inc(&self) -> usize {
