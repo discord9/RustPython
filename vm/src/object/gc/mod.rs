@@ -5,5 +5,5 @@ mod collector_sync;
 mod header;
 
 pub use header::GcHeader;
-pub use collector_sync::{CcSync, GLOBAL_COLLECTOR, SAME_THREAD_WITH_GC};
+pub use collector_sync::{CcSync, GLOBAL_COLLECTOR, IS_GC_THREAD};
 pub use trace::{GcObjPtr, GcTrace, TracerFn, GcStatus};

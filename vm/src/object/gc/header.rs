@@ -4,7 +4,7 @@ use std::sync::{
 };
 
 use rustpython_common::{atomic::PyAtomic, lock::{PyMutex, PyRwLock}, rc::PyRc};
-use crate::object::gc::{CcSync, GLOBAL_COLLECTOR, SAME_THREAD_WITH_GC};
+use crate::object::gc::{CcSync, GLOBAL_COLLECTOR, IS_GC_THREAD};
 
 
 #[cfg(feature = "threading")]
@@ -34,7 +34,7 @@ impl GcHeader {
     }
     /// This function will block if is pausing by gc
     pub fn is_pausing(&self){
-        if SAME_THREAD_WITH_GC.with(|v|v.get()){
+        if IS_GC_THREAD.with(|v|v.get()){
             // if is same thread, then this thread is already stop by gc itself,
             // no need to block.
             // and any call to is_pausing is probably from drop() or what so allow it to continue execute.

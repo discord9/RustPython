@@ -2,7 +2,7 @@ mod core;
 mod ext;
 mod payload;
 #[cfg(feature = "gc")]
-mod gc;
+pub(crate) mod gc;
 
 pub use self::core::*;
 pub use self::ext::*;
