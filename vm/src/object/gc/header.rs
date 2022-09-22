@@ -37,9 +37,10 @@ impl GcHeader {
         if IS_GC_THREAD.with(|v|v.get()){
             // if is same thread, then this thread is already stop by gc itself,
             // no need to block.
-            // and any call to is_pausing is probably from drop() or what so allow it to continue execute.
+            // and any call to do_pausing is probably from drop() or what so allow it to continue execute.
             return;
         }
+        #[cfg(debug_assertions)]
         if let Err(err) = self.gc.pause.try_lock(){
             debug!("is_pausing is blocked by gc:{:?}", err);
             if matches!(err, std::sync::TryLockError::WouldBlock){
