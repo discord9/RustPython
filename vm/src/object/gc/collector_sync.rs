@@ -93,7 +93,6 @@ impl CcSync {
         self.roots_len() > 100
     }
     pub fn increment(&self, obj: ObjRef) {
-        self.gc();
         obj.header().inc();
         obj.header().set_color(Color::Black);
     }
@@ -133,6 +132,7 @@ impl CcSync {
             GcStatus::ShouldDrop
             // unsafe { free(obj.as_ptr()) }
         } else {
+            self.gc();
             GcStatus::Buffered
         }
     }
@@ -149,7 +149,10 @@ impl CcSync {
     }
 
     fn collect_cycles(&self) {
-        debug!("Acquire lock for gc.");
+        if SAME_THREAD_WITH_GC.with(|v|v.get()){
+            return;
+            // already call collect_cycle() once
+        }
         let lock = self.pause.lock().unwrap();
         SAME_THREAD_WITH_GC.with(|v|v.set(true));
         self.mark_roots();
