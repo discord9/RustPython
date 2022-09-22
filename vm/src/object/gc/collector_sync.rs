@@ -163,7 +163,9 @@ impl CcSync {
         // no mutator will operate on them
         drop(lock);
         IS_GC_THREAD.with(|v|v.set(false));
+        warn!("Collect cycles with len()={}", self.roots_len());
         self.collect_roots();
+        warn!("End collect cycles with len()={}", self.roots_len());
     }
 
     fn mark_roots(&self) {
