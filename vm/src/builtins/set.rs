@@ -35,6 +35,16 @@ pub struct PySet {
     pub(super) inner: PySetInner,
 }
 
+impl crate::object::gc::GcTrace for PySet {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        let dict = &self.inner.content;
+        let entries = &dict.read().entries;
+        for entry in entries.iter().flatten() {
+            tracer_fn(entry.key.as_ref())
+        }
+    }
+}
+
 impl PySet {
     pub fn new_ref(ctx: &Context) -> PyRef<Self> {
         // Initialized empty, as calling __hash__ is required for adding each object to the set
@@ -153,7 +163,7 @@ impl PyPayload for PyFrozenSet {
 
 #[derive(Default, Clone)]
 pub(super) struct PySetInner {
-    content: PyRc<SetContentType>,
+    pub(crate) content: PyRc<SetContentType>,
 }
 
 impl PySetInner {
