@@ -32,6 +32,14 @@ pub struct PyList {
     elements: PyRwLock<Vec<PyObjectRef>>,
 }
 
+impl crate::object::gc::GcTrace for PyList{
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        for elem in self.borrow_vec().iter(){
+            tracer_fn(elem.as_ref());
+        }
+    }
+}
+
 impl fmt::Debug for PyList {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // TODO: implement more detailed, non-recursive Debug formatter
