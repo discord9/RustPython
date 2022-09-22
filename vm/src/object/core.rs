@@ -126,10 +126,11 @@ struct PyInner<T> {
 #[cfg(feature = "gc")]
 impl<T: PyObjectPayload> GcTrace for PyInner<T> {
     fn trace(&self, tracer_fn: &mut TracerFn) {
-        // Optional trait bound(Like a ?GcTrace) require specialization
-        // https://stackoverflow.com/questions/68701910/function-optional-trait-bound-in-rust
-        // fall back to use TypeId for now
-        // TODO(discord9): cast it into payload using TypeId, then call corrsponding trace()
+        /// Optional trait bound(Like a ?GcTrace) require specialization
+        /// 
+        /// https://stackoverflow.com/questions/68701910/function-optional-trait-bound-in-rust
+        /// 
+        /// fall back to use TypeId for now
         macro_rules! optional_trace {
             ($($TY: ty),*) => {
                 $(
