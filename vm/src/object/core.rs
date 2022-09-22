@@ -611,7 +611,7 @@ impl Deref for PyObjectRef {
         #[cfg(feature = "gc")]
         {
             let obj = unsafe { self.ptr.as_ref() };
-            obj.0.header().is_pausing();
+            obj.0.header().do_pausing();
             obj
         }
         #[cfg(not(feature = "gc"))]
@@ -1090,7 +1090,7 @@ impl<T: PyObjectPayload> Deref for Py<T> {
     fn deref(&self) -> &Self::Target {
         // stop the world for garbage collector
         #[cfg(feature = "gc")]
-        self.0.header().is_pausing();
+        self.0.header().do_pausing();
         &self.0.payload
     }
 }
@@ -1268,7 +1268,7 @@ where
         #[cfg(feature = "gc")]
         {
             let obj = unsafe { self.ptr.as_ref() };
-            obj.0.header().is_pausing();
+            obj.0.header().do_pausing();
             obj
         }
         #[cfg(not(feature = "gc"))]
