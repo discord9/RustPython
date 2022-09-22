@@ -24,7 +24,7 @@ use crate::{
         IterNextIterable, Iterable, PyComparisonOp, Unconstructible, Unhashable,
     },
     vm::VirtualMachine,
-    AsObject, Context, Py, PyObject, PyObjectRef, PyPayload, PyRef, PyResult, TryFromObject,
+    AsObject, Context, Py, PyObject, PyObjectRef, PyPayload, PyRef, PyResult, TryFromObject, object::gc::{GcTrace, TracerFn},
 };
 use rustpython_common::lock::PyMutex;
 use std::fmt;
@@ -45,6 +45,7 @@ pub type DictContentType = dictdatatype::Dict;
 pub struct PyDict {
     entries: DictContentType,
 }
+
 pub type PyDictRef = PyRef<PyDict>;
 
 impl fmt::Debug for PyDict {
