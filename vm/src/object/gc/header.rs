@@ -33,7 +33,7 @@ impl GcHeader {
         }
     }
     /// This function will block if is pausing by gc
-    pub fn is_pausing(&self){
+    pub fn do_pausing(&self){
         if IS_GC_THREAD.with(|v|v.get()){
             // if is same thread, then this thread is already stop by gc itself,
             // no need to block.
