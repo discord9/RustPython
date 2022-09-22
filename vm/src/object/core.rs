@@ -130,7 +130,6 @@ impl<T: PyObjectPayload> GcTrace for PyInner<T> {
         // https://stackoverflow.com/questions/68701910/function-optional-trait-bound-in-rust
         // fall back to use TypeId for now
         // TODO(discord9): cast it into payload using TypeId, then call corrsponding trace()
-        use crate::builtins::{PyList, PyDict};
         macro_rules! optional_trace {
             ($($TY: ty),*) => {
                 $(
@@ -141,7 +140,8 @@ impl<T: PyObjectPayload> GcTrace for PyInner<T> {
                 )else*
             };
         }
-        optional_trace!(PyList, PyDict);
+        use crate::builtins::{PyList, PyDict, PyFunction};
+        optional_trace!(PyList, PyDict, PyFunction);
     }
 }
 
