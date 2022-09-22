@@ -15,7 +15,7 @@ use rustpython_common::rc::PyRc;
 use std::cell::Cell;
 thread_local! {
     /// assume any drop() impl doesn't create new thread, so gc only work in this one thread.
-    pub static SAME_THREAD_WITH_GC: Cell<bool> = Cell::new(false);
+    pub static IS_GC_THREAD: Cell<bool> = Cell::new(false);
 }
 /// The global cycle collector, which collect cycle references for PyInner<T>
 pub static GLOBAL_COLLECTOR: Lazy<PyRc<CcSync>> = Lazy::new(|| {
@@ -149,12 +149,12 @@ impl CcSync {
     }
 
     fn collect_cycles(&self) {
-        if SAME_THREAD_WITH_GC.with(|v|v.get()){
+        if IS_GC_THREAD.with(|v|v.get()){
             return;
             // already call collect_cycle() once
         }
         let lock = self.pause.lock().unwrap();
-        SAME_THREAD_WITH_GC.with(|v|v.set(true));
+        IS_GC_THREAD.with(|v|v.set(true));
         self.mark_roots();
         self.scan_roots();
         // drop lock in here (where the lock should be check in every deref() for ObjectRef)
@@ -162,7 +162,7 @@ impl CcSync {
         // also what's left for collection should already be in garbage cycle,
         // no mutator will operate on them
         drop(lock);
-        SAME_THREAD_WITH_GC.with(|v|v.set(false));
+        IS_GC_THREAD.with(|v|v.set(false));
         self.collect_roots();
     }
 

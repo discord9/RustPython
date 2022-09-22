@@ -31,3 +31,13 @@ pub trait GcTrace {
 /// A `TracerFn` is a callback function that is invoked for each `PyGcObjectRef` owned
 /// by an instance of something.
 pub type TracerFn<'a> = dyn FnMut(&dyn GcObjPtr) + 'a;
+
+use crate::builtins::PyList;
+
+impl GcTrace for PyList{
+    fn trace(&self, tracer_fn: &mut TracerFn) {
+        for elem in self.borrow_vec().iter(){
+            tracer_fn(elem.as_ref());
+        }
+    }
+}
