@@ -15,12 +15,12 @@ use super::{
     ext::{AsObject, PyResult},
     payload::PyObjectPayload,
 };
-use crate::{common::{
+use crate::common::{
     atomic::{OncePtr, PyAtomic, Radium},
     linked_list::{Link, LinkedList, Pointers},
     lock::{PyMutex, PyMutexGuard, PyRwLock},
     refcount::RefCount,
-} };
+};
 use crate::object::gc::{GcHeader, GcObjPtr, GcStatus, GcTrace, TracerFn};
 use crate::{
     builtins::{PyDictRef, PyTypeRef},
@@ -35,7 +35,7 @@ use std::{
     marker::PhantomData,
     mem::ManuallyDrop,
     ops::Deref,
-    ptr::{self, NonNull}
+    ptr::{self, NonNull},
 };
 
 // so, PyObjectRef is basically equivalent to `PyRc<PyInner<dyn PyObjectPayload>>`, except it's
@@ -110,6 +110,7 @@ impl PyObjVTable {
 #[repr(C)]
 struct PyInner<T> {
     ref_count: RefCount,
+    #[cfg(feature = "gc")]
     header: GcHeader,
     // TODO: move typeid into vtable once TypeId::of is const
     typeid: TypeId,
@@ -127,9 +128,9 @@ struct PyInner<T> {
 impl<T: PyObjectPayload> GcTrace for PyInner<T> {
     fn trace(&self, tracer_fn: &mut TracerFn) {
         /// Optional trait bound(Like a ?GcTrace) require specialization
-        /// 
+        ///
         /// https://stackoverflow.com/questions/68701910/function-optional-trait-bound-in-rust
-        /// 
+        ///
         /// fall back to use TypeId for now
         macro_rules! optional_trace {
             ($($TY: ty),*) => {
@@ -141,9 +142,27 @@ impl<T: PyObjectPayload> GcTrace for PyInner<T> {
                 )else*
             };
         }
-        use crate::builtins::{PyList, PyDict,PySet, PySlice, PyFunction, PyZip};
+        use crate::builtins::{
+            PyDict, PyEnumerate, PyFilter, PyFunction, PyList, PyMap, PySet, PySlice, PyZip,
+        };
+        use crate::frame::Frame;
         use crate::protocol::PyIter;
-        optional_trace!(PyList, PyDict,PySet, PySlice, PyFunction, PyZip, PyIter);
+        optional_trace!(
+            // builtin types
+            PyDict,
+            PyEnumerate,
+            PyFilter,
+            PyFunction,
+            PyList,
+            PyMap,
+            PySet,
+            PySlice,
+            PyZip,
+            // protocol
+            PyIter,
+            // vm internal(but can be call from python) data struct
+            Frame
+        );
     }
 }
 
@@ -563,6 +582,7 @@ impl<T: PyObjectPayload> PyInner<T> {
         let member_count = typ.slots.member_count;
         Box::new(PyInner {
             ref_count: RefCount::new(),
+            #[cfg(feature = "gc")]
             header: GcHeader::new(),
             typeid: TypeId::of::<T>(),
             vtable: PyObjVTable::of::<T>(),
@@ -632,7 +652,7 @@ impl ToOwned for PyObject {
         } else {
             self.0.ref_count.inc();
         }
-        
+
         PyObjectRef {
             ptr: NonNull::from(self),
         }
@@ -886,7 +906,6 @@ impl PyObject {
         } else {
             self.0.ref_count.get()
         }
-        
     }
 
     #[inline]
@@ -914,7 +933,7 @@ impl PyObject {
                 } else {
                     zelf.0.ref_count.inc();
                 }
-                
+
                 if let Err(e) = slot_del(zelf, vm) {
                     let del_method = zelf.get_class_attr(identifier!(vm, __del__)).unwrap();
                     vm.run_unraisable(e, None, del_method);
@@ -925,7 +944,6 @@ impl PyObject {
                 } else {
                     zelf.0.ref_count.dec()
                 }
-                
             });
             match ret {
                 // the decref right above set ref_count back to 0
@@ -971,7 +989,6 @@ impl PyObject {
         } else {
             self.0.ref_count.leak();
         }
-        
     }
 
     pub(crate) fn is_interned(&self) -> bool {
@@ -980,7 +997,6 @@ impl PyObject {
         } else {
             self.0.ref_count.is_leaked()
         }
-        
     }
 
     pub(crate) fn get_slot(&self, offset: usize) -> Option<PyObjectRef> {
@@ -1033,7 +1049,7 @@ impl Drop for PyObjectRef {
 
         #[cfg(not(feature = "gc"))]
         */
-        
+
         if if cfg!(feature = "gc") {
             self.0.dec() == GcStatus::ShouldDrop
         } else {
@@ -1298,14 +1314,14 @@ impl<T: PyObjectPayload> PyWeakRef<T> {
 /// either given values or explicitly left uninitialized
 macro_rules! partially_init {
     (
-        $ty:path {$($init_field:ident: $init_value:expr),*$(,)?},
+        $ty:path {$($(#[$attr:meta])? $init_field:ident: $init_value:expr),*$(,)?},
         Uninit { $($uninit_field:ident),*$(,)? }$(,)?
     ) => {{
         // check all the fields are there but *don't* actually run it
         if false {
             #[allow(invalid_value, dead_code, unreachable_code)]
             let _ = {$ty {
-                $($init_field: $init_value,)*
+                $($(#[$attr])? $init_field: $init_value,)*
                 $($uninit_field: unreachable!(),)*
             }};
         }
@@ -1358,6 +1374,7 @@ pub(crate) fn init_type_hierarchy() -> (PyTypeRef, PyTypeRef, PyTypeRef) {
         let type_type_ptr = Box::into_raw(Box::new(partially_init!(
             PyInner::<PyType> {
                 ref_count: RefCount::new(),
+                #[cfg(feature = "gc")]
                 header: GcHeader::new(),
                 typeid: TypeId::of::<PyType>(),
                 vtable: PyObjVTable::of::<PyType>(),
@@ -1393,7 +1410,7 @@ pub(crate) fn init_type_hierarchy() -> (PyTypeRef, PyTypeRef, PyTypeRef) {
             } else {
                 (*type_type_ptr).ref_count.inc();
             }
-            
+
             ptr::write(
                 &mut (*object_type_ptr).typ as *mut PyRwLock<PyTypeRef> as *mut UninitRef<PyType>,
                 PyRwLock::new(NonNull::new_unchecked(type_type_ptr)),
