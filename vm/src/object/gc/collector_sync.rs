@@ -163,9 +163,7 @@ impl CcSync {
         // no mutator will operate on them
         drop(lock);
         IS_GC_THREAD.with(|v|v.set(false));
-        warn!("Collect cycles with len()={}", self.roots_len());
         self.collect_roots();
-        warn!("End collect cycles with len()={}", self.roots_len());
     }
 
     fn mark_roots(&self) {
@@ -222,6 +220,9 @@ impl CcSync {
                 self.collect_white(obj, &mut white);
             })
             .count();
+        if !white.is_empty(){
+            warn!("Collect cyclic garbage in white.len()={}", white.len());
+        }
         // Run drop on each of nodes.
         for i in &white {
             // Calling drop() will decrement the reference count on any of our live children.

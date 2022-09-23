@@ -3,11 +3,10 @@ use std::sync::{
     Mutex,
 };
 
-use rustpython_common::{atomic::PyAtomic, lock::{PyMutex, PyRwLock}, rc::PyRc};
+use rustpython_common::{atomic::PyAtomic, lock::PyMutex, rc::PyRc};
 use crate::object::gc::{CcSync, GLOBAL_COLLECTOR, IS_GC_THREAD};
 
 
-#[cfg(feature = "threading")]
 pub struct GcHeader {
     ref_cnt: PyAtomic<usize>,
     color: PyMutex<Color>,
@@ -16,12 +15,6 @@ pub struct GcHeader {
     // log_ptr: Mutex<Option<LogPointer>>,
 }
 
-#[cfg(not(feature = "threading"))]
-pub struct GcHeader {
-    ref_cnt: usize,
-    color: core::cell::Cell<Color>,
-    buffered: core::cell::Cell<bool>,
-}
 
 impl GcHeader {
     pub fn new() -> Self {
@@ -81,9 +74,6 @@ impl GcHeader {
     pub fn rc(&self) -> usize {
         self.ref_cnt.load(Ordering::Relaxed)
     }
-    pub fn get(&self) -> usize {
-        self.rc()
-    }
 }
 
 impl GcHeader {
@@ -112,7 +102,4 @@ pub enum Color {
     White,
     /// Possible root of cycle
     Purple,
-    Green,
-    Red,
-    Orange,
 }

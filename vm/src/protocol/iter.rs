@@ -14,6 +14,12 @@ pub struct PyIter<O = PyObjectRef>(O)
 where
     O: Borrow<PyObject>;
 
+impl<O: Borrow<PyObject>> crate::object::gc::GcTrace for PyIter<O> {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.0.as_object().trace(tracer_fn);
+    }
+}
+
 impl PyIter<PyObjectRef> {
     pub fn check(obj: &PyObject) -> bool {
         obj.class()
