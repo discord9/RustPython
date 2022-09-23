@@ -20,6 +20,13 @@ pub struct PyEnumerate {
     iterator: PyIter,
 }
 
+#[cfg(feature = "gc")]
+impl crate::object::gc::GcTrace for PyEnumerate{
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.iterator.trace(tracer_fn);
+    }
+}
+
 impl PyPayload for PyEnumerate {
     fn class(vm: &VirtualMachine) -> &'static Py<PyType> {
         vm.ctx.types.enumerate_type

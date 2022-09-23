@@ -31,6 +31,7 @@ pub struct PyList {
     elements: PyRwLock<Vec<PyObjectRef>>,
 }
 
+#[cfg(feature = "gc")]
 impl crate::object::gc::GcTrace for PyList{
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         self.borrow_vec().as_ref().trace(tracer_fn);

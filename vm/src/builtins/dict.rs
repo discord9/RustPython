@@ -23,7 +23,7 @@ use crate::{
         IterNextIterable, Iterable, PyComparisonOp, Unconstructible, Unhashable,
     },
     vm::VirtualMachine,
-    AsObject, Context, Py, PyObject, PyObjectRef, PyPayload, PyRef, PyResult, TryFromObject, object::gc::{GcTrace, TracerFn},
+    AsObject, Context, Py, PyObject, PyObjectRef, PyPayload, PyRef, PyResult, TryFromObject,
 };
 use rustpython_common::lock::PyMutex;
 use std::fmt;
@@ -45,8 +45,9 @@ pub struct PyDict {
     entries: DictContentType,
 }
 
-impl GcTrace for PyDict {
-    fn trace(&self, tracer_fn: &mut TracerFn) {
+#[cfg(feature = "gc")]
+impl crate::object::gc::GcTrace for PyDict {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         // TODO(discord9): elegant way to iterate over values instead of put pub(crate) everywhere to access it
         let dict = self._as_dict_inner();
         let entries = &dict.read().entries;

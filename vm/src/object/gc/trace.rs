@@ -1,3 +1,5 @@
+use rustpython_common::lock::PyMutex;
+
 use crate::object::gc::header::GcHeader;
 use crate::object::PyObjectPayload;
 use crate::{PyObjectRef, PyRef};
@@ -33,7 +35,12 @@ pub trait GcTrace {
     /// for ch in childs:
     ///     tracer_fn(ch)
     /// ```
-    /// *DO NOT* clone a `PyObjectRef`, use `as_ptr()` instead and operate on NonNull
+    /// *DO NOT* clone a `PyObjectRef` or `PyRef<T>`(which mess up trace with ref cnt inc), use `as_ptr()` instead and operate on NonNull
+    /// 
+    /// if a owned objectref is acyclic(like a `PyStr` or a `PyInt`), you can safely ignore it and not call acyclic field.
+    /// 
+    /// but calling such acyclic field is also ok.
+    /// trace() is guanarteed to called at most for every object in a scan of object graph
     fn trace(&self, tracer_fn: &mut TracerFn);
 }
 
@@ -48,24 +55,6 @@ impl<T: PyObjectPayload> GcTrace for PyRef<T> {
     }
 }
 
-impl<T: PyObjectPayload> GcTrace for Option<PyRef<T>> {
-    #[inline]
-    fn trace(&self, tracer_fn: &mut TracerFn) {
-        if let Some(v) = self{
-            v.trace(tracer_fn);
-        }
-    }
-}
-
-impl<T: PyObjectPayload> GcTrace for [PyRef<T>] {
-    #[inline]
-    fn trace(&self, tracer_fn: &mut TracerFn) {
-        for elem in self{
-            elem.trace(tracer_fn);
-        }
-    }
-}
-
 impl GcTrace for PyObjectRef {
     #[inline]
     fn trace(&self, tracer_fn: &mut TracerFn) {
@@ -73,7 +62,7 @@ impl GcTrace for PyObjectRef {
     }
 }
 
-impl GcTrace for Option<PyObjectRef> {
+impl<T:GcTrace> GcTrace for Option<T> {
     #[inline]
     fn trace(&self, tracer_fn: &mut TracerFn) {
         if let Some(v) = self {
@@ -82,11 +71,19 @@ impl GcTrace for Option<PyObjectRef> {
     }
 }
 
-impl GcTrace for [PyObjectRef] {
+impl<T:GcTrace> GcTrace for [T] {
     #[inline]
     fn trace(&self, tracer_fn: &mut TracerFn) {
         for elem in self{
             elem.trace(tracer_fn);
         }
+    }
+}
+
+impl<T:GcTrace> GcTrace for PyMutex<T>{
+    fn trace(&self, tracer_fn: &mut TracerFn) {
+        // safe to lock here
+        // because trace() is guaranteed to called at most for every object in a scan of object graph
+        self.lock().trace(tracer_fn)
     }
 }

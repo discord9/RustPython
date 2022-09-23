@@ -106,6 +106,12 @@ pub struct ArgMapping {
     methods: &'static PyMappingMethods,
 }
 
+#[cfg(feature = "gc")]
+impl crate::object::gc::GcTrace for ArgMapping {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.obj.trace(tracer_fn)
+    }}
+
 impl ArgMapping {
     #[inline]
     pub fn with_methods(obj: PyObjectRef, methods: &'static PyMappingMethods) -> Self {

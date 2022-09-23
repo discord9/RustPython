@@ -89,6 +89,13 @@ struct FrameState {
     lasti: u32,
 }
 
+#[cfg(feature = "gc")]
+impl crate::object::gc::GcTrace for FrameState{
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.stack.iter().map(|v|v.trace(tracer_fn)).count();
+    }
+}
+
 #[cfg(feature = "threading")]
 type Lasti = atomic::AtomicU32;
 #[cfg(not(feature = "threading"))]
@@ -111,6 +118,19 @@ pub struct Frame {
     /// tracer function for this frame (usually is None)
     pub trace: PyMutex<PyObjectRef>,
     state: PyMutex<FrameState>,
+}
+
+#[cfg(feature = "gc")]
+impl crate::object::gc::GcTrace for Frame {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.code.trace(tracer_fn);
+        self.fastlocals.lock().trace(tracer_fn);
+        self.cells_frees.trace(tracer_fn);
+        self.locals.trace(tracer_fn);
+        self.globals.trace(tracer_fn);
+        self.builtins.trace(tracer_fn);
+        // TODO(discord9)
+    }
 }
 
 impl PyPayload for Frame {

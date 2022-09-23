@@ -15,6 +15,11 @@ pub struct GcHeader {
     // log_ptr: Mutex<Option<LogPointer>>,
 }
 
+impl Default for GcHeader {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl GcHeader {
     pub fn new() -> Self {

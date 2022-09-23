@@ -14,6 +14,7 @@ pub struct PyIter<O = PyObjectRef>(O)
 where
     O: Borrow<PyObject>;
 
+#[cfg(feature = "gc")]
 impl<O: Borrow<PyObject>> crate::object::gc::GcTrace for PyIter<O> {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         // FIXME(discord9): check if this is correct
