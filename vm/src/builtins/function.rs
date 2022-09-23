@@ -10,7 +10,6 @@ use crate::common::lock::OnceCell;
 use crate::common::lock::PyMutex;
 use crate::convert::ToPyObject;
 use crate::function::ArgMapping;
-use crate::object::gc::GcObjPtr;
 use crate::{
     bytecode,
     class::PyClassImpl,

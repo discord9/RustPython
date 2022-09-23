@@ -16,6 +16,7 @@ pub struct PyZip {
     strict: PyAtomic<bool>,
 }
 
+#[cfg(feature = "gc")]
 impl crate::object::gc::GcTrace for PyZip {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         for iter in &self.iterators{
