@@ -212,31 +212,6 @@ impl GcObjPtr for PyObject {
     }
 }
 
-#[cfg(feature = "gc")]
-impl<T: PyObjectPayload> GcObjPtr for Py<T> {
-    /// call increment() of gc
-    fn inc(&self) {
-        self.0.inc()
-    }
-
-    /// call decrement() of gc
-    fn dec(&self) -> GcStatus {
-        self.0.dec()
-    }
-
-    fn rc(&self) -> usize {
-        self.0.rc()
-    }
-
-    fn header(&self) -> &GcHeader {
-        self.0.header()
-    }
-
-    fn as_ptr(&self) -> NonNull<dyn GcObjPtr> {
-        self.0.as_ptr()
-    }
-}
-
 impl<T: fmt::Debug> fmt::Debug for PyInner<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "[PyObject {:?}]", &self.payload)
