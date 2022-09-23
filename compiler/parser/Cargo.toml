@@ -9,7 +9,7 @@ license = "MIT"
 edition = "2021"
 
 [features]
-default = ["lalrpop"]
+default = ["lalrpop"]  # removing this causes potential build failure
 
 [build-dependencies]
 anyhow = "1.0.45"
