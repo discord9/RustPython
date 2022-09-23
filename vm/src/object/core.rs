@@ -930,7 +930,8 @@ impl PyObject {
                 #[cfg(feature = "gc")]
                 {
                     // FIXME(discord9): figure out if Buffered should drop.
-                    zelf.0.dec() == GcStatus::ShouldDrop || zelf.0.dec() == GcStatus::Buffered
+                    let stat = zelf.0.dec();
+                    stat == GcStatus::ShouldDrop || stat == GcStatus::Buffered
                 }
                 #[cfg(not(feature = "gc"))]
                 {
@@ -1042,11 +1043,17 @@ impl Drop for PyObjectRef {
         #[cfg(not(feature = "gc"))]
         */
 
-        if if cfg!(feature = "gc") {
-            self.0.dec() == GcStatus::ShouldDrop
-        } else {
-            self.0.ref_count.dec()
-        } {
+        let predicate = {
+            #[cfg(feature = "gc")]
+            {
+                self.0.dec() == GcStatus::ShouldDrop
+            }
+            #[cfg(not(feature = "gc"))]
+            {
+                self.0.ref_count.dec()
+            }
+        };
+        if predicate {
             unsafe { PyObject::drop_slow(self.ptr) }
         }
     }
@@ -1317,7 +1324,7 @@ macro_rules! partially_init {
             #[allow(invalid_value, dead_code, unreachable_code)]
             let _ = {$ty {
                 $(
-                    $(#[$attr])? 
+                    $(#[$attr])?
                     $init_field: $init_value,
                 )*
                 $($uninit_field: unreachable!(),)*
@@ -1389,6 +1396,7 @@ pub(crate) fn init_type_hierarchy() -> (PyTypeRef, PyTypeRef, PyTypeRef) {
         let object_type_ptr = Box::into_raw(Box::new(partially_init!(
             PyInner::<PyType> {
                 ref_count: RefCount::new(),
+                #[cfg(feature = "gc")]
                 header: GcHeader::new(),
                 typeid: TypeId::of::<PyType>(),
                 vtable: PyObjVTable::of::<PyType>(),
