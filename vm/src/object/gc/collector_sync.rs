@@ -15,7 +15,7 @@ use crate::object::gc::trace::GcObjPtr;
 use crate::object::gc::GcStatus;
 
 use once_cell::sync::Lazy;
-use rustpython_common::rc::PyRc;
+use rustpython_common::{lock::PyRwLock, rc::PyRc};
 use std::cell::Cell;
 thread_local! {
     /// assume any drop() impl doesn't create new thread, so gc only work in this one thread.
@@ -26,6 +26,7 @@ pub static GLOBAL_COLLECTOR: Lazy<PyRc<CcSync>> = Lazy::new(|| {
     PyRc::new(CcSync {
         roots: Mutex::new(Vec::new()),
         pause: Mutex::new(()),
+        gc_threads_num: PyRwLock::new(0),
     })
 });
 
@@ -64,6 +65,7 @@ pub struct CcSync {
     /// for stop the world, will be try to check lock every time deref ObjecteRef
     /// to achive pausing
     pub pause: Mutex<()>,
+    pub gc_threads_num: PyRwLock<isize>,
 }
 type ObjRef<'a> = &'a dyn GcObjPtr;
 type ObjPtr = NonNull<dyn GcObjPtr>;
@@ -86,6 +88,23 @@ unsafe fn free(ptr: ObjPtr) {
     dealloc(ptr.cast().as_ptr(), Layout::for_value(ptr.as_ref()));
 }
 impl CcSync {
+
+    pub fn vis_debug(&self) {
+        for root in self.roots.lock().unwrap().iter(){
+            let childs = self.get_childs(unsafe{ root.0.as_ref() });
+            dbg!(root);
+            dbg!(childs);
+        }
+    }
+
+    fn get_childs(&self, obj: ObjRef) -> Vec<WrappedPtr<dyn GcObjPtr>>{
+        let mut ret = Vec::new();
+        obj.trace(&mut |ch|{
+            ret.push(ch.as_ptr().into())
+        });
+        ret
+    }
+
     /// _suggest_(may or may not) collector to collect garbage.
     #[inline]
     pub fn gc(&self) {
@@ -158,13 +177,20 @@ impl CcSync {
     }
 
     fn collect_cycles(&self) {
-        warn!("Start collect cycle with len()={}", self.roots_len());
         if IS_GC_THREAD.with(|v| v.get()) {
             return;
             // already call collect_cycle() once
         }
         let lock = self.pause.lock().unwrap();
         IS_GC_THREAD.with(|v| v.set(true));
+        {
+            *self.gc_threads_num.write() += 1;
+        }
+        warn!(
+            "Start collect_cycle() with len()={}, gc_threads_num={}",
+            self.roots_len(),
+            self.gc_threads_num.read()
+        );
         self.mark_roots();
         self.scan_roots();
         // drop lock in here (where the lock should be check in every deref() for ObjectRef)
@@ -173,8 +199,11 @@ impl CcSync {
         // no mutator will operate on them
         drop(lock);
         IS_GC_THREAD.with(|v| v.set(false));
+        {
+            *self.gc_threads_num.write() -= 1;
+        }
         self.collect_roots();
-        warn!("End collect cycle with len()={}", self.roots_len());
+        warn!("End collect_cycle() with len()={}", self.roots_len());
     }
 
     fn mark_roots(&self) {
@@ -233,10 +262,13 @@ impl CcSync {
             .count();
 
         #[cfg(debug_assertions)]
-        let non_empty = !white.is_empty();
+        let non_empty = true;
         #[cfg(debug_assertions)]
         if non_empty {
-            warn!("Collect cyclic garbage in white.len()={}", white.len());
+            warn!(
+                "Start collect_roots() collect cyclic garbage in white.len()={}",
+                white.len()
+            );
         }
 
         // Run drop on each of nodes.
@@ -267,7 +299,7 @@ impl CcSync {
 
         #[cfg(debug_assertions)]
         if non_empty {
-            warn!("Done free cyclic garbage.");
+            warn!("End collect_roots(). Done free cyclic garbage.");
         }
     }
     fn collect_white(&self, obj: ObjRef, white: &mut Vec<NonNull<dyn GcObjPtr>>) {
@@ -286,7 +318,12 @@ impl CcSync {
                 #[cfg(debug_assertions)]
                 if ch.header().rc() == 0 {
                     dbg!(ch.header());
+                    dbg!(obj.as_ptr());
+                    dbg!(ch.as_ptr());
+                    warn!("A gray object have a child that should be free, something is wrong.");
+                    dbg!(self.get_childs(obj));
                 }
+
                 ch.header().dec();
                 self.mark_gray(ch);
             });

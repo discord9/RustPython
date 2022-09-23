@@ -151,21 +151,22 @@ impl<T: PyObjectPayload> GcTrace for PyInner<T> {
         use crate::frame::Frame;
         use crate::protocol::PyIter;
         optional_trace!(
-            PyList /*
-                   // builtin types
-
-                   PyEnumerate,
-                   PyFilter,
-                   PyFunction,
-                   PyList,
-                   PyMap,
-                   PySet,
-                   PySlice,
-                   PyZip,
-                   // protocol
-                   PyIter
-                   */
-                   // vm internal(but can be call from python) data struct
+            PyList
+            /* 
+            // builtin types
+            
+            PyEnumerate,
+            PyFilter,
+            PyFunction,
+            PyList,
+            PyMap,
+            PySet,
+            PySlice,
+            PyZip,
+            // protocol
+            PyIter
+            */
+             // vm internal(but can be call from python) data struct
                    // Frame
         );
     }
@@ -332,9 +333,7 @@ impl WeakRefList {
                     }
                     #[cfg(not(feature = "gc"))]
                     {
-                        {
-                            generic_weakref.0.ref_count.get() != 0
-                        }
+                        generic_weakref.0.ref_count.get() != 0
                     }
                 } {
                     return generic_weakref.to_owned();
@@ -650,18 +649,16 @@ impl Deref for PyObjectRef {
     type Target = PyObject;
     #[inline(always)]
     fn deref(&self) -> &PyObject {
-        cfg_if::cfg_if! {
-            if #[cfg(feature = "gc")]{
-                {
-                    let obj = unsafe { self.ptr.as_ref() };
-                    obj.0.header().do_pausing();
-                    obj
-                }
-            }else{
-                unsafe {
-                    self.ptr.as_ref()
-                }
-            }
+        #[cfg(feature = "gc")]
+        {
+            let obj = unsafe { self.ptr.as_ref() };
+            obj.0.header().do_pausing();
+            obj
+        }
+
+        #[cfg(not(feature = "gc"))]
+        {
+            unsafe { self.ptr.as_ref() }
         }
     }
 }
@@ -1217,7 +1214,9 @@ impl<T: PyObjectPayload> Drop for PyRef<T> {
                 self.0.dec() == GcStatus::CallerDrop
             }
             #[cfg(not(feature = "gc"))]
-            self.0.ref_count.dec()
+            {
+                self.0.ref_count.dec()
+            }
         } {
             unsafe { PyObject::drop_slow(self.ptr.cast::<PyObject>()) }
         }
@@ -1458,18 +1457,26 @@ pub(crate) fn init_type_hierarchy() -> (PyTypeRef, PyTypeRef, PyTypeRef) {
 
         unsafe {
             #[cfg(feature = "gc")]
-            (*type_type_ptr).inc();
+            {
+                (*type_type_ptr).inc();
+            }
             #[cfg(not(feature = "gc"))]
-            (*type_type_ptr).ref_count.inc();
+            {
+                (*type_type_ptr).ref_count.inc();
+            }
 
             ptr::write(
                 &mut (*object_type_ptr).typ as *mut PyRwLock<PyTypeRef> as *mut UninitRef<PyType>,
                 PyRwLock::new(NonNull::new_unchecked(type_type_ptr)),
             );
             #[cfg(feature = "gc")]
-            (*type_type_ptr).inc();
+            {
+                (*type_type_ptr).inc();
+            }
             #[cfg(not(feature = "gc"))]
-            (*type_type_ptr).ref_count.inc();
+            {
+                (*type_type_ptr).ref_count.inc();
+            }
 
             ptr::write(
                 &mut (*type_type_ptr).typ as *mut PyRwLock<PyTypeRef> as *mut UninitRef<PyType>,

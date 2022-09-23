@@ -49,7 +49,7 @@ impl GcHeader {
         let _lock = self.gc.pause.lock().unwrap();
     }
     pub fn color(&self) -> Color {
-        *self.color.lock()
+        self.color.lock().clone()
     }
     pub fn set_color(&self, new_color: Color) {
         // dbg!(new_color);
@@ -97,7 +97,7 @@ impl GcHeader {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Color {
     /// In use or free
     Black,
@@ -107,4 +107,6 @@ pub enum Color {
     White,
     /// Possible root of cycle
     Purple,
+    /// for debug accessing object
+    Visited(Box<Color>)
 }
