@@ -141,8 +141,9 @@ impl<T: PyObjectPayload> GcTrace for PyInner<T> {
                 )else*
             };
         }
-        use crate::builtins::{PyList, PyDict,PySet, PyFunction};
-        optional_trace!(PyList, PyDict, PySet, PyFunction);
+        use crate::builtins::{PyList, PyDict,PySet, PySlice, PyFunction, PyZip};
+        use crate::protocol::PyIter;
+        optional_trace!(PyList, PyDict,PySet, PySlice, PyFunction, PyZip, PyIter);
     }
 }
 
