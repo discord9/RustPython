@@ -19,6 +19,7 @@ pub struct PySlice {
     pub step: Option<PyObjectRef>,
 }
 
+#[cfg(feature = "gc")]
 impl crate::object::gc::GcTrace for PySlice {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         self.start.trace(tracer_fn);

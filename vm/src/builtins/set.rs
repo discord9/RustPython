@@ -34,6 +34,7 @@ pub struct PySet {
     pub(super) inner: PySetInner,
 }
 
+#[cfg(feature = "gc")]
 impl crate::object::gc::GcTrace for PySet {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         let dict = &self.inner.content;
