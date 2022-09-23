@@ -21,6 +21,7 @@ use crate::common::{
     lock::{PyMutex, PyMutexGuard, PyRwLock},
     refcount::RefCount,
 };
+#[cfg(feature = "gc")]
 use crate::object::gc::{GcHeader, GcObjPtr, GcStatus, GcTrace, TracerFn};
 use crate::{
     builtins::{PyDictRef, PyTypeRef},

@@ -23,8 +23,10 @@ use crate::{
         IterNextIterable, Iterable, PyComparisonOp, Unconstructible, Unhashable,
     },
     vm::VirtualMachine,
-    AsObject, Context, Py, PyObject, PyObjectRef, PyPayload, PyRef, PyResult, TryFromObject, object::gc::{GcTrace, TracerFn},
+    AsObject, Context, Py, PyObject, PyObjectRef, PyPayload, PyRef, PyResult, TryFromObject, 
 };
+#[cfg(feature = "gc")]
+use crate::object::gc::{GcTrace, TracerFn};
 use rustpython_common::lock::PyMutex;
 use std::fmt;
 
@@ -45,6 +47,7 @@ pub struct PyDict {
     entries: DictContentType,
 }
 
+#[cfg(feature = "gc")]
 impl GcTrace for PyDict {
     fn trace(&self, tracer_fn: &mut TracerFn) {
         // TODO(discord9): elegant way to iterate over values instead of put pub(crate) everywhere to access it
