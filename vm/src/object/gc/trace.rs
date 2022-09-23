@@ -27,8 +27,12 @@ pub trait GcObjPtr: GcTrace {
 pub trait GcTrace {
     /// call tracer_fn for every GcOjbect owned by a dyn GcTrace Object
     /// # API Contract
-    /// must make sure that every owned object(Every stored `PyObjectRef` to be exactly) is called with tracer_fn once,
-    ///  or garbage collect won't act correctly and very likely to _**panic**_ or deadlock.
+    /// must make sure that every owned object(Every stored `PyObjectRef` to be exactly) is called with tracer_fn at most once.
+    /// 
+    /// if some field is not called, the worse results is memory leak, but if some field is called repeatly, panic and deadlock can happen.
+    /// 
+    /// Note that Two `PyObjectRef` to the Same `PyObject` still count as two Ref, and should be called twice(once for each one) in this case.
+    ///
     /// ```
     /// for ch in childs:
     ///     tracer_fn(ch)

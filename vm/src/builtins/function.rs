@@ -37,6 +37,7 @@ pub struct PyFunction {
     jitted_code: OnceCell<CompiledCode>,
 }
 
+#[cfg(feature = "gc")]
 impl crate::object::gc::GcTrace for PyFunction {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         tracer_fn((*self.globals).as_object());
