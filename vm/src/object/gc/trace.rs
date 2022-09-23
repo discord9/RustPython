@@ -1,3 +1,5 @@
+use rustpython_common::lock::PyMutex;
+
 use crate::object::gc::header::GcHeader;
 use crate::object::PyObjectPayload;
 use crate::{PyObjectRef, PyRef, AsObject};
@@ -77,6 +79,21 @@ impl<T: GcTrace> GcTrace for [T] {
     }
 }
 
+impl<T: GcTrace> GcTrace for PyMutex<T> {
+    #[inline]
+    fn trace(&self, tracer_fn: &mut TracerFn) {
+        self.lock().trace(tracer_fn);
+    }
+}
+
+// TODO(discord9): impl_tuples!
+impl<A: GcTrace, B: GcTrace> GcTrace for (A, B) {
+    #[inline]
+    fn trace(&self, tracer_fn: &mut TracerFn) {
+        self.0.trace(tracer_fn);
+        self.1.trace(tracer_fn);
+    }
+}
 
 
 

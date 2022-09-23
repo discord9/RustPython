@@ -38,13 +38,18 @@ pub struct PyFunction {
 #[cfg(feature = "gc")]
 impl crate::object::gc::GcTrace for PyFunction {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
-        tracer_fn((*self.globals).as_object());
+        self.code.trace(tracer_fn);
+        self.globals.trace(tracer_fn);
+        if let Some(closure) = &self.closure {
+            for elem in closure.as_ref(){
+                elem.trace(tracer_fn);
+            }
+        }
         {
             let inner = self.defaults_and_kwdefaults.lock();
-            inner.0.as_ref().map(|v|tracer_fn(v.as_object()));
-            inner.1.as_ref().map(|v|tracer_fn(v.as_object()));
+            inner.trace(tracer_fn);
         }
-        // TODO(discord9): call trace() on other elems
+        self.name.trace(tracer_fn);
     }
 }
 
