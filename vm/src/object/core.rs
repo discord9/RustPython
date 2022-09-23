@@ -212,6 +212,32 @@ impl GcObjPtr for PyObject {
     }
 }
 
+#[cfg(feature = "gc")]
+impl<T: PyObjectPayload> GcObjPtr for PyRef<T> {
+    /// call increment() of gc
+    fn inc(&self) {
+        self.as_object().0.inc()
+    }
+
+    /// call decrement() of gc
+    fn dec(&self) -> GcStatus {
+        // FIXME(discord9): remove as_object() cause strange bugs, haven't figure out why(To do with type layout?)
+        self.as_object().0.dec()
+    }
+
+    fn rc(&self) -> usize {
+        self.as_object().0.rc()
+    }
+
+    fn header(&self) -> &GcHeader {
+        self.as_object().0.header()
+    }
+
+    fn as_ptr(&self) -> NonNull<dyn GcObjPtr> {
+        self.as_object().0.as_ptr()
+    }
+}
+
 impl<T: fmt::Debug> fmt::Debug for PyInner<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "[PyObject {:?}]", &self.payload)
@@ -277,11 +303,17 @@ impl WeakRefList {
             if let Some(generic_weakref) = inner.generic_weakref {
                 let generic_weakref = unsafe { generic_weakref.as_ref() };
 
-                if if cfg!(feature = "gc") {
-                    generic_weakref.0.rc() != 0
-                } else {
-                    generic_weakref.0.ref_count.get() != 0
-                } {
+                let predicate = {
+                    #[cfg(feature = "gc")]
+                    {
+                        generic_weakref.0.rc() != 0
+                    }
+                    #[cfg(not(feature = "gc"))]
+                    {
+                        generic_weakref.0.ref_count.get() != 0
+                    }
+                };
+                if predicate {
                     return generic_weakref.to_owned();
                 }
             }
@@ -384,9 +416,12 @@ impl WeakRefList {
 impl WeakListInner {
     fn iter(&self) -> impl Iterator<Item = &Py<PyWeak>> {
         self.list.iter().filter(|wr| {
-            if cfg!(feature = "gc") {
+            #[cfg(feature = "gc")]
+            {
                 wr.0.rc() > 0
-            } else {
+            }
+            #[cfg(not(feature = "gc"))]
+            {
                 wr.0.ref_count.get() > 0
             }
         })
@@ -444,11 +479,17 @@ impl PyWeak {
         let guard = unsafe { self.parent.as_ref().lock() };
         let obj_ptr = guard.obj?;
         unsafe {
-            if if cfg!(feature = "gc") {
-                !obj_ptr.as_ref().0.header().safe_inc()
-            } else {
-                !obj_ptr.as_ref().0.ref_count.safe_inc()
-            } {
+            let predicate = {
+                #[cfg(feature = "gc")]
+                {
+                    !obj_ptr.as_ref().0.header().safe_inc()
+                }
+                #[cfg(not(feature = "gc"))]
+                {
+                    !obj_ptr.as_ref().0.ref_count.safe_inc()
+                }
+            };
+            if predicate {
                 return None;
             }
             Some(PyObjectRef::from_raw(obj_ptr.as_ptr()))
@@ -861,9 +902,12 @@ impl PyObject {
 
     #[inline(always)]
     pub fn strong_count(&self) -> usize {
-        if cfg!(feature = "gc") {
+        #[cfg(feature = "gc")]
+        {
             self.0.rc()
-        } else {
+        }
+        #[cfg(not(feature = "gc"))]
+        {
             self.0.ref_count.get()
         }
     }
@@ -951,17 +995,23 @@ impl PyObject {
     /// # Safety
     /// This call will make the object live forever.
     pub(crate) unsafe fn mark_intern(&self) {
-        if cfg!(feature = "gc") {
+        #[cfg(feature = "gc")]
+        {
             self.0.header().leak();
-        } else {
+        }
+        #[cfg(not(feature = "gc"))]
+        {
             self.0.ref_count.leak();
         }
     }
 
     pub(crate) fn is_interned(&self) -> bool {
-        if cfg!(feature = "gc") {
+        #[cfg(feature = "gc")]
+        {
             self.0.header().is_leaked()
-        } else {
+        }
+        #[cfg(not(feature = "gc"))]
+        {
             self.0.ref_count.is_leaked()
         }
     }
@@ -1020,7 +1070,7 @@ impl Drop for PyObjectRef {
         let predicate = {
             #[cfg(feature = "gc")]
             {
-                self.0.dec() == GcStatus::ShouldDrop
+                self.dec() == GcStatus::ShouldDrop
             }
             #[cfg(not(feature = "gc"))]
             {
@@ -1141,11 +1191,17 @@ impl<T: PyObjectPayload> fmt::Debug for PyRef<T> {
 impl<T: PyObjectPayload> Drop for PyRef<T> {
     #[inline]
     fn drop(&mut self) {
-        if if cfg!(feature = "gc") {
-            self.no_pausing_ref().0.dec() == GcStatus::ShouldDrop
-        } else {
-            self.no_pausing_ref().0.ref_count.dec()
-        } {
+        let predicate = {
+            #[cfg(feature = "gc")]
+            {
+                self.dec() == GcStatus::ShouldDrop
+            }
+            #[cfg(not(feature = "gc"))]
+            {
+                self.as_object().0.ref_count.dec()
+            }
+        };
+        if predicate {
             unsafe { PyObject::drop_slow(self.ptr.cast::<PyObject>()) }
         }
     }
