@@ -15,12 +15,12 @@ use super::{
     ext::{AsObject, PyResult},
     payload::PyObjectPayload,
 };
-use crate::{common::{
+use crate::common::{
     atomic::{OncePtr, PyAtomic, Radium},
     linked_list::{Link, LinkedList, Pointers},
     lock::{PyMutex, PyMutexGuard, PyRwLock},
     refcount::RefCount,
-} };
+};
 use crate::object::gc::{GcHeader, GcObjPtr, GcStatus, GcTrace, TracerFn};
 use crate::{
     builtins::{PyDictRef, PyTypeRef},
@@ -35,7 +35,7 @@ use std::{
     marker::PhantomData,
     mem::ManuallyDrop,
     ops::Deref,
-    ptr::{self, NonNull}
+    ptr::{self, NonNull},
 };
 
 // so, PyObjectRef is basically equivalent to `PyRc<PyInner<dyn PyObjectPayload>>`, except it's
@@ -110,6 +110,7 @@ impl PyObjVTable {
 #[repr(C)]
 struct PyInner<T> {
     ref_count: RefCount,
+    #[cfg(feature = "gc")]
     header: GcHeader,
     // TODO: move typeid into vtable once TypeId::of is const
     typeid: TypeId,
@@ -127,9 +128,9 @@ struct PyInner<T> {
 impl<T: PyObjectPayload> GcTrace for PyInner<T> {
     fn trace(&self, tracer_fn: &mut TracerFn) {
         /// Optional trait bound(Like a ?GcTrace) require specialization
-        /// 
+        ///
         /// https://stackoverflow.com/questions/68701910/function-optional-trait-bound-in-rust
-        /// 
+        ///
         /// fall back to use TypeId for now
         macro_rules! optional_trace {
             ($($TY: ty),*) => {
@@ -141,9 +142,9 @@ impl<T: PyObjectPayload> GcTrace for PyInner<T> {
                 )else*
             };
         }
-        use crate::builtins::{PyList, PyDict,PySet, PySlice, PyFunction, PyZip};
+        use crate::builtins::{PyDict, PyFunction, PyList, PySet, PySlice, PyZip};
         use crate::protocol::PyIter;
-        optional_trace!(PyList, PyDict,PySet, PySlice, PyFunction, PyZip, PyIter);
+        optional_trace!(PyList, PyDict, PySet, PySlice, PyFunction, PyZip, PyIter);
     }
 }
 
@@ -627,12 +628,15 @@ impl ToOwned for PyObject {
 
     #[inline(always)]
     fn to_owned(&self) -> Self::Owned {
-        if cfg!(feature = "gc") {
+        #[cfg(feature = "gc")]
+        {
             self.0.inc();
-        } else {
+        }
+        #[cfg(not(feature = "gc"))]
+        {
             self.0.ref_count.inc();
         }
-        
+
         PyObjectRef {
             ptr: NonNull::from(self),
         }
@@ -886,7 +890,6 @@ impl PyObject {
         } else {
             self.0.ref_count.get()
         }
-        
     }
 
     #[inline]
@@ -909,23 +912,28 @@ impl PyObject {
             slot_del: fn(&PyObject, &VirtualMachine) -> PyResult<()>,
         ) -> Result<(), ()> {
             let ret = crate::vm::thread::with_vm(zelf, |vm| {
-                if cfg!(feature = "gc") {
+                #[cfg(feature = "gc")]
+                {
                     zelf.0.inc();
-                } else {
+                }
+                #[cfg(not(feature = "gc"))]
+                {
                     zelf.0.ref_count.inc();
                 }
-                
+
                 if let Err(e) = slot_del(zelf, vm) {
                     let del_method = zelf.get_class_attr(identifier!(vm, __del__)).unwrap();
                     vm.run_unraisable(e, None, del_method);
                 }
-                if cfg!(feature = "gc") {
+                #[cfg(feature = "gc")]
+                {
                     // FIXME(discord9): figure out if Buffered should drop.
                     zelf.0.dec() == GcStatus::ShouldDrop || zelf.0.dec() == GcStatus::Buffered
-                } else {
+                }
+                #[cfg(not(feature = "gc"))]
+                {
                     zelf.0.ref_count.dec()
                 }
-                
             });
             match ret {
                 // the decref right above set ref_count back to 0
@@ -971,7 +979,6 @@ impl PyObject {
         } else {
             self.0.ref_count.leak();
         }
-        
     }
 
     pub(crate) fn is_interned(&self) -> bool {
@@ -980,7 +987,6 @@ impl PyObject {
         } else {
             self.0.ref_count.is_leaked()
         }
-        
     }
 
     pub(crate) fn get_slot(&self, offset: usize) -> Option<PyObjectRef> {
@@ -1033,7 +1039,7 @@ impl Drop for PyObjectRef {
 
         #[cfg(not(feature = "gc"))]
         */
-        
+
         if if cfg!(feature = "gc") {
             self.0.dec() == GcStatus::ShouldDrop
         } else {
@@ -1073,9 +1079,12 @@ impl<T: PyObjectPayload> ToOwned for Py<T> {
 
     #[inline(always)]
     fn to_owned(&self) -> Self::Owned {
-        if cfg!(feature = "gc") {
+        #[cfg(feature = "gc")]
+        {
             self.0.inc();
-        } else {
+        }
+        #[cfg(not(feature = "gc"))]
+        {
             self.0.ref_count.inc();
         }
         PyRef {
@@ -1388,19 +1397,25 @@ pub(crate) fn init_type_hierarchy() -> (PyTypeRef, PyTypeRef, PyTypeRef) {
             type_type_ptr as *mut MaybeUninit<PyInner<PyType>> as *mut PyInner<PyType>;
 
         unsafe {
-            if cfg!(feature = "gc") {
+            #[cfg(feature = "gc")]
+            {
                 (*type_type_ptr).inc();
-            } else {
+            }
+            #[cfg(not(feature = "gc"))]
+            {
                 (*type_type_ptr).ref_count.inc();
             }
-            
+
             ptr::write(
                 &mut (*object_type_ptr).typ as *mut PyRwLock<PyTypeRef> as *mut UninitRef<PyType>,
                 PyRwLock::new(NonNull::new_unchecked(type_type_ptr)),
             );
-            if cfg!(feature = "gc") {
+            #[cfg(feature = "gc")]
+            {
                 (*type_type_ptr).inc();
-            } else {
+            }
+            #[cfg(not(feature = "gc"))]
+            {
                 (*type_type_ptr).ref_count.inc();
             }
             ptr::write(
