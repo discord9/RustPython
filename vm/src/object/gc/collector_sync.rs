@@ -54,7 +54,6 @@ impl<T: ?Sized> From<WrappedPtr<T>> for NonNull<T> {
     }
 }
 
-
 #[derive(Debug, Default)]
 pub struct CcSync {
     roots: Mutex<Vec<WrappedPtr<dyn GcObjPtr>>>,
@@ -80,9 +79,7 @@ impl CcSync {
     #[inline]
     pub fn gc(&self) {
         if self.should_gc() {
-            warn!("Start gc with len()={}", self.roots_len());
             self.collect_cycles();
-            warn!("End gc with len()={}", self.roots_len());
         }
     }
     fn roots_len(&self) -> usize {
@@ -149,12 +146,12 @@ impl CcSync {
     }
 
     fn collect_cycles(&self) {
-        if IS_GC_THREAD.with(|v|v.get()){
+        if IS_GC_THREAD.with(|v| v.get()) {
             return;
             // already call collect_cycle() once
         }
         let lock = self.pause.lock().unwrap();
-        IS_GC_THREAD.with(|v|v.set(true));
+        IS_GC_THREAD.with(|v| v.set(true));
         self.mark_roots();
         self.scan_roots();
         // drop lock in here (where the lock should be check in every deref() for ObjectRef)
@@ -162,13 +159,13 @@ impl CcSync {
         // also what's left for collection should already be in garbage cycle,
         // no mutator will operate on them
         drop(lock);
-        IS_GC_THREAD.with(|v|v.set(false));
+        IS_GC_THREAD.with(|v| v.set(false));
         self.collect_roots();
     }
 
     fn mark_roots(&self) {
-        let roots: Vec<_> = { self.roots.lock().unwrap().drain(..).collect() };
-        *self.roots.lock().unwrap() = roots
+        let old_roots: Vec<_> = { self.roots.lock().unwrap().drain(..).collect() };
+        let mut new_roots = old_roots
             .into_iter()
             .filter(|ptr| {
                 let obj = unsafe { ptr.as_ref() };
@@ -193,6 +190,7 @@ impl CcSync {
                 }
             })
             .collect();
+        (*self.roots.lock().unwrap()).append(&mut new_roots);
     }
     fn scan_roots(&self) {
         self.roots
@@ -220,7 +218,7 @@ impl CcSync {
                 self.collect_white(obj, &mut white);
             })
             .count();
-        if !white.is_empty(){
+        if !white.is_empty() {
             warn!("Collect cyclic garbage in white.len()={}", white.len());
         }
         // Run drop on each of nodes.
