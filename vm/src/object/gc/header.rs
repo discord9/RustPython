@@ -6,7 +6,7 @@ use std::sync::{
 use rustpython_common::{atomic::PyAtomic, lock::PyMutex, rc::PyRc};
 use crate::object::gc::{CcSync, GLOBAL_COLLECTOR, IS_GC_THREAD};
 
-
+#[derive(Debug)]
 pub struct GcHeader {
     ref_cnt: PyAtomic<usize>,
     color: PyMutex<Color>,

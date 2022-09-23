@@ -9,9 +9,9 @@ use core::ptr::NonNull;
 #[derive(PartialEq, Eq)]
 pub enum GcStatus {
     /// should be drop by caller
-    ShouldDrop,
+    CallerDrop,
     /// already buffered, will be drop by collector, no more action is required at caller
-    Buffered,
+    BufferedDrop,
     /// should keep and not drop by caller
     ShouldKeep,
 }

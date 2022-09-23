@@ -1,8 +1,7 @@
-/// based on paper:http://link.springer.com/10.1007/3-540-45337-7_12 
+/// based on paper:http://link.springer.com/10.1007/3-540-45337-7_12
 /// and crate: https://github.com/fitzgen/bacon-rajan-cc
 /// for a simple ref count cycle collector
 /// TODO(discord9): make a on-the-fly version based on doi:10.1145/1255450.1255453
-
 use std::{
     alloc::{dealloc, Layout},
     fmt,
@@ -59,7 +58,6 @@ impl<T: ?Sized> From<WrappedPtr<T>> for NonNull<T> {
     }
 }
 
-
 #[derive(Debug, Default)]
 pub struct CcSync {
     roots: Mutex<Vec<WrappedPtr<dyn GcObjPtr>>>,
@@ -105,6 +103,7 @@ impl CcSync {
     pub fn increment(&self, obj: ObjRef) {
         obj.header().inc();
         obj.header().set_color(Color::Black);
+        self.gc();
     }
 
     /// # Safety
@@ -123,7 +122,7 @@ impl CcSync {
             }
         } else {
             // FIXME(discord9): confirm if rc==0 then should drop
-            GcStatus::ShouldDrop
+            GcStatus::CallerDrop
         }
     }
 
@@ -139,11 +138,11 @@ impl CcSync {
         // before it is free in here,
         // but now change to passing message to allow it to drop outside
         if !obj.header().buffered() {
-            GcStatus::ShouldDrop
+            GcStatus::CallerDrop
             // unsafe { free(obj.as_ptr()) }
         } else {
-            self.gc();
-            GcStatus::Buffered
+            // self.gc();
+            GcStatus::BufferedDrop
         }
     }
 
@@ -159,12 +158,13 @@ impl CcSync {
     }
 
     fn collect_cycles(&self) {
-        if IS_GC_THREAD.with(|v|v.get()){
+        warn!("Start collect cycle with len()={}", self.roots_len());
+        if IS_GC_THREAD.with(|v| v.get()) {
             return;
             // already call collect_cycle() once
         }
         let lock = self.pause.lock().unwrap();
-        IS_GC_THREAD.with(|v|v.set(true));
+        IS_GC_THREAD.with(|v| v.set(true));
         self.mark_roots();
         self.scan_roots();
         // drop lock in here (where the lock should be check in every deref() for ObjectRef)
@@ -172,8 +172,9 @@ impl CcSync {
         // also what's left for collection should already be in garbage cycle,
         // no mutator will operate on them
         drop(lock);
-        IS_GC_THREAD.with(|v|v.set(false));
+        IS_GC_THREAD.with(|v| v.set(false));
         self.collect_roots();
+        warn!("End collect cycle with len()={}", self.roots_len());
     }
 
     fn mark_roots(&self) {
@@ -230,9 +231,14 @@ impl CcSync {
                 self.collect_white(obj, &mut white);
             })
             .count();
-        if !white.is_empty(){
+
+        #[cfg(debug_assertions)]
+        let non_empty = !white.is_empty();
+        #[cfg(debug_assertions)]
+        if non_empty {
             warn!("Collect cyclic garbage in white.len()={}", white.len());
         }
+
         // Run drop on each of nodes.
         for i in &white {
             // Calling drop() will decrement the reference count on any of our live children.
@@ -258,6 +264,11 @@ impl CcSync {
         for i in &white {
             unsafe { free(*i) }
         }
+
+        #[cfg(debug_assertions)]
+        if non_empty {
+            warn!("Done free cyclic garbage.");
+        }
     }
     fn collect_white(&self, obj: ObjRef, white: &mut Vec<NonNull<dyn GcObjPtr>>) {
         if obj.header().color() == Color::White && !obj.header().buffered() {
@@ -272,6 +283,10 @@ impl CcSync {
         if obj.header().color() != Color::Gray {
             obj.header().set_color(Color::Gray);
             obj.trace(&mut |ch| {
+                #[cfg(debug_assertions)]
+                if ch.header().rc() == 0 {
+                    dbg!(ch.header());
+                }
                 ch.header().dec();
                 self.mark_gray(ch);
             });

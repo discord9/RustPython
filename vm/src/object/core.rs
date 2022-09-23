@@ -15,11 +15,12 @@ use super::{
     ext::{AsObject, PyResult},
     payload::PyObjectPayload,
 };
+#[cfg(not(feature = "gc"))]
+use crate::common::refcount::RefCount;
 use crate::common::{
     atomic::{OncePtr, PyAtomic, Radium},
     linked_list::{Link, LinkedList, Pointers},
     lock::{PyMutex, PyMutexGuard, PyRwLock},
-    refcount::RefCount,
 };
 #[cfg(feature = "gc")]
 use crate::object::gc::{GcHeader, GcObjPtr, GcStatus, GcTrace, TracerFn};
@@ -110,6 +111,7 @@ impl PyObjVTable {
 /// payload can be a rust float or rust int in case of float and int objects.
 #[repr(C)]
 struct PyInner<T> {
+    #[cfg(not(feature = "gc"))]
     ref_count: RefCount,
     #[cfg(feature = "gc")]
     header: GcHeader,
@@ -149,20 +151,22 @@ impl<T: PyObjectPayload> GcTrace for PyInner<T> {
         use crate::frame::Frame;
         use crate::protocol::PyIter;
         optional_trace!(
-            // builtin types
-            PyDict,
-            PyEnumerate,
-            PyFilter,
-            PyFunction,
-            PyList,
-            PyMap,
-            PySet,
-            PySlice,
-            PyZip,
-            // protocol
-            PyIter,
-            // vm internal(but can be call from python) data struct
-            Frame
+            PyList /*
+                   // builtin types
+
+                   PyEnumerate,
+                   PyFilter,
+                   PyFunction,
+                   PyList,
+                   PyMap,
+                   PySet,
+                   PySlice,
+                   PyZip,
+                   // protocol
+                   PyIter
+                   */
+                   // vm internal(but can be call from python) data struct
+                   // Frame
         );
     }
 }
@@ -321,10 +325,17 @@ impl WeakRefList {
             if let Some(generic_weakref) = inner.generic_weakref {
                 let generic_weakref = unsafe { generic_weakref.as_ref() };
 
-                if if cfg!(feature = "gc") {
-                    generic_weakref.0.rc() != 0
-                } else {
-                    generic_weakref.0.ref_count.get() != 0
+                if {
+                    #[cfg(feature = "gc")]
+                    {
+                        generic_weakref.0.rc() != 0
+                    }
+                    #[cfg(not(feature = "gc"))]
+                    {
+                        {
+                            generic_weakref.0.ref_count.get() != 0
+                        }
+                    }
                 } {
                     return generic_weakref.to_owned();
                 }
@@ -428,9 +439,12 @@ impl WeakRefList {
 impl WeakListInner {
     fn iter(&self) -> impl Iterator<Item = &Py<PyWeak>> {
         self.list.iter().filter(|wr| {
-            if cfg!(feature = "gc") {
+            #[cfg(feature = "gc")]
+            {
                 wr.0.rc() > 0
-            } else {
+            }
+            #[cfg(not(feature = "gc"))]
+            {
                 wr.0.ref_count.get() > 0
             }
         })
@@ -488,10 +502,15 @@ impl PyWeak {
         let guard = unsafe { self.parent.as_ref().lock() };
         let obj_ptr = guard.obj?;
         unsafe {
-            if if cfg!(feature = "gc") {
-                !obj_ptr.as_ref().0.header().safe_inc()
-            } else {
-                !obj_ptr.as_ref().0.ref_count.safe_inc()
+            if {
+                #[cfg(feature = "gc")]
+                {
+                    !obj_ptr.as_ref().0.header().safe_inc()
+                }
+                #[cfg(not(feature = "gc"))]
+                {
+                    !obj_ptr.as_ref().0.ref_count.safe_inc()
+                }
             } {
                 return None;
             }
@@ -582,6 +601,7 @@ impl<T: PyObjectPayload> PyInner<T> {
     fn new(payload: T, typ: PyTypeRef, dict: Option<PyDictRef>) -> Box<Self> {
         let member_count = typ.slots.member_count;
         Box::new(PyInner {
+            #[cfg(not(feature = "gc"))]
             ref_count: RefCount::new(),
             #[cfg(feature = "gc")]
             header: GcHeader::new(),
@@ -630,15 +650,18 @@ impl Deref for PyObjectRef {
     type Target = PyObject;
     #[inline(always)]
     fn deref(&self) -> &PyObject {
-        #[cfg(feature = "gc")]
-        {
-            let obj = unsafe { self.ptr.as_ref() };
-            obj.0.header().do_pausing();
-            obj
-        }
-        #[cfg(not(feature = "gc"))]
-        unsafe {
-            self.ptr.as_ref()
+        cfg_if::cfg_if! {
+            if #[cfg(feature = "gc")]{
+                {
+                    let obj = unsafe { self.ptr.as_ref() };
+                    obj.0.header().do_pausing();
+                    obj
+                }
+            }else{
+                unsafe {
+                    self.ptr.as_ref()
+                }
+            }
         }
     }
 }
@@ -648,9 +671,13 @@ impl ToOwned for PyObject {
 
     #[inline(always)]
     fn to_owned(&self) -> Self::Owned {
-        if cfg!(feature = "gc") {
+        #[cfg(feature = "gc")]
+        {
             self.0.inc();
-        } else {
+        }
+
+        #[cfg(not(feature = "gc"))]
+        {
             self.0.ref_count.inc();
         }
 
@@ -902,9 +929,12 @@ impl PyObject {
 
     #[inline(always)]
     pub fn strong_count(&self) -> usize {
-        if cfg!(feature = "gc") {
+        #[cfg(feature = "gc")]
+        {
             self.0.rc()
-        } else {
+        }
+        #[cfg(not(feature = "gc"))]
+        {
             self.0.ref_count.get()
         }
     }
@@ -930,10 +960,13 @@ impl PyObject {
         ) -> Result<(), ()> {
             let ret = crate::vm::thread::with_vm(zelf, |vm| {
                 #[cfg(feature = "gc")]
-                zelf.0.inc();
+                {
+                    zelf.0.inc();
+                }
                 #[cfg(not(feature = "gc"))]
-                zelf.0.ref_count.inc();
-
+                {
+                    zelf.0.ref_count.inc();
+                }
                 if let Err(e) = slot_del(zelf, vm) {
                     let del_method = zelf.get_class_attr(identifier!(vm, __del__)).unwrap();
                     vm.run_unraisable(e, None, del_method);
@@ -941,10 +974,15 @@ impl PyObject {
 
                 // FIXME(discord9): figure out if Buffered should drop.
                 #[cfg(feature = "gc")]
-                {zelf.0.dec() == GcStatus::ShouldDrop || zelf.0.dec() == GcStatus::Buffered}
-                
+                {
+                    let res = zelf.0.dec();
+                    res == GcStatus::CallerDrop || res == GcStatus::BufferedDrop
+                }
+
                 #[cfg(not(feature = "gc"))]
-                zelf.0.ref_count.dec()
+                {
+                    zelf.0.ref_count.dec()
+                }
             });
             match ret {
                 // the decref right above set ref_count back to 0
@@ -985,17 +1023,23 @@ impl PyObject {
     /// # Safety
     /// This call will make the object live forever.
     pub(crate) unsafe fn mark_intern(&self) {
-        if cfg!(feature = "gc") {
+        #[cfg(feature = "gc")]
+        {
             self.0.header().leak();
-        } else {
+        }
+        #[cfg(not(feature = "gc"))]
+        {
             self.0.ref_count.leak();
         }
     }
 
     pub(crate) fn is_interned(&self) -> bool {
-        if cfg!(feature = "gc") {
+        #[cfg(feature = "gc")]
+        {
             self.0.header().is_leaked()
-        } else {
+        }
+        #[cfg(not(feature = "gc"))]
+        {
             self.0.ref_count.is_leaked()
         }
     }
@@ -1040,21 +1084,16 @@ impl<'a, T: PyObjectPayload> From<&'a Py<T>> for &'a PyObject {
 impl Drop for PyObjectRef {
     #[inline]
     fn drop(&mut self) {
-        /*
-        #[cfg(feature = "gc")]
-        {
-            if self.as_ref().0.dec() == GcStatus::ShouldDrop {
-                unsafe { PyObject::drop_slow(self.ptr) }
+        #[allow(clippy::blocks_in_if_conditions)]
+        if {
+            #[cfg(feature = "gc")]
+            {
+                self.0.dec() == GcStatus::CallerDrop
             }
-        }
-
-        #[cfg(not(feature = "gc"))]
-        */
-
-        if if cfg!(feature = "gc") {
-            self.0.dec() == GcStatus::ShouldDrop
-        } else {
-            self.0.ref_count.dec()
+            #[cfg(not(feature = "gc"))]
+            {
+                self.0.ref_count.dec()
+            }
         } {
             unsafe { PyObject::drop_slow(self.ptr) }
         }
@@ -1090,11 +1129,16 @@ impl<T: PyObjectPayload> ToOwned for Py<T> {
 
     #[inline(always)]
     fn to_owned(&self) -> Self::Owned {
-        if cfg!(feature = "gc") {
+        #[cfg(feature = "gc")]
+        {
             self.0.inc();
-        } else {
+        }
+
+        #[cfg(not(feature = "gc"))]
+        {
             self.0.ref_count.inc();
         }
+
         PyRef {
             ptr: NonNull::from(self),
         }
@@ -1165,11 +1209,15 @@ impl<T: PyObjectPayload> fmt::Debug for PyRef<T> {
 
 impl<T: PyObjectPayload> Drop for PyRef<T> {
     #[inline]
+    #[allow(clippy::blocks_in_if_conditions)]
     fn drop(&mut self) {
-        if if cfg!(feature = "gc") {
-            self.no_pausing_ref().0.dec() == GcStatus::ShouldDrop
-        } else {
-            self.no_pausing_ref().0.ref_count.dec()
+        if {
+            #[cfg(feature = "gc")]
+            {
+                self.0.dec() == GcStatus::CallerDrop
+            }
+            #[cfg(not(feature = "gc"))]
+            self.0.ref_count.dec()
         } {
             unsafe { PyObject::drop_slow(self.ptr.cast::<PyObject>()) }
         }
@@ -1374,6 +1422,7 @@ pub(crate) fn init_type_hierarchy() -> (PyTypeRef, PyTypeRef, PyTypeRef) {
         };
         let type_type_ptr = Box::into_raw(Box::new(partially_init!(
             PyInner::<PyType> {
+                #[cfg(not(feature = "gc"))]
                 ref_count: RefCount::new(),
                 #[cfg(feature = "gc")]
                 header: GcHeader::new(),
@@ -1388,6 +1437,7 @@ pub(crate) fn init_type_hierarchy() -> (PyTypeRef, PyTypeRef, PyTypeRef) {
         )));
         let object_type_ptr = Box::into_raw(Box::new(partially_init!(
             PyInner::<PyType> {
+                #[cfg(not(feature = "gc"))]
                 ref_count: RefCount::new(),
                 #[cfg(feature = "gc")]
                 header: GcHeader::new(),
@@ -1420,7 +1470,7 @@ pub(crate) fn init_type_hierarchy() -> (PyTypeRef, PyTypeRef, PyTypeRef) {
             (*type_type_ptr).inc();
             #[cfg(not(feature = "gc"))]
             (*type_type_ptr).ref_count.inc();
-            
+
             ptr::write(
                 &mut (*type_type_ptr).typ as *mut PyRwLock<PyTypeRef> as *mut UninitRef<PyType>,
                 PyRwLock::new(NonNull::new_unchecked(type_type_ptr)),

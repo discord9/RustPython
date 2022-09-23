@@ -34,7 +34,10 @@ pub struct PyList {
 #[cfg(feature = "gc")]
 impl crate::object::gc::GcTrace for PyList{
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
-        self.borrow_vec().as_ref().trace(tracer_fn);
+        // self.borrow_vec().iter().map(|v|v.trace(tracer_fn)).count();
+        for elem in self.borrow_vec().iter(){
+            tracer_fn(elem.as_ref())
+        }
     }
 }
 
