@@ -564,6 +564,7 @@ impl<T: PyObjectPayload> PyInner<T> {
         let member_count = typ.slots.member_count;
         Box::new(PyInner {
             ref_count: RefCount::new(),
+            #[cfg(feature = "gc")]
             header: GcHeader::new(),
             typeid: TypeId::of::<T>(),
             vtable: PyObjVTable::of::<T>(),
@@ -1308,21 +1309,27 @@ impl<T: PyObjectPayload> PyWeakRef<T> {
 /// either given values or explicitly left uninitialized
 macro_rules! partially_init {
     (
-        $ty:path {$($init_field:ident: $init_value:expr),*$(,)?},
+        $ty:path {$($(#[$attr:meta])? $init_field:ident: $init_value:expr),*$(,)?},
         Uninit { $($uninit_field:ident),*$(,)? }$(,)?
     ) => {{
         // check all the fields are there but *don't* actually run it
         if false {
             #[allow(invalid_value, dead_code, unreachable_code)]
             let _ = {$ty {
-                $($init_field: $init_value,)*
+                $(
+                    $(#[$attr])? 
+                    $init_field: $init_value,
+                )*
                 $($uninit_field: unreachable!(),)*
             }};
         }
         let mut m = ::std::mem::MaybeUninit::<$ty>::uninit();
         #[allow(unused_unsafe)]
         unsafe {
-            $(::std::ptr::write(&mut (*m.as_mut_ptr()).$init_field, $init_value);)*
+            $(
+                $(#[$attr])?
+                ::std::ptr::write(&mut (*m.as_mut_ptr()).$init_field, $init_value);
+            )*
         }
         m
     }};
@@ -1368,6 +1375,7 @@ pub(crate) fn init_type_hierarchy() -> (PyTypeRef, PyTypeRef, PyTypeRef) {
         let type_type_ptr = Box::into_raw(Box::new(partially_init!(
             PyInner::<PyType> {
                 ref_count: RefCount::new(),
+                #[cfg(feature = "gc")]
                 header: GcHeader::new(),
                 typeid: TypeId::of::<PyType>(),
                 vtable: PyObjVTable::of::<PyType>(),
