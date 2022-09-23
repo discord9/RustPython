@@ -38,7 +38,13 @@ pub struct PyFunction {
 
 impl crate::object::gc::GcTrace for PyFunction {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
-        tracer_fn(&*self.globals);
+        self.code.trace(tracer_fn);
+        self.globals.trace(tracer_fn);
+        if let Some(closure) = &self.closure{
+            for elem in closure.as_ref(){
+                elem.trace(tracer_fn);
+            }
+        }
         let inner = {
             let inner = self.defaults_and_kwdefaults.lock();
             (

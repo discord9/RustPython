@@ -1,3 +1,8 @@
+/// based on paper:http://link.springer.com/10.1007/3-540-45337-7_12 
+/// and crate: https://github.com/fitzgen/bacon-rajan-cc
+/// for a simple ref count cycle collector
+/// TODO(discord9): make a on-the-fly version based on doi:10.1145/1255450.1255453
+
 use std::{
     alloc::{dealloc, Layout},
     fmt,
@@ -65,6 +70,13 @@ pub struct CcSync {
 type ObjRef<'a> = &'a dyn GcObjPtr;
 type ObjPtr = NonNull<dyn GcObjPtr>;
 
+impl Drop for CcSync {
+    fn drop(&mut self) {
+        // force a gc before drop
+        self.collect_cycles();
+    }
+}
+
 unsafe fn drop_value(ptr: ObjPtr) {
     ptr::drop_in_place(ptr.as_ptr());
 }
@@ -80,9 +92,7 @@ impl CcSync {
     #[inline]
     pub fn gc(&self) {
         if self.should_gc() {
-            warn!("Start gc with len()={}", self.roots_len());
             self.collect_cycles();
-            warn!("End gc with len()={}", self.roots_len());
         }
     }
     fn roots_len(&self) -> usize {

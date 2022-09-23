@@ -39,7 +39,7 @@ impl crate::object::gc::GcTrace for PySet {
         let dict = &self.inner.content;
         let entries = &dict.read().entries;
         for entry in entries.iter().flatten() {
-            tracer_fn(entry.key.as_ref())
+            entry.key.trace(tracer_fn);
         }
     }
 }

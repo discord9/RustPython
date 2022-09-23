@@ -57,7 +57,7 @@ impl<T: PyObjectPayload> GcTrace for Option<PyRef<T>> {
     }
 }
 
-impl<T: PyObjectPayload> GcTrace for Vec<PyRef<T>> {
+impl<T: PyObjectPayload> GcTrace for [PyRef<T>] {
     #[inline]
     fn trace(&self, tracer_fn: &mut TracerFn) {
         for elem in self{
@@ -82,7 +82,7 @@ impl GcTrace for Option<PyObjectRef> {
     }
 }
 
-impl GcTrace for Vec<PyObjectRef> {
+impl GcTrace for [PyObjectRef] {
     #[inline]
     fn trace(&self, tracer_fn: &mut TracerFn) {
         for elem in self{

@@ -52,8 +52,8 @@ impl GcTrace for PyDict {
         let entries = &dict.read().entries;
         entries.iter().map(|v|{
             if let Some(v) = v{
-                tracer_fn(v.key.as_ref());
-                tracer_fn(v.value.as_ref());
+                v.key.trace(tracer_fn);
+                v.value.trace(tracer_fn);
             }
         }).count();
     }

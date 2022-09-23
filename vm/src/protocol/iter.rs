@@ -16,7 +16,8 @@ where
 
 impl<O: Borrow<PyObject>> crate::object::gc::GcTrace for PyIter<O> {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
-        self.0.as_object().trace(tracer_fn);
+        // FIXME(discord9): check if this is correct
+        tracer_fn(self.0.as_object());
     }
 }
 
