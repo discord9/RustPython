@@ -1,6 +1,6 @@
 use crate::object::gc::header::GcHeader;
 use crate::object::PyObjectPayload;
-use crate::{PyObjectRef, PyRef};
+use crate::{PyObjectRef, PyRef, AsObject};
 use core::ptr::NonNull;
 
 /// indicate what to do with the object afer calling dec()
@@ -41,14 +41,21 @@ pub trait GcTrace {
 /// by an instance of something.
 pub type TracerFn<'a> = dyn FnMut(&dyn GcObjPtr) + 'a;
 
-impl<T: PyObjectPayload> GcTrace for PyRef<T> {
+impl GcTrace for PyObjectRef {
     #[inline]
     fn trace(&self, tracer_fn: &mut TracerFn) {
-        tracer_fn(&(**self))
+        tracer_fn(self.as_ref())
     }
 }
 
-impl<T: PyObjectPayload> GcTrace for Option<PyRef<T>> {
+impl<T: PyObjectPayload> GcTrace for PyRef<T> {
+    #[inline]
+    fn trace(&self, tracer_fn: &mut TracerFn) {
+        tracer_fn((*self).as_object())
+    }
+}
+
+impl<T: GcTrace> GcTrace for Option<T> {
     #[inline]
     fn trace(&self, tracer_fn: &mut TracerFn) {
         if let Some(v) = self{
@@ -57,7 +64,7 @@ impl<T: PyObjectPayload> GcTrace for Option<PyRef<T>> {
     }
 }
 
-impl<T: PyObjectPayload> GcTrace for Vec<PyRef<T>> {
+impl<T: GcTrace> GcTrace for [T] {
     #[inline]
     fn trace(&self, tracer_fn: &mut TracerFn) {
         for elem in self{
@@ -66,27 +73,6 @@ impl<T: PyObjectPayload> GcTrace for Vec<PyRef<T>> {
     }
 }
 
-impl GcTrace for PyObjectRef {
-    #[inline]
-    fn trace(&self, tracer_fn: &mut TracerFn) {
-        tracer_fn(self.as_ref())
-    }
-}
 
-impl GcTrace for Option<PyObjectRef> {
-    #[inline]
-    fn trace(&self, tracer_fn: &mut TracerFn) {
-        if let Some(v) = self {
-            v.trace(tracer_fn);
-        }
-    }
-}
 
-impl GcTrace for Vec<PyObjectRef> {
-    #[inline]
-    fn trace(&self, tracer_fn: &mut TracerFn) {
-        for elem in self{
-            elem.trace(tracer_fn);
-        }
-    }
-}
+
