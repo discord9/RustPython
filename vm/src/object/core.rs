@@ -21,6 +21,7 @@ use crate::common::{
     lock::{PyMutex, PyMutexGuard, PyRwLock},
     refcount::RefCount,
 };
+#[cfg(feature = "gc")]
 use crate::object::gc::{GcHeader, GcObjPtr, GcStatus, GcTrace, TracerFn};
 use crate::{
     builtins::{PyDictRef, PyTypeRef},
@@ -928,22 +929,22 @@ impl PyObject {
             slot_del: fn(&PyObject, &VirtualMachine) -> PyResult<()>,
         ) -> Result<(), ()> {
             let ret = crate::vm::thread::with_vm(zelf, |vm| {
-                if cfg!(feature = "gc") {
-                    zelf.0.inc();
-                } else {
-                    zelf.0.ref_count.inc();
-                }
+                #[cfg(feature = "gc")]
+                zelf.0.inc();
+                #[cfg(not(feature = "gc"))]
+                zelf.0.ref_count.inc();
 
                 if let Err(e) = slot_del(zelf, vm) {
                     let del_method = zelf.get_class_attr(identifier!(vm, __del__)).unwrap();
                     vm.run_unraisable(e, None, del_method);
                 }
-                if cfg!(feature = "gc") {
-                    // FIXME(discord9): figure out if Buffered should drop.
-                    zelf.0.dec() == GcStatus::ShouldDrop || zelf.0.dec() == GcStatus::Buffered
-                } else {
-                    zelf.0.ref_count.dec()
-                }
+
+                // FIXME(discord9): figure out if Buffered should drop.
+                #[cfg(feature = "gc")]
+                {zelf.0.dec() == GcStatus::ShouldDrop || zelf.0.dec() == GcStatus::Buffered}
+                
+                #[cfg(not(feature = "gc"))]
+                zelf.0.ref_count.dec()
             });
             match ret {
                 // the decref right above set ref_count back to 0
@@ -1328,7 +1329,7 @@ macro_rules! partially_init {
         let mut m = ::std::mem::MaybeUninit::<$ty>::uninit();
         #[allow(unused_unsafe)]
         unsafe {
-            $(::std::ptr::write(&mut (*m.as_mut_ptr()).$init_field, $init_value);)*
+            $($(#[$attr])? ::std::ptr::write(&mut (*m.as_mut_ptr()).$init_field, $init_value);)*
         }
         m
     }};
@@ -1388,6 +1389,7 @@ pub(crate) fn init_type_hierarchy() -> (PyTypeRef, PyTypeRef, PyTypeRef) {
         let object_type_ptr = Box::into_raw(Box::new(partially_init!(
             PyInner::<PyType> {
                 ref_count: RefCount::new(),
+                #[cfg(feature = "gc")]
                 header: GcHeader::new(),
                 typeid: TypeId::of::<PyType>(),
                 vtable: PyObjVTable::of::<PyType>(),
@@ -1405,21 +1407,20 @@ pub(crate) fn init_type_hierarchy() -> (PyTypeRef, PyTypeRef, PyTypeRef) {
             type_type_ptr as *mut MaybeUninit<PyInner<PyType>> as *mut PyInner<PyType>;
 
         unsafe {
-            if cfg!(feature = "gc") {
-                (*type_type_ptr).inc();
-            } else {
-                (*type_type_ptr).ref_count.inc();
-            }
+            #[cfg(feature = "gc")]
+            (*type_type_ptr).inc();
+            #[cfg(not(feature = "gc"))]
+            (*type_type_ptr).ref_count.inc();
 
             ptr::write(
                 &mut (*object_type_ptr).typ as *mut PyRwLock<PyTypeRef> as *mut UninitRef<PyType>,
                 PyRwLock::new(NonNull::new_unchecked(type_type_ptr)),
             );
-            if cfg!(feature = "gc") {
-                (*type_type_ptr).inc();
-            } else {
-                (*type_type_ptr).ref_count.inc();
-            }
+            #[cfg(feature = "gc")]
+            (*type_type_ptr).inc();
+            #[cfg(not(feature = "gc"))]
+            (*type_type_ptr).ref_count.inc();
+            
             ptr::write(
                 &mut (*type_type_ptr).typ as *mut PyRwLock<PyTypeRef> as *mut UninitRef<PyType>,
                 PyRwLock::new(NonNull::new_unchecked(type_type_ptr)),
