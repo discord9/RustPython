@@ -46,10 +46,9 @@ impl crate::object::gc::GcTrace for PyFunction {
                 elem.trace(tracer_fn);
             }
         }
-        {
-            let inner = self.defaults_and_kwdefaults.lock();
-            inner.trace(tracer_fn);
-        }
+
+        self.defaults_and_kwdefaults.trace(tracer_fn);
+
         self.name.trace(tracer_fn);
     }
 }
