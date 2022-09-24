@@ -193,7 +193,7 @@ impl CcSync {
                         unsafe {
                             // can drop directly because no one is refering it
                             // (unlike in collect_white where drop_in_place first and deallocate later)
-                            Box::from_raw(ptr.0.as_ptr());
+                            drop(Box::from_raw(ptr.0.as_ptr()));
                             /*
                             drop_value(ptr.0);
                             free(ptr.0);

@@ -15,11 +15,12 @@ use super::{
     ext::{AsObject, PyResult},
     payload::PyObjectPayload,
 };
+#[cfg(not(feature = "gc"))]
+use crate::common::refcount::RefCount;
 use crate::common::{
     atomic::{OncePtr, PyAtomic, Radium},
     linked_list::{Link, LinkedList, Pointers},
     lock::{PyMutex, PyMutexGuard, PyRwLock},
-    refcount::RefCount,
 };
 #[cfg(feature = "gc")]
 use crate::object::gc::{GcHeader, GcObjPtr, GcStatus, GcTrace, TracerFn};
@@ -524,7 +525,7 @@ pub struct PyWeak {
 
 #[cfg(feature = "gc")]
 impl crate::object::gc::GcTrace for PyWeak {
-    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+    fn trace(&self, _tracer_fn: &mut crate::object::gc::TracerFn) {
         // PyWeak doesn't own the object by define
         // FIXME(discord9): confirm this and test
     }

@@ -6,7 +6,6 @@ use super::{PyInt, PyTupleRef, PyType};
 use crate::{
     class::PyClassImpl,
     function::ArgCallable,
-    
     protocol::{PyIterReturn, PySequence, PySequenceMethods},
     types::{IterNext, IterNextIterable},
     Context, Py, PyObject, PyObjectRef, PyPayload, PyResult, VirtualMachine,
