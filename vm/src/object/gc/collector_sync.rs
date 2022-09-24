@@ -112,7 +112,7 @@ impl CcSync {
             // a leaked object should always keep
             return GcStatus::ShouldKeep;
         }
-        // TODO(discord9): find a better place for gc()
+
         if obj.header().rc() > 0 {
             // prevent RAII Drop to drop below zero
             let rc = obj.header().dec();
@@ -141,8 +141,8 @@ impl CcSync {
         // but now change to passing message to allow it to drop outside
         if !obj.header().buffered() {
             GcStatus::ShouldDrop
-            // unsafe { free(obj.as_ptr()) }
         } else {
+            // TODO(discord9): find a better place for gc()
             self.gc();
             GcStatus::Buffered
         }

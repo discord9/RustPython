@@ -417,7 +417,6 @@ impl Iterable for PyTuple {
 pub(crate) struct PyTupleIterator {
     internal: PyMutex<PositionIterInternal<PyTupleRef>>,
 }
-// TODO(discord9): figure out PyTupleIterator require trace() or not?
 
 #[cfg(feature = "gc")]
 impl crate::object::gc::GcTrace for PyTupleIterator {
