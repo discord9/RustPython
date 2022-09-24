@@ -3,6 +3,7 @@ use std::sync::atomic::Ordering;
 use crate::object::gc::{CcSync, GLOBAL_COLLECTOR, IS_GC_THREAD};
 use rustpython_common::{atomic::PyAtomic, lock::PyMutex, rc::PyRc};
 
+#[repr(C)]
 pub struct GcHeader {
     ref_cnt: PyAtomic<usize>,
     color: PyMutex<Color>,

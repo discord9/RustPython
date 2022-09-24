@@ -110,6 +110,7 @@ impl PyObjVTable {
 /// payload can be a rust float or rust int in case of float and int objects.
 #[repr(C)]
 struct PyInner<T> {
+    #[cfg(not(feature = "gc"))]
     ref_count: RefCount,
     #[cfg(feature = "gc")]
     header: GcHeader,
@@ -642,6 +643,7 @@ impl<T: PyObjectPayload> PyInner<T> {
     fn new(payload: T, typ: PyTypeRef, dict: Option<PyDictRef>) -> Box<Self> {
         let member_count = typ.slots.member_count;
         Box::new(PyInner {
+            #[cfg(not(feature = "gc"))]
             ref_count: RefCount::new(),
             #[cfg(feature = "gc")]
             header: GcHeader::new(),
@@ -1315,6 +1317,7 @@ impl<T: PyObjectPayload> PyRef<T> {
 
     pub fn leak(pyref: Self) -> &'static Py<T> {
         // FIXME(discord9): make sure leak this rc is ok
+        #[cfg(feature = "gc")]
         pyref.header().leak();
         let ptr = pyref.ptr;
         std::mem::forget(pyref);
@@ -1478,6 +1481,7 @@ pub(crate) fn init_type_hierarchy() -> (PyTypeRef, PyTypeRef, PyTypeRef) {
         };
         let type_type_ptr = Box::into_raw(Box::new(partially_init!(
             PyInner::<PyType> {
+                #[cfg(not(feature = "gc"))]
                 ref_count: RefCount::new(),
                 #[cfg(feature = "gc")]
                 header: GcHeader::new(),
@@ -1492,6 +1496,7 @@ pub(crate) fn init_type_hierarchy() -> (PyTypeRef, PyTypeRef, PyTypeRef) {
         )));
         let object_type_ptr = Box::into_raw(Box::new(partially_init!(
             PyInner::<PyType> {
+                #[cfg(not(feature = "gc"))]
                 ref_count: RefCount::new(),
                 #[cfg(feature = "gc")]
                 header: GcHeader::new(),

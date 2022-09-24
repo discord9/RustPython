@@ -6,11 +6,14 @@ use super::{PyInt, PyTupleRef, PyType};
 use crate::{
     class::PyClassImpl,
     function::ArgCallable,
-    object::gc::GcTrace,
+    
     protocol::{PyIterReturn, PySequence, PySequenceMethods},
     types::{IterNext, IterNextIterable},
     Context, Py, PyObject, PyObjectRef, PyPayload, PyResult, VirtualMachine,
 };
+
+#[cfg(feature = "gc")]
+use crate::object::gc::GcTrace;
 use rustpython_common::{
     lock::{PyMutex, PyRwLock, PyRwLockUpgradableReadGuard},
     static_cell,
