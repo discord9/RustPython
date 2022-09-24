@@ -1,9 +1,9 @@
+use std::sync::{Mutex, MutexGuard};
 use std::{
     alloc::{dealloc, Layout},
     fmt,
     ops::Deref,
     ptr::{self, NonNull},
-    sync::Mutex,
 };
 
 use crate::object::gc::header::Color;
@@ -98,6 +98,10 @@ impl CcSync {
     /// if the last ref to a object call decrement() on object,
     /// then this object should be considered freed.
     pub unsafe fn decrement(&self, obj: ObjRef) -> GcStatus {
+        if obj.header().is_leaked() {
+            // a leaked object should always keep
+            return GcStatus::ShouldKeep;
+        }
         // TODO(discord9): find a better place for gc()
         if obj.header().rc() > 0 {
             // prevent RAII Drop to drop below zero
@@ -150,17 +154,18 @@ impl CcSync {
             return;
             // already call collect_cycle() once
         }
+        // order of acquire lock and check IS_GC_THREAD here is important
+        // This prevent set multiple IS_GC_THREAD thread local variable to true
         let lock = self.pause.lock().unwrap();
         IS_GC_THREAD.with(|v| v.set(true));
+
         self.mark_roots();
         self.scan_roots();
         // drop lock in here (where the lock should be check in every deref() for ObjectRef)
-        // to not stop the world, so drop() in collect_roots() for object can happen
-        // also what's left for collection should already be in garbage cycle,
+        // to not stop the world
+        // what's left for collection should already be in garbage cycle,
         // no mutator will operate on them
-        drop(lock);
-        IS_GC_THREAD.with(|v| v.set(false));
-        self.collect_roots();
+        self.collect_roots(lock);
     }
 
     fn mark_roots(&self) {
@@ -203,13 +208,17 @@ impl CcSync {
             })
             .count();
     }
-    fn collect_roots(&self) {
+    fn collect_roots(&self, lock: MutexGuard<()>) {
         // Collecting the nodes into this Vec is difference from the original
         // Bacon-Rajan paper. We need this because we have destructors(RAII) and
         // running them during traversal will cause cycles to be broken which
         // ruins the rest of our traversal.
         let mut white = Vec::new();
         let roots: Vec<_> = { self.roots.lock().unwrap().drain(..).collect() };
+        // TODO(discord9): release gc pause lock in here, for after this line no white garbage will be access by mutator
+        IS_GC_THREAD.with(|v| v.set(false));
+        drop(lock);
+
         roots
             .into_iter()
             .map(|ptr| {
