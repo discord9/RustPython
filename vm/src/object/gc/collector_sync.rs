@@ -215,7 +215,7 @@ impl CcSync {
         // ruins the rest of our traversal.
         let mut white = Vec::new();
         let roots: Vec<_> = { self.roots.lock().unwrap().drain(..).collect() };
-        // TODO(discord9): release gc pause lock in here, for after this line no white garbage will be access by mutator
+        // release gc pause lock in here, for after this line no white garbage will be access by mutator
         IS_GC_THREAD.with(|v| v.set(false));
         drop(lock);
 
