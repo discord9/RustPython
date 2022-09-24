@@ -258,6 +258,7 @@ pub struct PyCallableIterator {
 impl crate::object::gc::GcTrace for PyCallableIterator {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         self.sentinel.trace(tracer_fn);
+        // FIXME(discord9): don't know if RwLock own a object
         self.status.trace(tracer_fn)
     }
 }
