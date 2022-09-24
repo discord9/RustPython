@@ -1,11 +1,7 @@
-use std::sync::{
-    atomic::Ordering,
-    Mutex,
-};
+use std::sync::atomic::Ordering;
 
-use rustpython_common::{atomic::PyAtomic, lock::PyMutex, rc::PyRc};
 use crate::object::gc::{CcSync, GLOBAL_COLLECTOR, IS_GC_THREAD};
-
+use rustpython_common::{atomic::PyAtomic, lock::PyMutex, rc::PyRc};
 
 pub struct GcHeader {
     ref_cnt: PyAtomic<usize>,
@@ -15,28 +11,27 @@ pub struct GcHeader {
     // log_ptr: Mutex<Option<LogPointer>>,
 }
 
-
 impl GcHeader {
     pub fn new() -> Self {
         Self {
             ref_cnt: 1.into(),
             color: PyMutex::new(Color::Black),
             buffered: PyMutex::new(false),
-            gc: GLOBAL_COLLECTOR.clone()
+            gc: GLOBAL_COLLECTOR.clone(),
         }
     }
     /// This function will block if is pausing by gc
-    pub fn do_pausing(&self){
-        if IS_GC_THREAD.with(|v|v.get()){
+    pub fn do_pausing(&self) {
+        if IS_GC_THREAD.with(|v| v.get()) {
             // if is same thread, then this thread is already stop by gc itself,
             // no need to block.
             // and any call to do_pausing is probably from drop() or what so allow it to continue execute.
             return;
         }
         #[cfg(debug_assertions)]
-        if let Err(err) = self.gc.pause.try_lock(){
+        if let Err(err) = self.gc.pause.try_lock() {
             debug!("is_pausing is blocked by gc:{:?}", err);
-            if matches!(err, std::sync::TryLockError::WouldBlock){
+            if matches!(err, std::sync::TryLockError::WouldBlock) {
                 let bt = backtrace::Backtrace::new();
                 println!("{:?}", bt);
             }
@@ -53,7 +48,7 @@ impl GcHeader {
     pub fn buffered(&self) -> bool {
         *self.buffered.lock()
     }
-    pub  fn set_buffered(&self, buffered: bool) {
+    pub fn set_buffered(&self, buffered: bool) {
         *self.buffered.lock() = buffered;
     }
     /// simple RC += 1
@@ -64,7 +59,9 @@ impl GcHeader {
     #[inline]
     pub fn safe_inc(&self) -> bool {
         self.ref_cnt
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |prev| (prev != 0).then(|| prev + 1))
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |prev| {
+                (prev != 0).then(|| prev + 1)
+            })
             .is_ok()
     }
     /// simple RC -= 1

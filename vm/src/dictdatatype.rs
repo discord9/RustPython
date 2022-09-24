@@ -228,7 +228,6 @@ impl<T> DictInner<T> {
 type PopInnerResult<T> = ControlFlow<Option<DictEntry<T>>>;
 
 impl<T: Clone> Dict<T> {
-    
     pub(crate) fn read(&self) -> PyRwLockReadGuard<'_, DictInner<T>> {
         self.inner.read()
     }

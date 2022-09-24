@@ -3,7 +3,7 @@ use std::{
     fmt,
     ops::Deref,
     ptr::{self, NonNull},
-    sync::{Arc, Mutex},
+    sync::Mutex,
 };
 
 use crate::object::gc::header::Color;

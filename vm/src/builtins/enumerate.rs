@@ -21,7 +21,7 @@ pub struct PyEnumerate {
 }
 
 #[cfg(feature = "gc")]
-impl crate::object::gc::GcTrace for PyEnumerate{
+impl crate::object::gc::GcTrace for PyEnumerate {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         self.iterator.trace(tracer_fn);
     }
@@ -94,10 +94,11 @@ pub struct PyReverseSequenceIterator {
 }
 
 #[cfg(feature = "gc")]
-impl crate::object::gc::GcTrace for PyReverseSequenceIterator{
+impl crate::object::gc::GcTrace for PyReverseSequenceIterator {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         self.internal.lock().trace(tracer_fn)
-    }}
+    }
+}
 
 impl PyPayload for PyReverseSequenceIterator {
     fn class(vm: &VirtualMachine) -> &'static Py<PyType> {

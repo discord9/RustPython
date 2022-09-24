@@ -41,7 +41,7 @@ impl crate::object::gc::GcTrace for PyFunction {
         self.code.trace(tracer_fn);
         self.globals.trace(tracer_fn);
         if let Some(closure) = &self.closure {
-            for elem in closure.as_ref(){
+            for elem in closure.as_ref() {
                 elem.trace(tracer_fn);
             }
         }
