@@ -1315,6 +1315,8 @@ impl<T: PyObjectPayload> PyRef<T> {
     }
 
     pub fn leak(pyref: Self) -> &'static Py<T> {
+        // FIXME(discord9): make sure leak this rc is ok
+        pyref.header().leak();
         let ptr = pyref.ptr;
         std::mem::forget(pyref);
         unsafe { &*ptr.as_ptr() }

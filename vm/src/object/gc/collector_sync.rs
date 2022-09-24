@@ -90,6 +90,10 @@ impl CcSync {
         self.roots_len() > 100
     }
     pub fn increment(&self, obj: ObjRef) {
+        if obj.header().is_leaked(){
+            // by define a leaked object's rc should not change?
+            return;
+        }
         obj.header().inc();
         obj.header().set_color(Color::Black);
     }
