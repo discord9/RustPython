@@ -231,9 +231,9 @@ where
 }
 
 #[cfg(feature = "gc")]
-impl<'a, T, O> crate::object::gc::GcTrace
-    for PyIterIter<'a, T, O>
-    where O: crate::object::gc::GcTrace + Borrow<PyObject> 
+impl<'a, T, O> crate::object::gc::GcTrace for PyIterIter<'a, T, O>
+where
+    O: crate::object::gc::GcTrace + Borrow<PyObject>,
 {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         self.obj.trace(tracer_fn)
