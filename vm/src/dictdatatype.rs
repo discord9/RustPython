@@ -34,17 +34,7 @@ pub struct Dict<T = PyObjectRef> {
 #[cfg(feature = "gc")]
 impl<T: crate::object::gc::GcTrace> crate::object::gc::GcTrace for Dict<T> {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
-        self.inner
-            .read()
-            .entries
-            .iter()
-            .map(|v| {
-                if let Some(v) = v {
-                    v.key.trace(tracer_fn);
-                    v.value.trace(tracer_fn);
-                }
-            })
-            .count();
+        self.inner.trace(tracer_fn)
     }
 }
 
@@ -84,6 +74,21 @@ pub(crate) struct DictInner<T> {
     filled: usize,
     indices: Vec<IndexEntry>,
     pub(crate) entries: Vec<Option<DictEntry<T>>>,
+}
+
+#[cfg(feature = "gc")]
+impl<T: crate::object::gc::GcTrace> crate::object::gc::GcTrace for DictInner<T> {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.entries
+            .iter()
+            .map(|v| {
+                if let Some(v) = v {
+                    v.key.trace(tracer_fn);
+                    v.value.trace(tracer_fn);
+                }
+            })
+            .count();
+    }
 }
 
 impl<T: Clone> Clone for Dict<T> {
