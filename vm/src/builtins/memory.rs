@@ -1112,6 +1112,13 @@ pub struct PyMemoryViewIterator {
     internal: PyMutex<PositionIterInternal<PyRef<PyMemoryView>>>,
 }
 
+#[cfg(feature = "gc")]
+impl crate::object::gc::GcTrace for PyMemoryViewIterator {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.internal.trace(tracer_fn)
+    }
+}
+
 impl PyPayload for PyMemoryViewIterator {
     fn class(vm: &VirtualMachine) -> &'static Py<PyType> {
         vm.ctx.types.memoryviewiterator_type

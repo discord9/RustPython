@@ -25,6 +25,16 @@ pub enum IterStatus<T> {
     Exhausted,
 }
 
+#[cfg(feature = "gc")]
+impl<T: GcTrace> crate::object::gc::GcTrace for IterStatus<T> {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        match self {
+            IterStatus::Active(ref r) => r.trace(tracer_fn),
+            IterStatus::Exhausted => (),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct PositionIterInternal<T> {
     pub status: IterStatus<T>,
@@ -34,10 +44,7 @@ pub struct PositionIterInternal<T> {
 #[cfg(feature = "gc")]
 impl<T: GcTrace> crate::object::gc::GcTrace for PositionIterInternal<T> {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
-        match &self.status {
-            IterStatus::Active(ref r) => r.trace(tracer_fn),
-            IterStatus::Exhausted => (),
-        }
+        self.status.trace(tracer_fn)
     }
 }
 
@@ -177,6 +184,13 @@ pub struct PySequenceIterator {
     internal: PyMutex<PositionIterInternal<PyObjectRef>>,
 }
 
+#[cfg(feature = "gc")]
+impl crate::object::gc::GcTrace for PySequenceIterator {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.internal.trace(tracer_fn)
+    }
+}
+
 impl PyPayload for PySequenceIterator {
     fn class(vm: &VirtualMachine) -> &'static Py<PyType> {
         vm.ctx.types.iter_type
@@ -232,6 +246,14 @@ impl IterNext for PySequenceIterator {
 pub struct PyCallableIterator {
     sentinel: PyObjectRef,
     status: PyRwLock<IterStatus<ArgCallable>>,
+}
+
+#[cfg(feature = "gc")]
+impl crate::object::gc::GcTrace for PyCallableIterator {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.sentinel.trace(tracer_fn);
+        self.status.trace(tracer_fn)
+    }
 }
 
 impl PyPayload for PyCallableIterator {

@@ -457,6 +457,14 @@ pub struct PyBoundMethod {
     function: PyObjectRef,
 }
 
+#[cfg(feature = "gc")]
+impl crate::object::gc::GcTrace for PyBoundMethod {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.object.trace(tracer_fn);
+        self.function.trace(tracer_fn);
+    }
+}
+
 impl Callable for PyBoundMethod {
     type Args = FuncArgs;
     #[inline]
@@ -603,6 +611,12 @@ impl PyPayload for PyBoundMethod {
 #[derive(Debug, Default)]
 pub(crate) struct PyCell {
     contents: PyMutex<Option<PyObjectRef>>,
+}
+#[cfg(feature = "gc")]
+impl crate::object::gc::GcTrace for PyCell {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.contents.trace(tracer_fn)
+    }
 }
 pub(crate) type PyCellRef = PyRef<PyCell>;
 
