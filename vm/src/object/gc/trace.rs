@@ -1,4 +1,4 @@
-use rustpython_common::lock::PyMutex;
+use rustpython_common::lock::{PyMutex, PyRwLock};
 
 use crate::object::gc::header::GcHeader;
 use crate::object::PyObjectPayload;
@@ -35,7 +35,7 @@ pub trait GcTrace {
     ///
     /// Note that Two `PyObjectRef` to the Same `PyObject` still count as two Ref, and should be called twice(once for each one) in this case.
     ///
-    /// ```
+    /// ```ignore
     /// for ch in childs:
     ///     tracer_fn(ch)
     /// ```
@@ -86,6 +86,13 @@ impl<T: GcTrace> GcTrace for PyMutex<T> {
     #[inline]
     fn trace(&self, tracer_fn: &mut TracerFn) {
         self.lock().trace(tracer_fn);
+    }
+}
+
+impl<T: GcTrace> GcTrace for PyRwLock<T> {
+    #[inline]
+    fn trace(&self, tracer_fn: &mut TracerFn) {
+        self.read().trace(tracer_fn);
     }
 }
 
