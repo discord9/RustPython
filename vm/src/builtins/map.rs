@@ -19,6 +19,14 @@ pub struct PyMap {
     iterators: Vec<PyIter>,
 }
 
+#[cfg(feature = "gc")]
+impl crate::object::gc::GcTrace for PyMap {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.mapper.trace(tracer_fn);
+        self.iterators.trace(tracer_fn);
+    }
+}
+
 impl PyPayload for PyMap {
     fn class(vm: &VirtualMachine) -> &'static Py<PyType> {
         vm.ctx.types.map_type
