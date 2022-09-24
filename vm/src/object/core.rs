@@ -143,9 +143,31 @@ impl<T: PyObjectPayload> GcTrace for PyInner<T> {
                 )else*
             };
         }
-        use crate::builtins::{PyDict, PyFunction, PyList, PySet, PySlice, PyZip};
+        use crate::builtins::{
+            PyDict, PyEnumerate, PyFilter, PyFunction, PyList, PyProperty, PySet, PySlice, PySuper,
+            PyTraceback, PyTuple, PyZip,
+        };
+        use crate::builtins::tuple::PyTupleIterator;
         use crate::protocol::PyIter;
-        optional_trace!(PyList, PyDict, PySet, PySlice, PyFunction, PyZip, PyIter);
+        optional_trace!(
+            // builtin types
+            PyDict,
+            PyEnumerate,
+            PyFilter,
+            PyFunction,
+            PyList,
+            PyProperty,
+            PySet,
+            PySlice,
+            PySuper,
+            PyTraceback,
+            PyTuple,
+            PyZip,
+            // misc
+            PyTupleIterator,
+            // protocol
+            PyIter
+        );
     }
 }
 
@@ -951,7 +973,9 @@ impl PyObject {
                 {
                     // FIXME(discord9): figure out if Buffered should drop.
                     let stat = zelf.0.dec();
-                    stat == GcStatus::ShouldDrop || stat == GcStatus::Buffered
+                    // case 1: no cyclic ref, drop now
+                    // case 2: cyclic ref, drop later?
+                    true
                 }
                 #[cfg(not(feature = "gc"))]
                 {

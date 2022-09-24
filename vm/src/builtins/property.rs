@@ -51,6 +51,16 @@ pub struct PyProperty {
     doc: PyRwLock<Option<PyObjectRef>>,
 }
 
+#[cfg(feature = "gc")]
+impl crate::object::gc::GcTrace for PyProperty {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.getter.read().trace(tracer_fn);
+        self.setter.read().trace(tracer_fn);
+        self.deleter.read().trace(tracer_fn);
+        self.doc.read().trace(tracer_fn);
+    }
+}
+
 impl PyPayload for PyProperty {
     fn class(vm: &VirtualMachine) -> &'static Py<PyType> {
         vm.ctx.types.property_type
