@@ -51,18 +51,7 @@ pub struct PyDict {
 #[cfg(feature = "gc")]
 impl GcTrace for PyDict {
     fn trace(&self, tracer_fn: &mut TracerFn) {
-        // TODO(discord9): elegant way to iterate over values instead of put pub(crate) everywhere to access it
-        let dict = self._as_dict_inner();
-        let entries = &dict.read().entries;
-        entries
-            .iter()
-            .map(|v| {
-                if let Some(v) = v {
-                    tracer_fn(v.key.as_ref());
-                    tracer_fn(v.value.as_ref());
-                }
-            })
-            .count();
+        self.entries.trace(tracer_fn)
     }
 }
 
