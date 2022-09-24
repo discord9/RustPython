@@ -50,10 +50,10 @@ pub struct PyType {
 #[cfg(feature = "gc")]
 impl crate::object::gc::GcTrace for PyType {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        // FIXME(discord9): figure out correct trace() for PyType, simply call each field results in underflow
         self.base.trace(tracer_fn);
         self.bases.trace(tracer_fn);
         self.mro.trace(tracer_fn);
-        // FIXME(discord9): why is PyRwLock<Vec<PyRef<PyWeak>>>: !GcTrace, how?
         self.subclasses.read().trace(tracer_fn);
     }
 }

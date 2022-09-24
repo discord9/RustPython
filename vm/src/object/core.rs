@@ -175,7 +175,7 @@ impl<T: PyObjectPayload> GcTrace for PyInner<T> {
             PySuper,
             PyTraceback,
             PyTuple,
-            PyType,
+            // PyType,
             PyZip,
             // misc
             PyCell,
@@ -183,14 +183,14 @@ impl<T: PyObjectPayload> GcTrace for PyInner<T> {
             PySequenceIterator,
             PyCallableIterator,
             // iter on types
-            // PyList
+            // PyList's iter
             PyListIterator,
             PyListReverseIterator,
-            // PyTuple
+            // PyTuple's iter
             PyTupleIterator,
-            // PyEnumerate
+            // PyEnumerate's iter
             PyReverseSequenceIterator,
-            // PyMemory
+            // PyMemory's iter
             PyMemoryViewIterator,
             // function/Arg protocol
             ArgCallable,
@@ -1013,7 +1013,7 @@ impl PyObject {
                     // FIXME(discord9): figure out if Buffered should drop.
                     let _stat = zelf.0.dec();
                     // case 1: no cyclic ref, drop now
-                    // case 2: cyclic ref, drop later?
+                    // case 2: cyclic ref, drop later in gc?
                     true
                 }
                 #[cfg(not(feature = "gc"))]

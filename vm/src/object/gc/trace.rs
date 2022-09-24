@@ -29,7 +29,7 @@ pub trait GcObjPtr: GcTrace {
 pub trait GcTrace {
     /// call tracer_fn for every GcOjbect owned by a dyn GcTrace Object
     /// # API Contract
-    /// must make sure that every owned object(Every stored `PyObjectRef` to be exactly) is called with tracer_fn at most once.
+    /// must make sure that every owned object(Every stored `PyObjectRef` to be exactly) is called with tracer_fn **at most once**.
     ///
     /// if some field is not called, the worse results is memory leak, but if some field is called repeatly, panic and deadlock can happen.
     ///
@@ -39,7 +39,7 @@ pub trait GcTrace {
     /// for ch in childs:
     ///     tracer_fn(ch)
     /// ```
-    /// *DO NOT* clone a `PyObjectRef`, use `as_ptr()` instead and operate on NonNull
+    /// _**DO NOT**_ clone a `PyObjectRef`(which mess up the ref count system) in trace(), use ref or, if actually had to, use `as_ptr()`(which is a last resort and better not to use) instead and operate on NonNull
     fn trace(&self, tracer_fn: &mut TracerFn);
 }
 
@@ -88,6 +88,7 @@ impl<T: GcTrace> GcTrace for PyMutex<T> {
         self.lock().trace(tracer_fn);
     }
 }
+// FIXME(discord9): does a RwLock<T:GcTrace> actually own this ObjectRef? Need to rethink
 
 impl<T: GcTrace> GcTrace for PyRwLock<T> {
     #[inline]
