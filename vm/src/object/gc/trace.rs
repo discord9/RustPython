@@ -93,7 +93,6 @@ impl<T: GcTrace> GcTrace for PyMutex<T> {
         self.lock().trace(tracer_fn);
     }
 }
-// FIXME(discord9): does a RwLock<T:GcTrace> actually own this ObjectRef? Need to rethink
 
 impl<T: GcTrace> GcTrace for PyRwLock<T> {
     #[inline]
