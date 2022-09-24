@@ -50,7 +50,7 @@ pub struct PyType {
 #[cfg(feature = "gc")]
 impl crate::object::gc::GcTrace for PyType {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
-        // FIXME(discord9): figure out correct trace() for PyType, simply call each field results in underflow
+        // FIXME(discord9): figure out correct trace() for PyType, simply call each field results in underflow of rc, is PyType all leaked()?
         self.base.trace(tracer_fn);
         self.bases.trace(tracer_fn);
         self.mro.trace(tracer_fn);

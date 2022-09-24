@@ -175,7 +175,7 @@ impl<T: PyObjectPayload> GcTrace for PyInner<T> {
             PySuper,
             PyTraceback,
             PyTuple,
-            // PyType,
+            // PyType, (strange bug, see PyType's trace() for detail)
             PyZip,
             // misc
             PyCell,
