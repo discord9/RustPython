@@ -39,6 +39,17 @@ mod builtins {
         "can't compile() to bytecode when the `codegen` feature of rustpython is disabled";
 
     #[pyfunction]
+    fn gc() -> PyResult<usize> {
+        #[cfg(feature = "gc")]
+        {
+            use crate::object::gc::GLOBAL_COLLECTOR;
+            Ok(GLOBAL_COLLECTOR.force_gc())
+        }
+        #[cfg(not(feature = "gc"))]
+        Ok(0)
+    }
+
+    #[pyfunction]
     fn abs(x: PyObjectRef, vm: &VirtualMachine) -> PyResult {
         vm._abs(&x)
     }

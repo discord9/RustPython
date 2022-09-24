@@ -75,12 +75,18 @@ unsafe fn free(ptr: ObjPtr) {
     dealloc(ptr.cast().as_ptr(), Layout::for_value(ptr.as_ref()));
 }
 impl CcSync {
-    /// _suggest_(may or may not) collector to collect garbage.
+    /// _suggest_(may or may not) collector to collect garbage. return number of cyclic garbage being collected
     #[inline]
-    pub fn gc(&self) {
+    pub fn gc(&self)->usize {
         if self.should_gc() {
-            self.collect_cycles();
+            self.force_gc()
+        }else {
+            0
         }
+    }
+    #[inline]
+    pub fn force_gc(&self)->usize{
+        self.collect_cycles()
     }
     fn roots_len(&self) -> usize {
         self.roots.lock().unwrap().len()
@@ -153,9 +159,9 @@ impl CcSync {
         }
     }
 
-    fn collect_cycles(&self) {
+    fn collect_cycles(&self) ->usize{
         if IS_GC_THREAD.with(|v| v.get()) {
-            return;
+            return 0;
             // already call collect_cycle() once
         }
         // order of acquire lock and check IS_GC_THREAD here is important
@@ -169,7 +175,7 @@ impl CcSync {
         // to not stop the world
         // what's left for collection should already be in garbage cycle,
         // no mutator will operate on them
-        self.collect_roots(lock);
+        self.collect_roots(lock)
     }
 
     fn mark_roots(&self) {
@@ -212,7 +218,7 @@ impl CcSync {
             })
             .count();
     }
-    fn collect_roots(&self, lock: MutexGuard<()>) {
+    fn collect_roots(&self, lock: MutexGuard<()>) ->usize {
         // Collecting the nodes into this Vec is difference from the original
         // Bacon-Rajan paper. We need this because we have destructors(RAII) and
         // running them during traversal will cause cycles to be broken which
@@ -231,6 +237,7 @@ impl CcSync {
                 self.collect_white(obj, &mut white);
             })
             .count();
+        let len_white = white.len();
         if !white.is_empty() {
             warn!("Collect cyclic garbage in white.len()={}", white.len());
         }
@@ -259,6 +266,7 @@ impl CcSync {
         for i in &white {
             unsafe { free(*i) }
         }
+        len_white
     }
     fn collect_white(&self, obj: ObjRef, white: &mut Vec<NonNull<dyn GcObjPtr>>) {
         if obj.header().color() == Color::White && !obj.header().buffered() {
