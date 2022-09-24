@@ -159,7 +159,9 @@ impl<T: PyObjectPayload> GcTrace for PyInner<T> {
             PyZip,
         };
         use crate::function::{ArgCallable, ArgIterable, ArgMapping, ArgSequence};
-        use crate::protocol::PyIter;
+        use crate::protocol::{
+            PyBuffer, PyIter, PyIterIter, PyIterReturn, PyMapping, PyNumber, PySequence,
+        };
         optional_trace!(
             // builtin types
             // PyRange, PyStr is acyclic
@@ -200,7 +202,15 @@ impl<T: PyObjectPayload> GcTrace for PyInner<T> {
             ArgMapping,
             ArgSequence,
             // protocol
-            PyIter
+            // struct like
+            PyBuffer,
+            PyIter,
+            // FIXME(discord9): confirm this is ok to do
+            PyIterIter<T>,
+            PyIterReturn,
+            PyMapping,
+            PyNumber,
+            PySequence
         );
     }
 }
