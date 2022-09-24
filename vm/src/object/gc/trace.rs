@@ -27,19 +27,19 @@ pub trait GcObjPtr: GcTrace {
 
 /// use `trace()` to call on all owned ObjectRef
 pub trait GcTrace {
-    /// call tracer_fn for every GcOjbect owned by a dyn GcTrace Object
+    /// call tracer_fn for every object(childrens) owned by a Object
     /// # API Contract
     /// must make sure that every owned object(Every stored `PyObjectRef` to be exactly) is called with tracer_fn **at most once**.
+    /// If some field is not called, the worse results is memory leak, but if some field is called repeatly, panic and deadlock can happen.
     ///
-    /// if some field is not called, the worse results is memory leak, but if some field is called repeatly, panic and deadlock can happen.
-    ///
-    /// Note that Two `PyObjectRef` to the Same `PyObject` still count as two Ref, and should be called twice(once for each one) in this case.
+    /// _**DO NOT**_ clone a `PyObjectRef`(which mess up the ref count system) in `trace()`, use `ref`erence or, if actually had to, use `as_ptr()`(which is a last resort and better not to use) instead and operate on NonNull
     ///
     /// ```ignore
     /// for ch in childs:
     ///     tracer_fn(ch)
     /// ```
-    /// _**DO NOT**_ clone a `PyObjectRef`(which mess up the ref count system) in trace(), use ref or, if actually had to, use `as_ptr()`(which is a last resort and better not to use) instead and operate on NonNull
+    ///
+    /// Note that Two `PyObjectRef` to the Same `PyObject` still count as two Ref, and should be called twice(once for each one) in this case.
     fn trace(&self, tracer_fn: &mut TracerFn);
 }
 
