@@ -54,6 +54,11 @@ impl GcTrace for PyObjectRef {
     }
 }
 
+impl GcTrace for () {
+    #[inline]
+    fn trace(&self, _tracer_fn: &mut TracerFn) {}
+}
+
 impl<T: PyObjectPayload> GcTrace for PyRef<T> {
     #[inline]
     fn trace(&self, tracer_fn: &mut TracerFn) {
