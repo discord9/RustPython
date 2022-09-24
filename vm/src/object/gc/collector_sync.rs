@@ -77,15 +77,15 @@ unsafe fn free(ptr: ObjPtr) {
 impl CcSync {
     /// _suggest_(may or may not) collector to collect garbage. return number of cyclic garbage being collected
     #[inline]
-    pub fn gc(&self)->usize {
+    pub fn gc(&self) -> usize {
         if self.should_gc() {
             self.force_gc()
-        }else {
+        } else {
             0
         }
     }
     #[inline]
-    pub fn force_gc(&self)->usize{
+    pub fn force_gc(&self) -> usize {
         self.collect_cycles()
     }
     fn roots_len(&self) -> usize {
@@ -96,7 +96,7 @@ impl CcSync {
         self.roots_len() > 100
     }
     pub fn increment(&self, obj: ObjRef) {
-        if obj.header().is_leaked(){
+        if obj.header().is_leaked() {
             // by define a leaked object's rc should not change?
             return;
         }
@@ -159,7 +159,7 @@ impl CcSync {
         }
     }
 
-    fn collect_cycles(&self) ->usize{
+    fn collect_cycles(&self) -> usize {
         if IS_GC_THREAD.with(|v| v.get()) {
             return 0;
             // already call collect_cycle() once
@@ -218,7 +218,7 @@ impl CcSync {
             })
             .count();
     }
-    fn collect_roots(&self, lock: MutexGuard<()>) ->usize {
+    fn collect_roots(&self, lock: MutexGuard<()>) -> usize {
         // Collecting the nodes into this Vec is difference from the original
         // Bacon-Rajan paper. We need this because we have destructors(RAII) and
         // running them during traversal will cause cycles to be broken which
