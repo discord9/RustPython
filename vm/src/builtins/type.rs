@@ -42,6 +42,17 @@ pub struct PyType {
     pub heaptype_ext: Option<Pin<Box<HeapTypeExt>>>,
 }
 
+#[cfg(feature = "gc")]
+impl crate::object::gc::GcTrace for PyType {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.base.trace(tracer_fn);
+        self.bases.trace(tracer_fn);
+        self.mro.trace(tracer_fn);
+        // FIXME(discord9): why is PyRwLock<Vec<PyRef<PyWeak>>>: !GcTrace, how?
+        self.subclasses.read().trace(tracer_fn);
+    }
+}
+
 #[derive(Default)]
 pub struct HeapTypeExt {
     pub slots: Option<PyTupleTyped<PyStrRef>>,

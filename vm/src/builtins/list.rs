@@ -536,6 +536,13 @@ pub struct PyListIterator {
     internal: PyMutex<PositionIterInternal<PyListRef>>,
 }
 
+#[cfg(feature = "gc")]
+impl crate::object::gc::GcTrace for PyListIterator {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.internal.trace(tracer_fn)
+    }
+}
+
 impl PyPayload for PyListIterator {
     fn class(vm: &VirtualMachine) -> &'static Py<PyType> {
         vm.ctx.types.list_iterator_type
@@ -579,6 +586,13 @@ impl IterNext for PyListIterator {
 #[derive(Debug)]
 pub struct PyListReverseIterator {
     internal: PyMutex<PositionIterInternal<PyListRef>>,
+}
+
+#[cfg(feature = "gc")]
+impl crate::object::gc::GcTrace for PyListReverseIterator {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.internal.trace(tracer_fn)
+    }
 }
 
 impl PyPayload for PyListReverseIterator {
