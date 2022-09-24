@@ -93,6 +93,12 @@ pub struct PyReverseSequenceIterator {
     internal: PyMutex<PositionIterInternal<PyObjectRef>>,
 }
 
+#[cfg(feature = "gc")]
+impl crate::object::gc::GcTrace for PyReverseSequenceIterator{
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.internal.lock().trace(tracer_fn)
+    }}
+
 impl PyPayload for PyReverseSequenceIterator {
     fn class(vm: &VirtualMachine) -> &'static Py<PyType> {
         vm.ctx.types.reverse_iter_type

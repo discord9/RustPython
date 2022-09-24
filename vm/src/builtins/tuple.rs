@@ -418,10 +418,7 @@ pub(crate) struct PyTupleIterator {
 #[cfg(feature = "gc")]
 impl crate::object::gc::GcTrace for PyTupleIterator {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
-        match &self.internal.lock().status{
-            &crate::builtins::IterStatus::Active(ref r) => r.trace(tracer_fn),
-            &crate::builtins::IterStatus::Exhausted => (),
-        }
+        self.internal.lock().trace(tracer_fn)
     }
 }
 

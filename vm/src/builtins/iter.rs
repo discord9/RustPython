@@ -8,7 +8,7 @@ use crate::{
     function::ArgCallable,
     protocol::{PyIterReturn, PySequence, PySequenceMethods},
     types::{IterNext, IterNextIterable},
-    Context, Py, PyObject, PyObjectRef, PyPayload, PyResult, VirtualMachine,
+    Context, Py, PyObject, PyObjectRef, PyPayload, PyResult, VirtualMachine, object::gc::GcTrace,
 };
 use rustpython_common::{
     lock::{PyMutex, PyRwLock, PyRwLockUpgradableReadGuard},
@@ -29,6 +29,15 @@ pub struct PositionIterInternal<T> {
     pub status: IterStatus<T>,
     pub position: usize,
 }
+
+#[cfg(feature = "gc")]
+impl<T: GcTrace> crate::object::gc::GcTrace for PositionIterInternal<T> {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        match &self.status{
+            IterStatus::Active(ref r) => r.trace(tracer_fn),
+            IterStatus::Exhausted => (),
+        }
+    }}
 
 impl<T> PositionIterInternal<T> {
     pub fn new(obj: T, position: usize) -> Self {

@@ -147,7 +147,7 @@ impl<T: PyObjectPayload> GcTrace for PyInner<T> {
             PyDict, PyEnumerate, PyFilter, PyFunction, PyList, PyProperty, PySet, PySlice, PySuper,
             PyTraceback, PyTuple, PyZip,
         };
-        use crate::builtins::tuple::PyTupleIterator;
+        use crate::builtins::{tuple::PyTupleIterator, enumerate::PyReverseSequenceIterator};
         use crate::protocol::PyIter;
         optional_trace!(
             // builtin types
@@ -163,8 +163,9 @@ impl<T: PyObjectPayload> GcTrace for PyInner<T> {
             PyTraceback,
             PyTuple,
             PyZip,
-            // misc
+            // iter on types
             PyTupleIterator,
+            PyReverseSequenceIterator,
             // protocol
             PyIter
         );
@@ -971,7 +972,7 @@ impl PyObject {
                 #[cfg(feature = "gc")]
                 {
                     // FIXME(discord9): figure out if Buffered should drop.
-                    let stat = zelf.0.dec();
+                    let _stat = zelf.0.dec();
                     // case 1: no cyclic ref, drop now
                     // case 2: cyclic ref, drop later?
                     true
