@@ -14,6 +14,13 @@ pub struct ArgCallable {
     obj: PyObjectRef,
 }
 
+#[cfg(feature = "gc")]
+impl crate::object::gc::GcTrace for ArgCallable {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.obj.trace(tracer_fn)
+    }
+}
+
 impl ArgCallable {
     #[inline(always)]
     pub fn invoke(&self, args: impl IntoFuncArgs, vm: &VirtualMachine) -> PyResult {
@@ -65,6 +72,13 @@ pub struct ArgIterable<T = PyObjectRef> {
     _item: PhantomData<T>,
 }
 
+#[cfg(feature = "gc")]
+impl<T: crate::object::gc::GcTrace> crate::object::gc::GcTrace for ArgIterable<T> {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.iterable.trace(tracer_fn)
+    }
+}
+
 impl<T> ArgIterable<T> {
     /// Returns an iterator over this sequence of objects.
     ///
@@ -104,6 +118,13 @@ where
 pub struct ArgMapping {
     obj: PyObjectRef,
     methods: &'static PyMappingMethods,
+}
+
+#[cfg(feature = "gc")]
+impl crate::object::gc::GcTrace for ArgMapping {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.obj.trace(tracer_fn)
+    }
 }
 
 impl ArgMapping {
@@ -173,6 +194,13 @@ impl TryFromObject for ArgMapping {
 // this is not strictly related to PySequence protocol.
 #[derive(Clone)]
 pub struct ArgSequence<T = PyObjectRef>(Vec<T>);
+
+#[cfg(feature = "gc")]
+impl<T: crate::object::gc::GcTrace> crate::object::gc::GcTrace for ArgSequence<T> {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.0.trace(tracer_fn)
+    }
+}
 
 impl<T> ArgSequence<T> {
     #[inline(always)]
