@@ -130,7 +130,7 @@ struct PyInner<T> {
 #[cfg(feature = "gc")]
 impl<T: PyObjectPayload> GcTrace for PyInner<T> {
     fn trace(&self, tracer_fn: &mut TracerFn) {
-        /// Optional trait bound(Like a ?GcTrace) require specialization
+        /// FIXME(discord9): Optional trait bound(Like a ?GcTrace) require specialization
         ///
         /// https://stackoverflow.com/questions/68701910/function-optional-trait-bound-in-rust
         ///
@@ -179,7 +179,7 @@ impl<T: PyObjectPayload> GcTrace for PyInner<T> {
             PySuper,
             PyTraceback,
             PyTuple,
-            // PyType, (strange bug, see PyType's trace() for detail)
+            // FIXME(discord9): PyType, (strange bug, see PyType's trace() for detail)
             PyZip,
             // misc
             PyCell,
@@ -1024,7 +1024,7 @@ impl PyObject {
                 }
                 #[cfg(feature = "gc")]
                 {
-                    // FIXME(discord9): figure out if Buffered should drop.
+                    // FIXME(discord9): confirm this should return truw always
                     let _stat = zelf.0.dec();
                     // case 1: no cyclic ref, drop now
                     // case 2: cyclic ref, drop later in gc?
