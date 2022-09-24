@@ -50,7 +50,7 @@ pub struct PyType {
 #[cfg(feature = "gc")]
 impl crate::object::gc::GcTrace for PyType {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
-        // FIXME(discord9): figure out correct trace() for PyType, 
+        // FIXME(discord9): figure out correct trace() for PyType,
         // simply call each field results in underflow of rc, is PyType all leaked()?
         // might have to do with similiar problem before which only use PyInner<Erased>(through `.as_object()`) can access header() with correct data
         // but PyInner<T> access header() with wrong data, but not sure about that.
