@@ -143,29 +143,60 @@ impl<T: PyObjectPayload> GcTrace for PyInner<T> {
                 )else*
             };
         }
-        use crate::builtins::{enumerate::PyReverseSequenceIterator, tuple::PyTupleIterator};
+        use crate::builtins::iter::{PyCallableIterator, PySequenceIterator};
         use crate::builtins::{
-            PyDict, PyEnumerate, PyFilter, PyFunction, PyList, PyProperty, PySet, PySlice, PySuper,
-            PyTraceback, PyTuple, PyZip,
+            enumerate::PyReverseSequenceIterator,
+            function::PyCell,
+            list::{PyListIterator, PyListReverseIterator},
+            memory::PyMemoryViewIterator,
+            tuple::PyTupleIterator,
         };
+        use crate::builtins::{
+            PyBoundMethod, PyDict, PyEnumerate, PyFilter, PyFunction, PyList, PyMappingProxy,
+            PyProperty, PySet, PySlice, PyStaticMethod, PySuper, PyTraceback, PyTuple, PyType,
+            PyZip,
+        };
+        use crate::function::{ArgCallable, ArgIterable, ArgMapping, ArgSequence};
         use crate::protocol::PyIter;
         optional_trace!(
             // builtin types
+            // PyRange, PyStr is acyclic
+            PyBoundMethod,
             PyDict,
             PyEnumerate,
             PyFilter,
             PyFunction,
             PyList,
+            PyMappingProxy,
             PyProperty,
             PySet,
             PySlice,
+            PyStaticMethod,
             PySuper,
             PyTraceback,
             PyTuple,
+            PyType,
             PyZip,
+            // misc
+            PyCell,
+            // iter in iter.rs
+            PySequenceIterator,
+            PyCallableIterator,
             // iter on types
+            // PyList
+            PyListIterator,
+            PyListReverseIterator,
+            // PyTuple
             PyTupleIterator,
+            // PyEnumerate
             PyReverseSequenceIterator,
+            // PyMemory
+            PyMemoryViewIterator,
+            // function/Arg protocol
+            ArgCallable,
+            ArgIterable,
+            ArgMapping,
+            ArgSequence,
             // protocol
             PyIter
         );
@@ -488,6 +519,14 @@ pub struct PyWeak {
     // this is treated as part of parent's mutex - you must hold that lock to access it
     callback: UnsafeCell<Option<PyObjectRef>>,
     pub(crate) hash: PyAtomic<crate::common::hash::PyHash>,
+}
+
+#[cfg(feature = "gc")]
+impl crate::object::gc::GcTrace for PyWeak {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        // PyWeak doesn't own the object by define
+        // FIXME(discord9): confirm this and test
+    }
 }
 
 cfg_if::cfg_if! {
