@@ -143,11 +143,11 @@ impl<T: PyObjectPayload> GcTrace for PyInner<T> {
                 )else*
             };
         }
+        use crate::builtins::{enumerate::PyReverseSequenceIterator, tuple::PyTupleIterator};
         use crate::builtins::{
             PyDict, PyEnumerate, PyFilter, PyFunction, PyList, PyProperty, PySet, PySlice, PySuper,
             PyTraceback, PyTuple, PyZip,
         };
-        use crate::builtins::{tuple::PyTupleIterator, enumerate::PyReverseSequenceIterator};
         use crate::protocol::PyIter;
         optional_trace!(
             // builtin types

@@ -33,9 +33,9 @@ pub struct PyList {
 }
 
 #[cfg(feature = "gc")]
-impl crate::object::gc::GcTrace for PyList{
+impl crate::object::gc::GcTrace for PyList {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
-        for elem in self.borrow_vec().iter(){
+        for elem in self.borrow_vec().iter() {
             elem.trace(tracer_fn);
         }
     }

@@ -1,8 +1,8 @@
 mod core;
 mod ext;
-mod payload;
 #[cfg(feature = "gc")]
 pub(crate) mod gc;
+mod payload;
 
 pub use self::core::*;
 pub use self::ext::*;

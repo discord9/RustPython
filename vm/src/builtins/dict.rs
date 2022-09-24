@@ -2,6 +2,8 @@ use super::{
     set::PySetInner, IterStatus, PositionIterInternal, PyBaseExceptionRef, PyGenericAlias,
     PyMappingProxy, PySet, PyStrRef, PyTupleRef, PyType, PyTypeRef,
 };
+#[cfg(feature = "gc")]
+use crate::object::gc::{GcTrace, TracerFn};
 use crate::{
     atomic_func,
     builtins::{
@@ -24,10 +26,8 @@ use crate::{
         IterNextIterable, Iterable, PyComparisonOp, Unconstructible, Unhashable,
     },
     vm::VirtualMachine,
-    AsObject, Context, Py, PyObject, PyObjectRef, PyPayload, PyRef, PyResult, TryFromObject, 
+    AsObject, Context, Py, PyObject, PyObjectRef, PyPayload, PyRef, PyResult, TryFromObject,
 };
-#[cfg(feature = "gc")]
-use crate::object::gc::{GcTrace, TracerFn};
 use rustpython_common::lock::PyMutex;
 use std::fmt;
 
@@ -54,12 +54,15 @@ impl GcTrace for PyDict {
         // TODO(discord9): elegant way to iterate over values instead of put pub(crate) everywhere to access it
         let dict = self._as_dict_inner();
         let entries = &dict.read().entries;
-        entries.iter().map(|v|{
-            if let Some(v) = v{
-                tracer_fn(v.key.as_ref());
-                tracer_fn(v.value.as_ref());
-            }
-        }).count();
+        entries
+            .iter()
+            .map(|v| {
+                if let Some(v) = v {
+                    tracer_fn(v.key.as_ref());
+                    tracer_fn(v.value.as_ref());
+                }
+            })
+            .count();
     }
 }
 
