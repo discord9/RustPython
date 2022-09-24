@@ -61,7 +61,7 @@ impl GcHeader {
     pub fn safe_inc(&self) -> bool {
         self.ref_cnt
             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |prev| {
-                (prev != 0).then(|| prev + 1)
+                (prev != 0).then_some(prev + 1)
             })
             .is_ok()
     }
