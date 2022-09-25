@@ -9,6 +9,7 @@ pub struct GcHeader {
     ref_cnt: PyAtomic<usize>,
     color: PyMutex<Color>,
     buffered: PyMutex<bool>,
+    pub exclusive: PyMutex<()>,
     pub gc: PyRc<CcSync>,
     // log_ptr: Mutex<Option<LogPointer>>,
 }
@@ -19,6 +20,7 @@ impl GcHeader {
             ref_cnt: 1.into(),
             color: PyMutex::new(Color::Black),
             buffered: PyMutex::new(false),
+            exclusive: PyMutex::new(()),
             gc: GLOBAL_COLLECTOR.clone(),
         }
     }
