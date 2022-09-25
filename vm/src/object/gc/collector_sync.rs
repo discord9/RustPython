@@ -107,6 +107,7 @@ impl CcSync {
     /// if the last ref to a object call decrement() on object,
     /// then this object should be considered freed.
     pub unsafe fn decrement(&self, obj: ObjRef) -> GcStatus {
+        /// FIXME(discord9): if a call to decrement is happening when gc() is called on annother thread, what lock should be done to ensure correctness?
         if obj.header().is_leaked() {
             // a leaked object should always keep
             return GcStatus::ShouldKeep;
@@ -154,8 +155,6 @@ impl CcSync {
         if obj.header().color() != Color::Purple {
             obj.header().set_color(Color::Purple);
             if !obj.header().buffered() {
-                // check if need to pause first before actually access roots
-                obj.header().do_pausing();
                 // lock here to serialize access to root
                 let mut roots = self.roots.lock().unwrap();
                 obj.header().set_buffered(true);
