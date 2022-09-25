@@ -1,4 +1,5 @@
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 use std::{
     alloc::{dealloc, Layout},
     fmt,
@@ -11,7 +12,7 @@ use crate::object::gc::trace::GcObjPtr;
 use crate::object::gc::GcStatus;
 
 use once_cell::sync::Lazy;
-use rustpython_common::lock::{PyRwLock, PyRwLockWriteGuard};
+use rustpython_common::lock::{PyRwLock, PyRwLockWriteGuard, PyMutex};
 use std::cell::Cell;
 thread_local! {
     /// assume any drop() impl doesn't create new thread, so gc only work in this one thread.
@@ -22,6 +23,7 @@ pub static GLOBAL_COLLECTOR: Lazy<Arc<CcSync>> = Lazy::new(|| {
     Arc::new(CcSync {
         roots: Mutex::new(Vec::new()),
         pause: PyRwLock::new(()),
+        last_gc_time: PyMutex::new(Instant::now())
     })
 });
 
@@ -54,12 +56,13 @@ impl<T: ?Sized> From<WrappedPtr<T>> for NonNull<T> {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct CcSync {
     roots: Mutex<Vec<WrappedPtr<dyn GcObjPtr>>>,
     /// for stop the world, will be try to check lock every time deref ObjecteRef
     /// to achive pausing
     pub pause: PyRwLock<()>,
+    last_gc_time: PyMutex<Instant>,
 }
 type ObjRef<'a> = &'a dyn GcObjPtr;
 type ObjPtr = NonNull<dyn GcObjPtr>;
@@ -93,7 +96,13 @@ impl CcSync {
     }
     /// TODO: change to use roots'len or what to determine
     pub fn should_gc(&self) -> bool {
-        self.roots_len() > 1024
+        let mut last_gc_time = self.last_gc_time.lock();
+        if last_gc_time.elapsed().as_secs() >= 1 {
+            *last_gc_time = Instant::now();
+            self.roots_len() > 1024
+        }else{
+            false
+        }
     }
     pub fn increment(&self, obj: ObjRef) {
         if obj.header().is_leaked() {
