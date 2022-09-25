@@ -1,4 +1,4 @@
-use std::sync::{Mutex, MutexGuard, Arc};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::{
     alloc::{dealloc, Layout},
     fmt,
@@ -113,6 +113,9 @@ impl CcSync {
         }
 
         if obj.header().rc() > 0 {
+            // acquire exclusive access to obj
+            #[cfg(feature = "threading")]
+            let _lock = obj.header().exclusive.lock();
             // prevent RAII Drop to drop below zero
             let rc = obj.header().dec();
             if rc == 0 {
@@ -151,8 +154,9 @@ impl CcSync {
         if obj.header().color() != Color::Purple {
             obj.header().set_color(Color::Purple);
             if !obj.header().buffered() {
-                obj.header().set_buffered(true);
+                // lock here to serialize access to root
                 let mut roots = self.roots.lock().unwrap();
+                obj.header().set_buffered(true);
                 roots.push(obj.as_ptr().into());
             }
         }
