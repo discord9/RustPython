@@ -1,6 +1,7 @@
 use std::sync::atomic::Ordering;
 
 use crate::object::gc::{CcSync, GLOBAL_COLLECTOR, IS_GC_THREAD};
+use std::sync::MutexGuard;
 use rustpython_common::{atomic::PyAtomic, lock::PyMutex, rc::PyRc};
 
 /// Garbage collect header, containing ref count and other info, using repr(C) to stay consistent with PyInner 's repr
@@ -23,6 +24,17 @@ impl GcHeader {
             gc: GLOBAL_COLLECTOR.clone(),
         }
     }
+
+    pub fn try_pausing<T>(&self) ->Option<MutexGuard<()>>{
+        if IS_GC_THREAD.with(|v| v.get()) {
+            // if is same thread, then this thread is already stop by gc itself,
+            // no need to block.
+            // and any call to do_pausing is probably from drop() or what so allow it to continue execute.
+            return None;
+        }
+        Some(self.gc.pause.lock().unwrap())
+    }
+
     /// This function will block if is pausing by gc
     pub fn do_pausing(&self) {
         if IS_GC_THREAD.with(|v| v.get()) {
