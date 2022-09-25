@@ -1,8 +1,10 @@
-use std::sync::atomic::Ordering;
+use std::sync::{atomic::Ordering, Arc};
 
 use crate::object::gc::{CcSync, GLOBAL_COLLECTOR, IS_GC_THREAD};
+#[cfg(not(feature = "threading"))]
+use rustpython_common::atomic::Radium;
+use rustpython_common::{atomic::PyAtomic, lock::PyMutex};
 use std::sync::MutexGuard;
-use rustpython_common::{atomic::PyAtomic, lock::PyMutex, rc::PyRc};
 
 /// Garbage collect header, containing ref count and other info, using repr(C) to stay consistent with PyInner 's repr
 #[repr(C)]
@@ -11,7 +13,7 @@ pub struct GcHeader {
     color: PyMutex<Color>,
     buffered: PyMutex<bool>,
     pub exclusive: PyMutex<()>,
-    pub gc: PyRc<CcSync>
+    pub gc: Arc<CcSync>,
 }
 
 impl GcHeader {
@@ -25,7 +27,7 @@ impl GcHeader {
         }
     }
 
-    pub fn try_pausing(&self) ->Option<MutexGuard<()>>{
+    pub fn try_pausing(&self) -> Option<MutexGuard<()>> {
         if IS_GC_THREAD.with(|v| v.get()) {
             // if is same thread, then this thread is already stop by gc itself,
             // no need to block.
