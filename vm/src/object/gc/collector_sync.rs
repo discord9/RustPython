@@ -12,7 +12,7 @@ use crate::object::gc::trace::GcObjPtr;
 use crate::object::gc::GcStatus;
 
 use once_cell::sync::Lazy;
-use rustpython_common::lock::{PyRwLock, PyRwLockWriteGuard, PyMutex};
+use rustpython_common::lock::{PyMutex, PyRwLock, PyRwLockWriteGuard};
 use std::cell::Cell;
 thread_local! {
     /// assume any drop() impl doesn't create new thread, so gc only work in this one thread.
@@ -23,7 +23,7 @@ pub static GLOBAL_COLLECTOR: Lazy<Arc<CcSync>> = Lazy::new(|| {
     Arc::new(CcSync {
         roots: Mutex::new(Vec::new()),
         pause: PyRwLock::new(()),
-        last_gc_time: PyMutex::new(Instant::now())
+        last_gc_time: PyMutex::new(Instant::now()),
     })
 });
 
@@ -97,10 +97,11 @@ impl CcSync {
     /// TODO: change to use roots'len or what to determine
     pub fn should_gc(&self) -> bool {
         let mut last_gc_time = self.last_gc_time.lock();
+        // FIXME(discord9): still can't pass test_threading.py(can pass test_thread.py though)
         if last_gc_time.elapsed().as_secs() >= 1 {
             *last_gc_time = Instant::now();
             self.roots_len() > 1024
-        }else{
+        } else {
             false
         }
     }

@@ -154,8 +154,20 @@ impl<T: PyObjectPayload> GcTrace for PyInner<T> {
             tuple::PyTupleIterator,
         };
         use crate::builtins::{
-            PyBoundMethod, PyDict, PyEnumerate, PyFilter, PyFunction, PyList, PyMappingProxy,
-            PyProperty, PySet, PySlice, PyStaticMethod, PySuper, PyTraceback, PyTuple, // PyType,
+            PyBoundMethod,
+            PyDict,
+            PyEnumerate,
+            PyFilter,
+            PyFunction,
+            PyList,
+            PyMappingProxy,
+            PyProperty,
+            PySet,
+            PySlice,
+            PyStaticMethod,
+            PySuper,
+            PyTraceback,
+            PyTuple, // PyType,
             PyZip,
         };
         use crate::function::{ArgCallable, ArgIterable, ArgMapping, ArgSequence};
