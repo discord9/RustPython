@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Arc, Mutex};
 use std::{
     alloc::{dealloc, Layout},
     fmt,
@@ -11,6 +11,7 @@ use crate::object::gc::trace::GcObjPtr;
 use crate::object::gc::GcStatus;
 
 use once_cell::sync::Lazy;
+use rustpython_common::lock::{PyRwLock, PyRwLockWriteGuard};
 use std::cell::Cell;
 thread_local! {
     /// assume any drop() impl doesn't create new thread, so gc only work in this one thread.
@@ -20,7 +21,7 @@ thread_local! {
 pub static GLOBAL_COLLECTOR: Lazy<Arc<CcSync>> = Lazy::new(|| {
     Arc::new(CcSync {
         roots: Mutex::new(Vec::new()),
-        pause: Mutex::new(()),
+        pause: PyRwLock::new(()),
     })
 });
 
@@ -58,7 +59,7 @@ pub struct CcSync {
     roots: Mutex<Vec<WrappedPtr<dyn GcObjPtr>>>,
     /// for stop the world, will be try to check lock every time deref ObjecteRef
     /// to achive pausing
-    pub pause: Mutex<()>,
+    pub pause: PyRwLock<()>,
 }
 type ObjRef<'a> = &'a dyn GcObjPtr;
 type ObjPtr = NonNull<dyn GcObjPtr>;
@@ -92,13 +93,14 @@ impl CcSync {
     }
     /// TODO: change to use roots'len or what to determine
     pub fn should_gc(&self) -> bool {
-        self.roots_len() > 100
+        self.roots_len() > 1024
     }
     pub fn increment(&self, obj: ObjRef) {
         if obj.header().is_leaked() {
             // by define a leaked object's rc should not change?
             return;
         }
+        obj.header().do_pausing();
         obj.header().inc();
         obj.header().set_color(Color::Black);
     }
@@ -114,6 +116,7 @@ impl CcSync {
         }
 
         if obj.header().rc() > 0 {
+            obj.header().do_pausing();
             // acquire exclusive access to obj
             #[cfg(feature = "threading")]
             let _lock = obj.header().exclusive.lock();
@@ -171,7 +174,8 @@ impl CcSync {
         }
         // order of acquire lock and check IS_GC_THREAD here is important
         // This prevent set multiple IS_GC_THREAD thread local variable to true
-        let lock = self.pause.lock().unwrap();
+        // using write() to gain exclusive access
+        let lock = self.pause.write();
         IS_GC_THREAD.with(|v| v.set(true));
 
         self.mark_roots();
@@ -223,7 +227,7 @@ impl CcSync {
             })
             .count();
     }
-    fn collect_roots(&self, lock: MutexGuard<()>) -> usize {
+    fn collect_roots(&self, lock: PyRwLockWriteGuard<()>) -> usize {
         // Collecting the nodes into this Vec is difference from the original
         // Bacon-Rajan paper. We need this because we have destructors(RAII) and
         // running them during traversal will cause cycles to be broken which

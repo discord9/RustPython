@@ -155,7 +155,7 @@ impl<T: PyObjectPayload> GcTrace for PyInner<T> {
         };
         use crate::builtins::{
             PyBoundMethod, PyDict, PyEnumerate, PyFilter, PyFunction, PyList, PyMappingProxy,
-            PyProperty, PySet, PySlice, PyStaticMethod, PySuper, PyTraceback, PyTuple, PyType,
+            PyProperty, PySet, PySlice, PyStaticMethod, PySuper, PyTraceback, PyTuple, // PyType,
             PyZip,
         };
         use crate::function::{ArgCallable, ArgIterable, ArgMapping, ArgSequence};

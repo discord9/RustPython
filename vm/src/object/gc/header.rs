@@ -3,8 +3,7 @@ use std::sync::{atomic::Ordering, Arc};
 use crate::object::gc::{CcSync, GLOBAL_COLLECTOR, IS_GC_THREAD};
 #[cfg(not(feature = "threading"))]
 use rustpython_common::atomic::Radium;
-use rustpython_common::{atomic::PyAtomic, lock::PyMutex};
-use std::sync::MutexGuard;
+use rustpython_common::{atomic::PyAtomic, lock::{PyMutex, PyRwLockReadGuard}};
 
 /// Garbage collect header, containing ref count and other info, using repr(C) to stay consistent with PyInner 's repr
 #[repr(C)]
@@ -27,14 +26,14 @@ impl GcHeader {
         }
     }
 
-    pub fn try_pausing(&self) -> Option<MutexGuard<()>> {
+    pub fn try_pausing(&self) -> Option<PyRwLockReadGuard<()>> {
         if IS_GC_THREAD.with(|v| v.get()) {
             // if is same thread, then this thread is already stop by gc itself,
             // no need to block.
             // and any call to do_pausing is probably from drop() or what so allow it to continue execute.
             return None;
         }
-        Some(self.gc.pause.lock().unwrap())
+        Some(self.gc.pause.read())
     }
 
     /// This function will block if is pausing by gc
@@ -45,15 +44,7 @@ impl GcHeader {
             // and any call to do_pausing is probably from drop() or what so allow it to continue execute.
             return;
         }
-        #[cfg(debug_assertions)]
-        if let Err(err) = self.gc.pause.try_lock() {
-            debug!("is_pausing is blocked by gc:{:?}", err);
-            if matches!(err, std::sync::TryLockError::WouldBlock) {
-                let bt = backtrace::Backtrace::new();
-                println!("{:?}", bt);
-            }
-        }
-        let _lock = self.gc.pause.lock().unwrap();
+        let _lock = self.gc.pause.read();
     }
     pub fn color(&self) -> Color {
         *self.color.lock()
