@@ -25,7 +25,7 @@ impl GcHeader {
         }
     }
 
-    pub fn try_pausing<T>(&self) ->Option<MutexGuard<()>>{
+    pub fn try_pausing(&self) ->Option<MutexGuard<()>>{
         if IS_GC_THREAD.with(|v| v.get()) {
             // if is same thread, then this thread is already stop by gc itself,
             // no need to block.
