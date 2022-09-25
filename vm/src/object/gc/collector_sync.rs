@@ -154,6 +154,8 @@ impl CcSync {
         if obj.header().color() != Color::Purple {
             obj.header().set_color(Color::Purple);
             if !obj.header().buffered() {
+                // check if need to pause first before actually access roots
+                obj.header().do_pausing();
                 // lock here to serialize access to root
                 let mut roots = self.roots.lock().unwrap();
                 obj.header().set_buffered(true);
