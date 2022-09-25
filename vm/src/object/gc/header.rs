@@ -3,7 +3,10 @@ use std::sync::{atomic::Ordering, Arc};
 use crate::object::gc::{CcSync, GLOBAL_COLLECTOR, IS_GC_THREAD};
 #[cfg(not(feature = "threading"))]
 use rustpython_common::atomic::Radium;
-use rustpython_common::{atomic::PyAtomic, lock::{PyMutex, PyRwLockReadGuard}};
+use rustpython_common::{
+    atomic::PyAtomic,
+    lock::{PyMutex, PyRwLockReadGuard},
+};
 
 /// Garbage collect header, containing ref count and other info, using repr(C) to stay consistent with PyInner 's repr
 #[repr(C)]
