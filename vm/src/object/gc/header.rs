@@ -10,8 +10,7 @@ pub struct GcHeader {
     color: PyMutex<Color>,
     buffered: PyMutex<bool>,
     pub exclusive: PyMutex<()>,
-    pub gc: PyRc<CcSync>,
-    // log_ptr: Mutex<Option<LogPointer>>,
+    pub gc: PyRc<CcSync>
 }
 
 impl GcHeader {
@@ -93,6 +92,7 @@ impl GcHeader {
     }
 }
 
+/// other color(Green, Red, Orange) in the paper is not in use for now, so remove them in this enum
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Color {
     /// In use or free
