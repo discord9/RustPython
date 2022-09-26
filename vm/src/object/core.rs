@@ -385,7 +385,7 @@ impl WeakRefList {
                 let predicate = {
                     #[cfg(feature = "gc")]
                     {
-                        generic_weakref.0.rc() != 0
+                        generic_weakref.as_object().0.rc() != 0
                     }
                     #[cfg(not(feature = "gc"))]
                     {
@@ -497,7 +497,7 @@ impl WeakListInner {
         self.list.iter().filter(|wr| {
             #[cfg(feature = "gc")]
             {
-                wr.0.rc() > 0
+                wr.as_object().0.rc() > 0
             }
             #[cfg(not(feature = "gc"))]
             {
