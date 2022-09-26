@@ -375,6 +375,13 @@ mod builtins {
         obj.hash(vm)
     }
 
+    #[cfg(debug_assertions)]
+    #[pyfunction]
+    fn header_gc(obj: PyObjectRef, vm: &VirtualMachine) -> PyResult<PyStr> {
+        use crate::object::gc::GcObjPtr;
+        Ok(format!("{:#?}",obj.as_ref().header()).into())
+    }
+
     #[pyfunction]
     fn breakpoint(args: FuncArgs, vm: &VirtualMachine) -> PyResult {
         match vm
