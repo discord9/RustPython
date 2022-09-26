@@ -19,6 +19,18 @@ pub struct GcHeader {
     pub gc: PyRc<CcSync>,
 }
 
+impl std::fmt::Debug for GcHeader {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GcHeader")
+            .field("ref_cnt", &self.ref_cnt)
+            .field("color", &self.color)
+            .field("buffered", &self.buffered)
+            .field("exclusive", &self.exclusive)
+            .field("gc", &self.gc)
+            .finish()
+    }
+}
+
 impl GcHeader {
     pub fn new() -> Self {
         Self {
