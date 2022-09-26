@@ -96,6 +96,9 @@ flamer = { version = "0.4", optional = true }
 ascii = "1.0.0"
 backtrace = "0.3.66"
 
+# for viz debug garbage collect
+dot = "0.1.4"
+
 [target.'cfg(unix)'.dependencies]
 exitcode = "1.1.2"
 uname = "0.1.1"
