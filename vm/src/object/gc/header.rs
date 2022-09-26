@@ -1,4 +1,4 @@
-use std::sync::{atomic::Ordering, Arc};
+use std::sync::atomic::Ordering;
 
 use crate::object::gc::{CcSync, GLOBAL_COLLECTOR, IS_GC_THREAD};
 #[cfg(not(feature = "threading"))]

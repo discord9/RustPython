@@ -1,4 +1,4 @@
-use std::sync::{Mutex, Arc};
+use std::sync::Arc;
 use std::time::Instant;
 use std::{
     alloc::{dealloc, Layout},
@@ -12,8 +12,7 @@ use crate::object::gc::trace::GcObjPtr;
 use crate::object::gc::GcStatus;
 
 
-use rustpython_common::lock::{PyMutex, PyRwLock, PyRwLockWriteGuard, Lazy};
-use rustpython_common::rc::PyRc;
+use rustpython_common::lock::{PyMutex, PyRwLock, PyRwLockWriteGuard};
 use std::cell::Cell;
 thread_local! {
     /// assume any drop() impl doesn't create new thread, so gc only work in this one thread.
