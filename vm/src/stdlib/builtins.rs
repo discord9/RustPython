@@ -337,7 +337,10 @@ mod builtins {
         #[cfg(feature = "gc")]
         {
             use crate::object::gc::GLOBAL_COLLECTOR;
-            Ok(GLOBAL_COLLECTOR.force_gc())
+            #[cfg(feature = "threading")]
+            return Ok(GLOBAL_COLLECTOR.force_gc());
+            #[cfg(not(feature = "threading"))]
+            return Ok(GLOBAL_COLLECTOR.with(|v|v.force_gc()));
         }
         #[cfg(not(feature = "gc"))]
         Ok(0)
