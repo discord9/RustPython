@@ -71,7 +71,6 @@ impl<T: ?Sized> From<WrappedPtr<T>> for NonNull<T> {
     }
 }
 
-#[derive(Debug)]
 pub struct CcSync {
     roots: PyMutex<Vec<WrappedPtr<dyn GcObjPtr>>>,
     /// for stop the world, will be try to check lock every time deref ObjecteRef
@@ -79,6 +78,17 @@ pub struct CcSync {
     pub pause: PyRwLock<()>,
     last_gc_time: PyMutex<Instant>,
 }
+
+impl std::fmt::Debug for CcSync {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CcSync")
+            .field("roots", &format!("[{} objects in buffer]", self.roots_len()))
+            .field("pause", &self.pause)
+            .field("last_gc_time", &self.last_gc_time)
+            .finish()
+    }
+}
+
 type ObjRef<'a> = &'a dyn GcObjPtr;
 type ObjPtr = NonNull<dyn GcObjPtr>;
 
