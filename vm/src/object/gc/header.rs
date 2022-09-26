@@ -11,24 +11,13 @@ use rustpython_common::{
 
 /// Garbage collect header, containing ref count and other info, using repr(C) to stay consistent with PyInner 's repr
 #[repr(C)]
+#[derive(Debug)]
 pub struct GcHeader {
     ref_cnt: PyAtomic<usize>,
     color: PyMutex<Color>,
     buffered: PyMutex<bool>,
     pub exclusive: PyMutex<()>,
     pub gc: PyRc<CcSync>,
-}
-
-impl std::fmt::Debug for GcHeader {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("GcHeader")
-            .field("ref_cnt", &self.ref_cnt)
-            .field("color", &self.color)
-            .field("buffered", &self.buffered)
-            .field("exclusive", &self.exclusive)
-            .field("gc", &self.gc)
-            .finish()
-    }
 }
 
 impl GcHeader {
