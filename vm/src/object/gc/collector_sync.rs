@@ -11,7 +11,6 @@ use crate::object::gc::header::Color;
 use crate::object::gc::trace::GcObjPtr;
 use crate::object::gc::GcStatus;
 
-
 use rustpython_common::lock::{PyMutex, PyRwLock, PyRwLockWriteGuard};
 
 use std::cell::Cell;
@@ -22,13 +21,14 @@ thread_local! {
 /// The global cycle collector, which collect cycle references for PyInner<T>
 
 #[cfg(feature = "threading")]
-pub static GLOBAL_COLLECTOR: once_cell::sync::Lazy<Arc<CcSync>> = once_cell::sync::Lazy::new(|| {
-    Arc::new(CcSync {
-        roots: PyMutex::new(Vec::new()),
-        pause: PyRwLock::new(()),
-        last_gc_time: PyMutex::new(Instant::now()),
-    })
-});
+pub static GLOBAL_COLLECTOR: once_cell::sync::Lazy<Arc<CcSync>> =
+    once_cell::sync::Lazy::new(|| {
+        Arc::new(CcSync {
+            roots: PyMutex::new(Vec::new()),
+            pause: PyRwLock::new(()),
+            last_gc_time: PyMutex::new(Instant::now()),
+        })
+    });
 
 #[cfg(not(feature = "threading"))]
 use rustpython_common::rc::PyRc;

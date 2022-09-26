@@ -5,7 +5,8 @@ use crate::object::gc::{CcSync, GLOBAL_COLLECTOR, IS_GC_THREAD};
 use rustpython_common::atomic::Radium;
 use rustpython_common::{
     atomic::PyAtomic,
-    lock::{PyMutex, PyRwLockReadGuard}, rc::PyRc,
+    lock::{PyMutex, PyRwLockReadGuard},
+    rc::PyRc,
 };
 
 /// Garbage collect header, containing ref count and other info, using repr(C) to stay consistent with PyInner 's repr
@@ -28,8 +29,7 @@ impl GcHeader {
             #[cfg(feature = "threading")]
             gc: GLOBAL_COLLECTOR.clone(),
             #[cfg(not(feature = "threading"))]
-            gc: GLOBAL_COLLECTOR.with(|v|v.clone()),
-            
+            gc: GLOBAL_COLLECTOR.with(|v| v.clone()),
         }
     }
 
