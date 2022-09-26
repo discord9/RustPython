@@ -1,4 +1,4 @@
-use std::sync::{Arc, Mutex};
+use std::sync::{Mutex, Arc};
 use std::time::Instant;
 use std::{
     alloc::{dealloc, Layout},
@@ -11,26 +11,39 @@ use crate::object::gc::header::Color;
 use crate::object::gc::trace::GcObjPtr;
 use crate::object::gc::GcStatus;
 
-use once_cell::sync::Lazy;
-use rustpython_common::lock::{PyMutex, PyRwLock, PyRwLockWriteGuard};
+
+use rustpython_common::lock::{PyMutex, PyRwLock, PyRwLockWriteGuard, Lazy};
+use rustpython_common::rc::PyRc;
 use std::cell::Cell;
 thread_local! {
     /// assume any drop() impl doesn't create new thread, so gc only work in this one thread.
     pub static IS_GC_THREAD: Cell<bool> = Cell::new(false);
 }
 /// The global cycle collector, which collect cycle references for PyInner<T>
-pub static GLOBAL_COLLECTOR: Lazy<Arc<CcSync>> = Lazy::new(|| {
+
+#[cfg(feature = "threading")]
+pub static GLOBAL_COLLECTOR: once_cell::sync::Lazy<Arc<CcSync>> = once_cell::sync::Lazy::new(|| {
     Arc::new(CcSync {
-        roots: Mutex::new(Vec::new()),
+        roots: PyMutex::new(Vec::new()),
         pause: PyRwLock::new(()),
         last_gc_time: PyMutex::new(Instant::now()),
     })
 });
 
+#[cfg(not(feature = "threading"))]
+thread_local! {
+    pub static GLOBAL_COLLECTOR: PyRc<CcSync> = PyRc::new(CcSync {
+        roots: PyMutex::new(Vec::new()),
+        pause: PyRwLock::new(()),
+        last_gc_time: PyMutex::new(Instant::now()),
+    });
+}
+
 /// only use for roots's pointer to object, mark `NonNull` as safe to send
 #[repr(transparent)]
 pub(crate) struct WrappedPtr<T: ?Sized>(NonNull<T>);
 unsafe impl<T: ?Sized> Send for WrappedPtr<T> {}
+unsafe impl<T: ?Sized> Sync for WrappedPtr<T> {}
 impl<T: ?Sized> Deref for WrappedPtr<T> {
     type Target = NonNull<T>;
     fn deref(&self) -> &Self::Target {
@@ -58,7 +71,7 @@ impl<T: ?Sized> From<WrappedPtr<T>> for NonNull<T> {
 
 #[derive(Debug)]
 pub struct CcSync {
-    roots: Mutex<Vec<WrappedPtr<dyn GcObjPtr>>>,
+    roots: PyMutex<Vec<WrappedPtr<dyn GcObjPtr>>>,
     /// for stop the world, will be try to check lock every time deref ObjecteRef
     /// to achive pausing
     pub pause: PyRwLock<()>,
@@ -92,7 +105,7 @@ impl CcSync {
         self.collect_cycles()
     }
     fn roots_len(&self) -> usize {
-        self.roots.lock().unwrap().len()
+        self.roots.lock().len()
     }
     /// TODO: change to use roots'len or what to determine
     pub fn should_gc(&self) -> bool {
@@ -170,7 +183,7 @@ impl CcSync {
             if !obj.header().buffered() {
                 let _lock = obj.header().try_pausing();
                 // lock here to serialize access to root&gc
-                let mut roots = self.roots.lock().unwrap();
+                let mut roots = self.roots.lock();
                 obj.header().set_buffered(true);
                 roots.push(obj.as_ptr().into());
             }
@@ -198,7 +211,7 @@ impl CcSync {
     }
 
     fn mark_roots(&self) {
-        let old_roots: Vec<_> = { self.roots.lock().unwrap().drain(..).collect() };
+        let old_roots: Vec<_> = { self.roots.lock().drain(..).collect() };
         let mut new_roots = old_roots
             .into_iter()
             .filter(|ptr| {
@@ -224,12 +237,11 @@ impl CcSync {
                 }
             })
             .collect();
-        (*self.roots.lock().unwrap()).append(&mut new_roots);
+        (*self.roots.lock()).append(&mut new_roots);
     }
     fn scan_roots(&self) {
         self.roots
             .lock()
-            .unwrap()
             .iter()
             .map(|ptr| {
                 let obj = unsafe { ptr.as_ref() };
@@ -243,7 +255,7 @@ impl CcSync {
         // running them during traversal will cause cycles to be broken which
         // ruins the rest of our traversal.
         let mut white = Vec::new();
-        let roots: Vec<_> = { self.roots.lock().unwrap().drain(..).collect() };
+        let roots: Vec<_> = { self.roots.lock().drain(..).collect() };
         // release gc pause lock in here, for after this line no white garbage will be access by mutator
         IS_GC_THREAD.with(|v| v.set(false));
         drop(lock);
