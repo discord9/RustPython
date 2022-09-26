@@ -13,6 +13,7 @@ use crate::object::gc::GcStatus;
 
 
 use rustpython_common::lock::{PyMutex, PyRwLock, PyRwLockWriteGuard};
+
 use std::cell::Cell;
 thread_local! {
     /// assume any drop() impl doesn't create new thread, so gc only work in this one thread.
@@ -29,6 +30,8 @@ pub static GLOBAL_COLLECTOR: once_cell::sync::Lazy<Arc<CcSync>> = once_cell::syn
     })
 });
 
+#[cfg(not(feature = "threading"))]
+use rustpython_common::rc::PyRc;
 #[cfg(not(feature = "threading"))]
 thread_local! {
     pub static GLOBAL_COLLECTOR: PyRc<CcSync> = PyRc::new(CcSync {
