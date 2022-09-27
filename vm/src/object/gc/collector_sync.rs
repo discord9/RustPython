@@ -108,15 +108,15 @@ unsafe fn free(ptr: ObjPtr) {
 impl CcSync {
     /// _suggest_(may or may not) collector to collect garbage. return number of cyclic garbage being collected
     #[inline]
-    pub fn gc(&self) -> usize {
+    pub fn gc(&self) -> (usize, usize) {
         if self.should_gc() {
             self.force_gc()
         } else {
-            0
+            (0, 0)
         }
     }
     #[inline]
-    pub fn force_gc(&self) -> usize {
+    pub fn force_gc(&self) -> (usize, usize) {
         self.collect_cycles()
     }
     fn roots_len(&self) -> usize {
@@ -205,9 +205,10 @@ impl CcSync {
         }
     }
 
-    fn collect_cycles(&self) -> usize {
+    /// return `(acyclic garbage, cyclic garbage)`
+    fn collect_cycles(&self) -> (usize, usize) {
         if IS_GC_THREAD.with(|v| v.get()) {
-            return 0;
+            return (0, 0);
             // already call collect_cycle() once
         }
         // order of acquire lock and check IS_GC_THREAD here is important
@@ -216,16 +217,17 @@ impl CcSync {
         let lock = self.pause.write();
         IS_GC_THREAD.with(|v| v.set(true));
 
-        self.mark_roots();
+        let freed = self.mark_roots();
         self.scan_roots();
         // drop lock in here (where the lock should be check in every deref() for ObjectRef)
         // to not stop the world
         // what's left for collection should already be in garbage cycle,
         // no mutator will operate on them
-        self.collect_roots(lock)
+        (freed, self.collect_roots(lock))
     }
 
-    fn mark_roots(&self) {
+    fn mark_roots(&self) -> usize {
+        let mut freed = 0;
         let old_roots: Vec<_> = { self.roots.lock().drain(..).collect() };
         let mut new_roots = old_roots
             .into_iter()
@@ -237,6 +239,7 @@ impl CcSync {
                 } else {
                     obj.header().set_buffered(false);
                     if obj.header().color() == Color::Black && obj.rc() == 0 {
+                        freed += 1;
                         unsafe {
                             // can drop directly because no one is refering it
                             // (unlike in collect_white where drop_in_place first and deallocate later)
@@ -253,6 +256,7 @@ impl CcSync {
             })
             .collect();
         (*self.roots.lock()).append(&mut new_roots);
+        freed
     }
     fn scan_roots(&self) {
         self.roots
