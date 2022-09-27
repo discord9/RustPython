@@ -333,7 +333,7 @@ mod builtins {
     }
 
     #[pyfunction]
-    fn gc() -> PyResult<usize> {
+    fn gc() -> PyResult<(usize, usize)> {
         #[cfg(feature = "gc")]
         {
             use crate::object::gc::GLOBAL_COLLECTOR;
@@ -343,7 +343,7 @@ mod builtins {
             return Ok(GLOBAL_COLLECTOR.with(|v| v.force_gc()));
         }
         #[cfg(not(feature = "gc"))]
-        Ok(0)
+        Ok((0,0))
     }
 
     #[pyfunction]
@@ -375,11 +375,23 @@ mod builtins {
         obj.hash(vm)
     }
 
+    /// temoral debug function
     #[cfg(debug_assertions)]
     #[pyfunction]
-    fn header_gc(obj: PyObjectRef, vm: &VirtualMachine) -> PyResult<PyStr> {
+    fn dbg(obj: PyRef<crate::builtins::PyWeakProxy>, _vm: &VirtualMachine) -> PyResult<PyStr> {
         use crate::object::gc::GcObjPtr;
-        Ok(format!("{:#?}",obj.as_ref().header()).into())
+        let obj = obj.weak.upgrade();
+        let header = obj.as_ref().map(|obj| obj.header());
+        Ok(format!("{:#?}\nheader: {:#?}", obj, header).into())
+    }
+
+    /// temoral debug function
+    #[cfg(debug_assertions)]
+    #[pyfunction]
+    fn dbg_header(obj: PyObjectRef, _vm: &VirtualMachine) -> PyResult<PyStr> {
+        use crate::object::gc::GcObjPtr;
+        let header = obj.as_ref().header();
+        Ok(format!("{:#?}\nheader: {:#?}", obj, header).into())
     }
 
     #[pyfunction]
