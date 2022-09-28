@@ -264,6 +264,10 @@ impl<T: PyObjectPayload> GcObjPtr for PyInner<T> {
     fn as_ptr(&self) -> NonNull<dyn GcObjPtr> {
         NonNull::from(self)
     }
+    fn as_obj_ptr(&self)-> Option<NonNull<PyObject>> {
+        // because repr(transparent)
+        Some(self.as_ptr().cast::<PyObject>())
+    }
 }
 
 #[cfg(feature = "gc")]

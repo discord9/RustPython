@@ -10,7 +10,7 @@ use crate::{
 #[pyclass(module = false, name = "weakproxy")]
 #[derive(Debug)]
 pub struct PyWeakProxy {
-    weak: PyRef<PyWeak>,
+    pub(crate) weak: PyRef<PyWeak>,
 }
 
 impl PyPayload for PyWeakProxy {
