@@ -188,7 +188,7 @@ impl CcSync {
         } else {
             // TODO(discord9): find a better place for gc()
             self.gc();
-            GcStatus::Buffered
+            GcStatus::BufferedDrop
         }
     }
 

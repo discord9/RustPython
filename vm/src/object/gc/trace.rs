@@ -11,7 +11,7 @@ pub enum GcStatus {
     /// should be drop by caller
     ShouldDrop,
     /// already buffered, will be drop by collector, no more action is required at caller
-    Buffered,
+    BufferedDrop,
     /// should keep and not drop by caller
     ShouldKeep,
 }
