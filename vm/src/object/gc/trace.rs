@@ -2,7 +2,7 @@ use rustpython_common::lock::{PyMutex, PyRwLock};
 
 use crate::object::gc::header::GcHeader;
 use crate::object::PyObjectPayload;
-use crate::{AsObject, PyObjectRef, PyRef};
+use crate::{AsObject, PyObjectRef, PyRef, PyObject};
 use core::ptr::NonNull;
 
 /// indicate what to do with the object afer calling dec()
@@ -23,6 +23,10 @@ pub trait GcObjPtr: GcTrace {
     fn header(&self) -> &GcHeader;
     // as a NonNull pointer to a gc managed object
     fn as_ptr(&self) -> NonNull<dyn GcObjPtr>;
+    /// return a pointer to inner PyObject if possible
+    fn as_obj_ptr(&self) -> Option<NonNull<PyObject>>{
+        None
+    }
 }
 
 /// use `trace()` to call on all owned ObjectRef
