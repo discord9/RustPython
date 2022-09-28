@@ -126,9 +126,9 @@ impl CcSync {
     pub fn should_gc(&self) -> bool {
         let mut last_gc_time = self.last_gc_time.lock();
         // FIXME(discord9): still can't pass test_threading.py(can pass test_thread.py though)
-        if last_gc_time.elapsed().as_secs() >= 1 {
+        if last_gc_time.elapsed().as_millis() >= 10 {
             *last_gc_time = Instant::now();
-            self.roots_len() > 1024
+            self.roots_len() > 700
         } else {
             false
         }
@@ -241,6 +241,7 @@ impl CcSync {
                     if obj.header().color() == Color::Black && obj.rc() == 0 {
                         freed += 1;
                         unsafe {
+                            // FIXME(discord9): find correct way to drop
                             // can drop directly because no one is refering it
                             // (unlike in collect_white where drop_in_place first and deallocate later)
                             drop(Box::from_raw(ptr.0.as_ptr()));
