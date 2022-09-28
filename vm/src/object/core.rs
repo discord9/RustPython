@@ -1037,10 +1037,10 @@ impl PyObject {
                 #[cfg(feature = "gc")]
                 {
                     // FIXME(discord9): confirm this should return truw always
-                    let _stat = zelf.0.dec();
+                    let stat = zelf.0.dec();
                     // case 1: no cyclic ref, drop now
                     // case 2: cyclic ref, drop later in gc?
-                    true
+                    stat == GcStatus::ShouldDrop || stat == GcStatus::BufferedDrop
                 }
                 #[cfg(not(feature = "gc"))]
                 {
@@ -1161,6 +1161,8 @@ impl Drop for PyObjectRef {
         let predicate = {
             #[cfg(feature = "gc")]
             {
+                // FIXME(discord9): check this predicate is ok?
+                // should I drop here(run deconstructor) anyway, and only do a dealloc for thing in buffered?
                 self.dec() == GcStatus::ShouldDrop
             }
             #[cfg(not(feature = "gc"))]
