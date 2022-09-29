@@ -37,7 +37,7 @@ use std::{
     marker::PhantomData,
     mem::ManuallyDrop,
     ops::Deref,
-    ptr::{self, NonNull},
+    ptr::{self, NonNull}
 };
 
 // so, PyObjectRef is basically equivalent to `PyRc<PyInner<dyn PyObjectPayload>>`, except it's
@@ -84,6 +84,16 @@ struct PyObjVTable {
 }
 unsafe fn drop_dealloc_obj<T: PyObjectPayload>(x: *mut PyObject) {
     drop(Box::from_raw(x as *mut PyInner<T>));
+}
+/// execute destructor only
+unsafe fn drop_value<T: PyObjectPayload>(x: *mut PyObject) {
+    x.drop_in_place()
+}
+/// deallocate memory in heap only, DOES NOT run destructor
+/// # Safety
+/// should only be called after its' destructor is runned
+unsafe fn dealloc<T: PyObjectPayload>(x: *mut PyObject) {
+    std::alloc::dealloc(x.cast(), std::alloc::Layout::for_value(x.as_ref().unwrap()));
 }
 unsafe fn debug_obj<T: PyObjectPayload>(x: &PyObject, f: &mut fmt::Formatter) -> fmt::Result {
     let x = &*(x as *const PyObject as *const PyInner<T>);
@@ -265,13 +275,9 @@ impl GcObjPtr for PyInner<Erased> {
         NonNull::from(self)
     }
     fn as_obj_ptr(&self) -> Option<NonNull<PyObject>> {
-        // because repr(transparent)
-        // possibly wrong, return None for now
+        // because repr(transparent) for PyObject
         // Some(self.as_ptr().cast::<PyObject>())
         None
-    }
-    fn type_id(&self) -> Option<TypeId> {
-        Some(self.typeid)
     }
 }
 
@@ -302,9 +308,6 @@ impl GcObjPtr for PyObject {
         // because repr(transparent)
         Some(NonNull::from(self))
     }
-    fn type_id(&self) -> Option<TypeId> {
-        self.0.type_id()
-    }
 }
 
 #[cfg(feature = "gc")]
@@ -333,9 +336,6 @@ impl<T: PyObjectPayload> GcObjPtr for Py<T> {
     fn as_obj_ptr(&self) -> Option<NonNull<PyObject>> {
         // because repr(transparent)
         self.as_object().as_obj_ptr()
-    }
-    fn type_id(&self) -> Option<TypeId> {
-        self.as_object().type_id()
     }
 }
 
