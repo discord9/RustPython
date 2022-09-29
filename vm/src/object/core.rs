@@ -175,7 +175,7 @@ impl GcTrace for PyInner<Erased> {
             PyBuffer, PyIter, PyIterIter, PyIterReturn, PyMapping, PyNumber, PySequence,
         };
         optional_trace!(
-            PyList /*
+            PyList, PyDict /*
                    // builtin types
                    // PyRange, PyStr is acyclic
                    PyBoundMethod,
