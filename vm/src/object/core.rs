@@ -175,56 +175,54 @@ impl GcTrace for PyInner<Erased> {
             PyBuffer, PyIter, PyIterIter, PyIterReturn, PyMapping, PyNumber, PySequence,
         };
         optional_trace!(
-            PyList, PyDict /*
-                   // builtin types
-                   // PyRange, PyStr is acyclic
-                   PyBoundMethod,
-                   PyDict,
-                   PyEnumerate,
-                   PyFilter,
-                   PyFunction,
-                   PyList,
-                   PyMappingProxy,
-                   PyProperty,
-                   PySet,
-                   PySlice,
-                   PyStaticMethod,
-                   PySuper,
-                   PyTraceback,
-                   PyTuple,
-                   // FIXME(discord9): PyType, (strange bug, see PyType's trace() for detail)
-                   PyZip,
-                   // misc
-                   PyCell,
-                   // iter in iter.rs
-                   PySequenceIterator,
-                   PyCallableIterator,
-                   // iter on types
-                   // PyList's iter
-                   PyListIterator,
-                   PyListReverseIterator,
-                   // PyTuple's iter
-                   PyTupleIterator,
-                   // PyEnumerate's iter
-                   PyReverseSequenceIterator,
-                   // PyMemory's iter
-                   PyMemoryViewIterator,
-                   // function/Arg protocol
-                   ArgCallable,
-                   ArgIterable,
-                   ArgMapping,
-                   ArgSequence,
-                   // protocol
-                   // struct like
-                   PyBuffer,
-                   PyIter,
-                   // FIXME(discord9): confirm this is ok to do
-                   PyIterIter<T>,
-                   PyIterReturn,
-                   PyMapping,
-                   PyNumber,
-                   PySequence
-                    */
+            // builtin types
+            // PyRange, PyStr is acyclic
+            PyBoundMethod,
+            PyDict,
+            PyEnumerate,
+            PyFilter,
+            PyFunction,
+            PyList,
+            PyMappingProxy,
+            PyProperty,
+            PySet,
+            PySlice,
+            PyStaticMethod,
+            PySuper,
+            PyTraceback,
+            PyTuple,
+            // FIXME(discord9): PyType, (strange bug, see PyType's trace() for detail)
+            PyZip,
+            // misc
+            PyCell,
+            // iter in iter.rs
+            PySequenceIterator,
+            PyCallableIterator,
+            // iter on types
+            // PyList's iter
+            PyListIterator,
+            PyListReverseIterator,
+            // PyTuple's iter
+            PyTupleIterator,
+            // PyEnumerate's iter
+            PyReverseSequenceIterator,
+            // PyMemory's iter
+            PyMemoryViewIterator,
+            // function/Arg protocol
+            ArgCallable,
+            ArgIterable,
+            ArgMapping,
+            ArgSequence,
+            // protocol
+            // struct like
+            PyBuffer,
+            PyIter,
+            // FIXME(discord9): confirm this is ok to do
+            PyIterIter<Erased>,
+            PyIterReturn,
+            PyMapping,
+            PyNumber,
+            PySequence
         );
     }
 }
