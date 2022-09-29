@@ -2,14 +2,17 @@ use rustpython_common::lock::{PyMutex, PyRwLock};
 
 use crate::object::gc::header::GcHeader;
 use crate::object::PyObjectPayload;
-use crate::{AsObject, PyObjectRef, PyRef, PyObject};
+use crate::{AsObject, PyObject, PyObjectRef, PyRef};
 use core::ptr::NonNull;
+use std::any::TypeId;
 
 /// indicate what to do with the object afer calling dec()
 #[derive(PartialEq, Eq)]
 pub enum GcStatus {
     /// should be drop by caller
     ShouldDrop,
+    /// something is servel wrong in here
+    AlreadyDrop,
     /// already buffered, will be drop by collector, no more action is required at caller
     BufferedDrop,
     /// should keep and not drop by caller
@@ -24,7 +27,10 @@ pub trait GcObjPtr: GcTrace {
     // as a NonNull pointer to a gc managed object
     fn as_ptr(&self) -> NonNull<dyn GcObjPtr>;
     /// return a pointer to inner PyObject if possible
-    fn as_obj_ptr(&self) -> Option<NonNull<PyObject>>{
+    fn as_obj_ptr(&self) -> Option<NonNull<PyObject>> {
+        None
+    }
+    fn type_id(&self) -> Option<TypeId> {
         None
     }
 }

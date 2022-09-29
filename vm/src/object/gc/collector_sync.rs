@@ -10,6 +10,7 @@ use std::{
 use crate::object::gc::header::Color;
 use crate::object::gc::trace::GcObjPtr;
 use crate::object::gc::GcStatus;
+use crate::PyObject;
 
 use rustpython_common::lock::{PyMutex, PyRwLock, PyRwLockWriteGuard};
 
@@ -105,8 +106,11 @@ unsafe fn free(ptr: ObjPtr) {
     // Box::from_raw(ptr.as_ptr());
     dealloc(ptr.cast().as_ptr(), Layout::for_value(ptr.as_ref()));
 }
+
 impl CcSync {
     /// _suggest_(may or may not) collector to collect garbage. return number of cyclic garbage being collected
+    ///
+    /// TODO(discord9): find a better place for gc()
     #[inline]
     pub fn gc(&self) -> (usize, usize) {
         if self.should_gc() {
@@ -125,7 +129,7 @@ impl CcSync {
     /// TODO: change to use roots'len or what to determine
     pub fn should_gc(&self) -> bool {
         let mut last_gc_time = self.last_gc_time.lock();
-        // FIXME(discord9): still can't pass test_threading.py(can pass test_thread.py though)
+        // FIXME(discord9): better condition, could be important
         if last_gc_time.elapsed().as_millis() >= 10 {
             *last_gc_time = Instant::now();
             self.roots_len() > 700
@@ -152,13 +156,13 @@ impl CcSync {
             // a leaked object should always keep
             return GcStatus::ShouldKeep;
         }
-
+        // prevent RAII Drop to drop below zero
         if obj.header().rc() > 0 {
             obj.header().do_pausing();
             // acquire exclusive access to obj
             #[cfg(feature = "threading")]
             let _lock = obj.header().exclusive.lock();
-            // prevent RAII Drop to drop below zero
+
             let rc = obj.header().dec();
             if rc == 0 {
                 self.release(obj)
@@ -176,6 +180,7 @@ impl CcSync {
         // because drop obj itself will drop all ObjRef store by object itself once more,
         // so balance out in here
         // by doing nothing
+        // instead of minus one
         //obj.trace(&mut |ch| {
 
         // self.decrement(ch);
@@ -186,8 +191,6 @@ impl CcSync {
         if !obj.header().buffered() {
             GcStatus::ShouldDrop
         } else {
-            // TODO(discord9): find a better place for gc()
-            self.gc();
             GcStatus::BufferedDrop
         }
     }
@@ -242,9 +245,15 @@ impl CcSync {
                         freed += 1;
                         unsafe {
                             // FIXME(discord9): find correct way to drop
-                            // can drop directly because no one is refering it
+                            // can drop directly because no one is refering it by definition
                             // (unlike in collect_white where drop_in_place first and deallocate later)
-                            drop(Box::from_raw(ptr.0.as_ptr()));
+                            if let Some(ptr) = ptr.0.as_ref().as_obj_ptr() {
+                                warn!("A proper PyObject!");
+                                PyObject::drop_slow(ptr)
+                            }else{
+                                warn!("A GcObjPtr didn't impl as_obj_ptr() therefore fall back to call its default drop impl");
+                                drop(Box::from_raw(ptr.as_ptr()))
+                            }
                             /*
                             drop_value(ptr.0);
                             free(ptr.0);

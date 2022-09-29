@@ -343,7 +343,7 @@ mod builtins {
             return Ok(GLOBAL_COLLECTOR.with(|v| v.force_gc()));
         }
         #[cfg(not(feature = "gc"))]
-        Ok((0,0))
+        Ok((0, 0))
     }
 
     #[pyfunction]
