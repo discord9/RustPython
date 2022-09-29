@@ -76,8 +76,8 @@ use std::{
 /// A type to just represent "we've erased the type of this object, cast it before you use it"
 #[derive(Debug)]
 struct Erased;
-#[cfg(feature = "gc")]
-impl PyObjectPayload for Erased {}
+// #[cfg(feature = "gc")]
+// impl PyObjectPayload for Erased {}
 struct PyObjVTable {
     drop_dealloc: unsafe fn(*mut PyObject),
     debug: unsafe fn(&PyObject, &mut fmt::Formatter) -> fmt::Result,
@@ -128,7 +128,7 @@ struct PyInner<T> {
 }
 
 #[cfg(feature = "gc")]
-impl<T: PyObjectPayload> GcTrace for PyInner<T> {
+impl GcTrace for PyInner<Erased> {
     fn trace(&self, tracer_fn: &mut TracerFn) {
         /// FIXME(discord9): Optional trait bound(Like a ?GcTrace) require specialization
         ///
@@ -244,7 +244,7 @@ impl GcTrace for PyObject {
 }
 
 #[cfg(feature = "gc")]
-impl<T: PyObjectPayload> GcObjPtr for PyInner<T> {
+impl GcObjPtr for PyInner<Erased> {
     /// call increment() of gc
     fn inc(&self) {
         self.header().gc.increment(self)
@@ -1230,7 +1230,7 @@ impl<T: PyObjectPayload> ToOwned for Py<T> {
     fn to_owned(&self) -> Self::Owned {
         #[cfg(feature = "gc")]
         {
-            self.0.inc();
+            self.as_object().0.inc();
         }
         #[cfg(not(feature = "gc"))]
         {
@@ -1249,7 +1249,7 @@ impl<T: PyObjectPayload> Deref for Py<T> {
     fn deref(&self) -> &Self::Target {
         // stop the world for garbage collector
         #[cfg(feature = "gc")]
-        self.0.header().do_pausing();
+        self.as_object().0.header().do_pausing();
         &self.0.payload
     }
 }
@@ -1436,7 +1436,7 @@ where
         #[cfg(feature = "gc")]
         {
             let obj = unsafe { self.ptr.as_ref() };
-            obj.0.header().do_pausing();
+            obj.as_object().0.header().do_pausing();
             obj
         }
         #[cfg(not(feature = "gc"))]
@@ -1567,7 +1567,8 @@ pub(crate) fn init_type_hierarchy() -> (PyTypeRef, PyTypeRef, PyTypeRef) {
         unsafe {
             #[cfg(feature = "gc")]
             {
-                (*type_type_ptr).inc();
+                // FIXME: figure out if this is correct way.
+                (*type_type_ptr.cast::<PyInner<Erased>>()).inc();
             }
             #[cfg(not(feature = "gc"))]
             {
@@ -1580,7 +1581,8 @@ pub(crate) fn init_type_hierarchy() -> (PyTypeRef, PyTypeRef, PyTypeRef) {
             );
             #[cfg(feature = "gc")]
             {
-                (*type_type_ptr).inc();
+                // FIXME: figure out if this is correct way.
+                (*type_type_ptr.cast::<PyInner<Erased>>()).inc();
             }
             #[cfg(not(feature = "gc"))]
             {
