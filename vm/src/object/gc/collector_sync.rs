@@ -316,6 +316,7 @@ impl CcSync {
             });
             // so to allow drop() to drop by itself
             obj.header().set_buffered(false);
+            // FIXME: here drop is incorrect, for it is dropping PyObject with type information correctly.
             unsafe {
                 drop_value(*i);
             }
