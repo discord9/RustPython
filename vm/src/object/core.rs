@@ -175,54 +175,56 @@ impl<T: PyObjectPayload> GcTrace for PyInner<T> {
             PyBuffer, PyIter, PyIterIter, PyIterReturn, PyMapping, PyNumber, PySequence,
         };
         optional_trace!(
-            // builtin types
-            // PyRange, PyStr is acyclic
-            PyBoundMethod,
-            PyDict,
-            PyEnumerate,
-            PyFilter,
-            PyFunction,
-            PyList,
-            PyMappingProxy,
-            PyProperty,
-            PySet,
-            PySlice,
-            PyStaticMethod,
-            PySuper,
-            PyTraceback,
-            PyTuple,
-            // FIXME(discord9): PyType, (strange bug, see PyType's trace() for detail)
-            PyZip,
-            // misc
-            PyCell,
-            // iter in iter.rs
-            PySequenceIterator,
-            PyCallableIterator,
-            // iter on types
-            // PyList's iter
-            PyListIterator,
-            PyListReverseIterator,
-            // PyTuple's iter
-            PyTupleIterator,
-            // PyEnumerate's iter
-            PyReverseSequenceIterator,
-            // PyMemory's iter
-            PyMemoryViewIterator,
-            // function/Arg protocol
-            ArgCallable,
-            ArgIterable,
-            ArgMapping,
-            ArgSequence,
-            // protocol
-            // struct like
-            PyBuffer,
-            PyIter,
-            // FIXME(discord9): confirm this is ok to do
-            PyIterIter<T>,
-            PyIterReturn,
-            PyMapping,
-            PyNumber,
-            PySequence
+            PyList /*
+                   // builtin types
+                   // PyRange, PyStr is acyclic
+                   PyBoundMethod,
+                   PyDict,
+                   PyEnumerate,
+                   PyFilter,
+                   PyFunction,
+                   PyList,
+                   PyMappingProxy,
+                   PyProperty,
+                   PySet,
+                   PySlice,
+                   PyStaticMethod,
+                   PySuper,
+                   PyTraceback,
+                   PyTuple,
+                   // FIXME(discord9): PyType, (strange bug, see PyType's trace() for detail)
+                   PyZip,
+                   // misc
+                   PyCell,
+                   // iter in iter.rs
+                   PySequenceIterator,
+                   PyCallableIterator,
+                   // iter on types
+                   // PyList's iter
+                   PyListIterator,
+                   PyListReverseIterator,
+                   // PyTuple's iter
+                   PyTupleIterator,
+                   // PyEnumerate's iter
+                   PyReverseSequenceIterator,
+                   // PyMemory's iter
+                   PyMemoryViewIterator,
+                   // function/Arg protocol
+                   ArgCallable,
+                   ArgIterable,
+                   ArgMapping,
+                   ArgSequence,
+                   // protocol
+                   // struct like
+                   PyBuffer,
+                   PyIter,
+                   // FIXME(discord9): confirm this is ok to do
+                   PyIterIter<T>,
+                   PyIterReturn,
+                   PyMapping,
+                   PyNumber,
+                   PySequence
+                    */
         );
     }
 }
@@ -230,7 +232,7 @@ impl<T: PyObjectPayload> GcTrace for PyInner<T> {
 #[cfg(feature = "gc")]
 impl<T: PyObjectPayload> GcTrace for Py<T> {
     fn trace(&self, tracer_fn: &mut TracerFn) {
-        self.0.trace(tracer_fn)
+        self.as_object().0.trace(tracer_fn)
     }
 }
 
@@ -264,9 +266,14 @@ impl<T: PyObjectPayload> GcObjPtr for PyInner<T> {
     fn as_ptr(&self) -> NonNull<dyn GcObjPtr> {
         NonNull::from(self)
     }
-    fn as_obj_ptr(&self)-> Option<NonNull<PyObject>> {
+    fn as_obj_ptr(&self) -> Option<NonNull<PyObject>> {
         // because repr(transparent)
-        Some(self.as_ptr().cast::<PyObject>())
+        // possibly wrong, return None for now
+        // Some(self.as_ptr().cast::<PyObject>())
+        None
+    }
+    fn type_id(&self) -> Option<TypeId> {
+        Some(self.typeid)
     }
 }
 
@@ -293,10 +300,17 @@ impl GcObjPtr for PyObject {
     fn as_ptr(&self) -> NonNull<dyn GcObjPtr> {
         self.0.as_ptr()
     }
+    fn as_obj_ptr(&self) -> Option<NonNull<PyObject>> {
+        // because repr(transparent)
+        Some(NonNull::from(self))
+    }
+    fn type_id(&self) -> Option<TypeId> {
+        self.0.type_id()
+    }
 }
 
 #[cfg(feature = "gc")]
-impl<T: PyObjectPayload> GcObjPtr for PyRef<T> {
+impl<T: PyObjectPayload> GcObjPtr for Py<T> {
     /// call increment() of gc
     fn inc(&self) {
         self.as_object().0.inc()
@@ -304,7 +318,6 @@ impl<T: PyObjectPayload> GcObjPtr for PyRef<T> {
 
     /// call decrement() of gc
     fn dec(&self) -> GcStatus {
-        // FIXME(discord9): remove as_object() cause strange bugs, haven't figure out why(To do with type layout?)
         self.as_object().0.dec()
     }
 
@@ -318,6 +331,13 @@ impl<T: PyObjectPayload> GcObjPtr for PyRef<T> {
 
     fn as_ptr(&self) -> NonNull<dyn GcObjPtr> {
         self.as_object().0.as_ptr()
+    }
+    fn as_obj_ptr(&self) -> Option<NonNull<PyObject>> {
+        // because repr(transparent)
+        self.as_object().as_obj_ptr()
+    }
+    fn type_id(&self) -> Option<TypeId> {
+        self.as_object().type_id()
     }
 }
 
@@ -1077,7 +1097,7 @@ impl PyObject {
 
     /// Can only be called when ref_count has dropped to zero. `ptr` must be valid
     #[inline(never)]
-    unsafe fn drop_slow(ptr: NonNull<PyObject>) {
+    pub(in crate::object) unsafe fn drop_slow(ptr: NonNull<PyObject>) {
         if let Err(()) = ptr.as_ref().drop_slow_inner() {
             // abort drop for whatever reason
             return;
