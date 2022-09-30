@@ -75,7 +75,7 @@ use std::{
 
 /// A type to just represent "we've erased the type of this object, cast it before you use it"
 #[derive(Debug)]
-struct Erased;
+pub(in crate::object) struct Erased;
 // #[cfg(feature = "gc")]
 // impl PyObjectPayload for Erased {}
 struct PyObjVTable {
@@ -87,13 +87,13 @@ unsafe fn drop_dealloc_obj<T: PyObjectPayload>(x: *mut PyObject) {
 }
 /// execute destructor only
 unsafe fn drop_value<T: PyObjectPayload>(x: *mut PyObject) {
-    x.drop_in_place()
+    x.cast::<PyInner<T>>().drop_in_place()
 }
-/// deallocate memory in heap only, DOES NOT run destructor
+/// deallocate memory with type info(cast as PyInner<T>) in heap only, DOES NOT run destructor
 /// # Safety
-/// should only be called after its' destructor is runned
+/// should only be called after its' destructor is done(i.e. called `drop_value`(which called drop_in_place))
 unsafe fn dealloc<T: PyObjectPayload>(x: *mut PyObject) {
-    std::alloc::dealloc(x.cast(), std::alloc::Layout::for_value(x.as_ref().unwrap()));
+    std::alloc::dealloc(x.cast(), std::alloc::Layout::for_value(x.cast::<PyInner<T>>().as_ref().unwrap()));
 }
 unsafe fn debug_obj<T: PyObjectPayload>(x: &PyObject, f: &mut fmt::Formatter) -> fmt::Result {
     let x = &*(x as *const PyObject as *const PyInner<T>);
@@ -120,7 +120,7 @@ impl PyObjVTable {
 /// python class, and carries some rust payload optionally. This rust
 /// payload can be a rust float or rust int in case of float and int objects.
 #[repr(C)]
-struct PyInner<T> {
+pub(in crate::object) struct PyInner<T> {
     #[cfg(not(feature = "gc"))]
     ref_count: RefCount,
     #[cfg(feature = "gc")]
