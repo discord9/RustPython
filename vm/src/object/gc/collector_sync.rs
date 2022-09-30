@@ -7,6 +7,7 @@ use std::{
     ptr::{self, NonNull},
 };
 
+use crate::object::{PyInner, Erased};
 use crate::object::gc::header::Color;
 use crate::object::gc::trace::GcObjPtr;
 use crate::object::gc::GcStatus;
@@ -92,7 +93,8 @@ impl std::fmt::Debug for CcSync {
             .finish()
     }
 }
-
+type Inner = PyInner<Erased>;
+// TODO: change to use PyInner<Erased> directly
 type ObjRef<'a> = &'a dyn GcObjPtr;
 type ObjPtr = NonNull<dyn GcObjPtr>;
 
@@ -247,13 +249,17 @@ impl CcSync {
                             // FIXME(discord9): find correct way to drop
                             // can drop directly because no one is refering it by definition
                             // (unlike in collect_white where drop_in_place first and deallocate later)
+                            PyObject::drop_slow(ptr.cast::<PyObject>());
+                            /*
                             if let Some(ptr) = ptr.0.as_ref().as_obj_ptr() {
                                 warn!("A proper PyObject!");
                                 PyObject::drop_slow(ptr)
                             }else{
                                 warn!("A GcObjPtr didn't impl as_obj_ptr() therefore fall back to call its default drop impl");
-                                drop(Box::from_raw(ptr.as_ptr()))
+                                // FIXME(discord9): wrong, without type layout info, this is wrong!
+                                //drop(Box::from_raw(ptr.as_ptr()))
                             }
+                             */
                             /*
                             drop_value(ptr.0);
                             free(ptr.0);
