@@ -76,8 +76,7 @@ use std::{
 /// A type to just represent "we've erased the type of this object, cast it before you use it"
 #[derive(Debug)]
 pub(in crate::object) struct Erased;
-// #[cfg(feature = "gc")]
-// impl PyObjectPayload for Erased {}
+
 struct PyObjVTable {
     drop_dealloc: unsafe fn(*mut PyObject),
     drop_only: unsafe fn(*mut PyObject),
@@ -1064,7 +1063,7 @@ impl PyObject {
                 }
                 #[cfg(feature = "gc")]
                 {
-                    // FIXME(discord9): confirm this should return truw always
+                    // FIXME(discord9): confirm this should return true always
                     let stat = zelf.0.dec();
                     // case 1: no cyclic ref, drop now
                     // case 2: cyclic ref, drop later in gc?
@@ -1109,6 +1108,30 @@ impl PyObject {
         let drop_dealloc = ptr.as_ref().0.vtable.drop_dealloc;
         // call drop only when there are no references in scope - stacked borrows stuff
         drop_dealloc(ptr.as_ptr())
+    }
+
+    /// Can only be called when ref_count has dropped to zero. `ptr` must be valid
+    #[inline(never)]
+    pub(in crate::object) unsafe fn drop_only(ptr: NonNull<PyObject>) {
+        if let Err(()) = ptr.as_ref().drop_slow_inner() {
+            // abort drop for whatever reason
+            return;
+        }
+        let drop_only = ptr.as_ref().0.vtable.drop_only;
+        // call drop only when there are no references in scope - stacked borrows stuff
+        drop_only(ptr.as_ptr())
+    }
+
+    /// Can only be called when ref_count has dropped to zero. `ptr` must be valid
+    #[inline(never)]
+    pub(in crate::object) unsafe fn dealloc_only(ptr: NonNull<PyObject>) {
+        if let Err(()) = ptr.as_ref().drop_slow_inner() {
+            // abort drop for whatever reason
+            return;
+        }
+        let dealloc_only = ptr.as_ref().0.vtable.dealloc_only;
+        // call drop only when there are no references in scope - stacked borrows stuff
+        dealloc_only(ptr.as_ptr())
     }
 
     /// # Safety
