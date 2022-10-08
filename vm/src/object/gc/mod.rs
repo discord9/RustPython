@@ -3,6 +3,6 @@
 mod collector_sync;
 mod header;
 mod trace;
-pub use collector_sync::{CcSync, GLOBAL_COLLECTOR, IS_GC_THREAD};
+pub use collector_sync::{GcResult, CcSync, GLOBAL_COLLECTOR, IS_GC_THREAD};
 pub use header::{Color, GcHeader};
 pub use trace::{GcObjPtr, GcStatus, GcTrace, TracerFn};

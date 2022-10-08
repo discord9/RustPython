@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::time::Instant;
 use std::{fmt, ops::Deref, ptr::NonNull};
 
-use crate::object::gc::{GcStatus, Color, GcObjPtr};
+use crate::object::gc::{Color, GcObjPtr, GcStatus};
 use crate::PyObject;
 
 use rustpython_common::lock::{PyMutex, PyRwLock, PyRwLockWriteGuard};
@@ -65,6 +65,30 @@ impl<T: ?Sized> From<WrappedPtr<T>> for NonNull<T> {
     }
 }
 
+#[derive(Debug)]
+pub struct GcResult {
+    acyclic_cnt: usize,
+    cyclic_cnt: usize,
+}
+
+impl GcResult {
+    fn new(tuple: (usize, usize))->Self{
+        Self { acyclic_cnt: tuple.0, cyclic_cnt: tuple.1 }
+    }
+}
+
+impl From<(usize, usize)> for GcResult {
+    fn from(t: (usize, usize)) -> Self {
+        Self::new(t)
+    }
+}
+
+impl From<GcResult> for (usize, usize) {
+    fn from(g: GcResult) -> Self {
+        (g.acyclic_cnt, g.cyclic_cnt)
+    }
+}
+
 pub struct CcSync {
     roots: PyMutex<Vec<WrappedPtr<dyn GcObjPtr>>>,
     /// for stop the world, will be try to check lock every time deref ObjecteRef
@@ -94,15 +118,15 @@ impl CcSync {
     ///
     /// TODO(discord9): find a better place for gc()
     #[inline]
-    pub fn gc(&self) -> (usize, usize) {
+    pub fn gc(&self) -> GcResult {
         if self.should_gc() {
             self.force_gc()
         } else {
-            (0, 0)
+            (0, 0).into()
         }
     }
     #[inline]
-    pub fn force_gc(&self) -> (usize, usize) {
+    pub fn force_gc(&self) -> GcResult {
         self.collect_cycles()
     }
     fn roots_len(&self) -> usize {
@@ -110,6 +134,9 @@ impl CcSync {
     }
     /// TODO: change to use roots'len or what to determine
     pub fn should_gc(&self) -> bool {
+        if IS_GC_THREAD.with(|v| v.get()) {
+            return false;
+        }
         let mut last_gc_time = self.last_gc_time.lock();
         // FIXME(discord9): better condition, could be important
         if self.roots_len() > 700 && last_gc_time.elapsed().as_millis() >= 10 {
@@ -193,9 +220,9 @@ impl CcSync {
     }
 
     /// return `(acyclic garbage collected, cyclic garbage collected)`
-    fn collect_cycles(&self) -> (usize, usize) {
+    fn collect_cycles(&self) -> GcResult {
         if IS_GC_THREAD.with(|v| v.get()) {
-            return (0, 0);
+            return (0, 0).into();
             // already call collect_cycle() once
         }
         // order of acquire lock and check IS_GC_THREAD here is important
@@ -203,14 +230,14 @@ impl CcSync {
         // using write() to gain exclusive access
         let lock = self.pause.write();
         IS_GC_THREAD.with(|v| v.set(true));
-
+        warn!("start gc.");
         let freed = self.mark_roots();
         self.scan_roots();
         // drop lock in here (where the lock should be check in every deref() for ObjectRef)
         // to not stop the world
         // what's left for collection should already be in garbage cycle,
         // no mutator will operate on them
-        (freed, self.collect_roots(lock))
+        (freed, self.collect_roots(lock)).into()
     }
 
     fn mark_roots(&self) -> usize {
