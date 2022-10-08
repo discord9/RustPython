@@ -17,6 +17,8 @@ pub struct GcHeader {
     color: PyMutex<Color>,
     buffered: PyMutex<bool>,
     is_drop: PyMutex<bool>,
+    /// check for soundness
+    is_dealloc: PyMutex<bool>,
     pub exclusive: PyMutex<()>,
     pub gc: PyRc<CcSync>,
 }
@@ -28,6 +30,7 @@ impl GcHeader {
             color: PyMutex::new(Color::Black),
             buffered: PyMutex::new(false),
             is_drop: PyMutex::new(false),
+            is_dealloc: PyMutex::new(false),
             exclusive: PyMutex::new(()),
             #[cfg(feature = "threading")]
             gc: GLOBAL_COLLECTOR.clone(),
@@ -36,13 +39,32 @@ impl GcHeader {
         }
     }
 
-    /// return true if can drop(also mark object as dropped)
-    pub(crate) fn can_drop(&self)-> bool {
+    pub(crate) fn check_set_drop_dealloc(&self) -> bool {
         let mut is_drop = self.is_drop.lock();
-        if !(*is_drop){
+        let mut is_dealloc = self.is_dealloc.lock();
+        if *is_dealloc{
+            warn!("Already deallocated! What?");
+        }
+        if !(*is_drop) && !(*is_dealloc) {
+            *is_drop = true;
+            *is_dealloc = true;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// return true if can drop(also mark object as dropped)
+    pub(crate) fn check_set_drop_only(&self) -> bool {
+        let mut is_drop = self.is_drop.lock();
+        let is_dealloc = self.is_dealloc.lock();
+        if *is_dealloc{
+            warn!("Already deallocated!What?");
+        }
+        if !(*is_drop) && !(*is_dealloc) {
             *is_drop = true;
             true
-        }else{
+        } else {
             false
         }
     }
