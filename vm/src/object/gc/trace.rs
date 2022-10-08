@@ -14,7 +14,7 @@ pub enum GcStatus {
     /// already buffered, will be dealloc by collector, caller should call `drop_only` to run destructor only but not dealloc memory region
     BufferedDrop,
     /// should keep and not drop by caller
-    ShouldKeep
+    ShouldKeep,
 }
 pub trait GcObjPtr: GcTrace {
     fn inc(&self);

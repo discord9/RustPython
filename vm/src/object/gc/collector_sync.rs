@@ -188,7 +188,7 @@ impl CcSync {
         // self.decrement(ch);
         //});
         obj.header().set_color(Color::Black);
-        
+
         // TODO(discord9): just drop in here, not by the caller, which is cleaner
         // before it is free in here,
         // but now change to passing message to allow it to drop outside
