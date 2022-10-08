@@ -1,16 +1,14 @@
 use std::sync::Arc;
 use std::time::Instant;
 use std::{
-    alloc::{dealloc, Layout},
     fmt,
     ops::Deref,
-    ptr::{self, NonNull},
+    ptr::NonNull,
 };
 
 use crate::object::gc::header::Color;
 use crate::object::gc::trace::GcObjPtr;
 use crate::object::gc::GcStatus;
-use crate::object::{Erased, PyInner};
 use crate::PyObject;
 
 use rustpython_common::lock::{PyMutex, PyRwLock, PyRwLockWriteGuard};
@@ -96,18 +94,6 @@ impl std::fmt::Debug for CcSync {
 
 // TODO: change to use PyInner<Erased> directly
 type ObjRef<'a> = &'a dyn GcObjPtr;
-type ObjPtr = NonNull<dyn GcObjPtr>;
-
-unsafe fn drop_value(ptr: ObjPtr) {
-    ptr::drop_in_place(ptr.as_ptr());
-}
-
-unsafe fn free(ptr: ObjPtr) {
-    debug_assert!(ptr.as_ref().header().rc() == 0);
-    debug_assert!(!ptr.as_ref().header().buffered());
-    // Box::from_raw(ptr.as_ptr());
-    dealloc(ptr.cast().as_ptr(), Layout::for_value(ptr.as_ref()));
-}
 
 impl CcSync {
     /// _suggest_(may or may not) collector to collect garbage. return number of cyclic garbage being collected
@@ -316,7 +302,6 @@ impl CcSync {
                 // PyObject::drop_slow(i.cast::<PyObject>());
             }
         }
-        warn!("Done drop");
         // drop first, deallocate later so to avoid heap corruption
         // cause by circular ref and therefore
         // access pointer of already dropped value's memory region

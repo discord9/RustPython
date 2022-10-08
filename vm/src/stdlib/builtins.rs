@@ -332,6 +332,7 @@ mod builtins {
         call_object_format(vm, value, None, format_spec.as_str())
     }
 
+    /// force a gc to happen
     #[pyfunction]
     fn gc() -> PyResult<(usize, usize)> {
         #[cfg(feature = "gc")]
@@ -373,25 +374,6 @@ mod builtins {
     #[pyfunction]
     fn hash(obj: PyObjectRef, vm: &VirtualMachine) -> PyResult<PyHash> {
         obj.hash(vm)
-    }
-
-    /// temoral debug function
-    #[cfg(debug_assertions)]
-    #[pyfunction]
-    fn dbg(obj: PyRef<crate::builtins::PyWeakProxy>, _vm: &VirtualMachine) -> PyResult<PyStr> {
-        use crate::object::gc::GcObjPtr;
-        let obj = obj.weak.upgrade();
-        let header = obj.as_ref().map(|obj| obj.header());
-        Ok(format!("{:#?}\nheader: {:#?}", obj, header).into())
-    }
-
-    /// temoral debug function
-    #[cfg(debug_assertions)]
-    #[pyfunction]
-    fn dbg_header(obj: PyObjectRef, _vm: &VirtualMachine) -> PyResult<PyStr> {
-        use crate::object::gc::GcObjPtr;
-        let header = obj.as_ref().header();
-        Ok(format!("{:#?}\nheader: {:#?}", obj, header).into())
     }
 
     #[pyfunction]
