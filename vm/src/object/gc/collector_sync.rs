@@ -127,6 +127,7 @@ impl CcSync {
         obj.header().do_pausing();
         obj.header().inc();
         obj.header().set_color(Color::Black);
+        obj.header().gc.gc();
     }
 
     /// # Safety
