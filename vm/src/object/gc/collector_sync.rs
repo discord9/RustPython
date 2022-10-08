@@ -7,10 +7,10 @@ use std::{
     ptr::{self, NonNull},
 };
 
-use crate::object::{PyInner, Erased};
 use crate::object::gc::header::Color;
 use crate::object::gc::trace::GcObjPtr;
 use crate::object::gc::GcStatus;
+use crate::object::{Erased, PyInner};
 use crate::PyObject;
 
 use rustpython_common::lock::{PyMutex, PyRwLock, PyRwLockWriteGuard};
@@ -93,7 +93,7 @@ impl std::fmt::Debug for CcSync {
             .finish()
     }
 }
-type Inner = PyInner<Erased>;
+
 // TODO: change to use PyInner<Erased> directly
 type ObjRef<'a> = &'a dyn GcObjPtr;
 type ObjPtr = NonNull<dyn GcObjPtr>;
@@ -324,14 +324,17 @@ impl CcSync {
             obj.header().set_buffered(false);
             // FIXME: here drop is incorrect, for it is dropping PyObject with type information correctly.
             unsafe {
-                drop_value(*i);
+                // drop_value(*i);
+                PyObject::drop_only(i.cast::<PyObject>());
             }
         }
         // drop first, deallocate later so to avoid heap corruption
         // cause by circular ref and therefore
-        // access pointer of already dropped value's mem?
+        // access pointer of already dropped value's memory region
         for i in &white {
-            unsafe { free(*i) }
+            unsafe {
+                PyObject::dealloc_only(i.cast::<PyObject>());
+            }
         }
         len_white
     }
