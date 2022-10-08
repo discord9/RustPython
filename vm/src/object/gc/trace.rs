@@ -11,8 +11,6 @@ use std::any::TypeId;
 pub enum GcStatus {
     /// should be drop by caller
     ShouldDrop,
-    /// something is servel wrong in here
-    AlreadyDrop,
     /// already buffered, will be drop by collector, no more action is required at caller
     BufferedDrop,
     /// should keep and not drop by caller

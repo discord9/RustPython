@@ -249,21 +249,7 @@ impl CcSync {
                             // FIXME(discord9): find correct way to drop
                             // can drop directly because no one is refering it by definition
                             // (unlike in collect_white where drop_in_place first and deallocate later)
-                            PyObject::drop_slow(ptr.cast::<PyObject>());
-                            /*
-                            if let Some(ptr) = ptr.0.as_ref().as_obj_ptr() {
-                                warn!("A proper PyObject!");
-                                PyObject::drop_slow(ptr)
-                            }else{
-                                warn!("A GcObjPtr didn't impl as_obj_ptr() therefore fall back to call its default drop impl");
-                                // FIXME(discord9): wrong, without type layout info, this is wrong!
-                                //drop(Box::from_raw(ptr.as_ptr()))
-                            }
-                             */
-                            /*
-                            drop_value(ptr.0);
-                            free(ptr.0);
-                             */
+                            // PyObject::drop_slow(ptr.cast::<PyObject>());
                             // obj is dangling after this line?
                         }
                     }
@@ -322,10 +308,8 @@ impl CcSync {
             });
             // so to allow drop() to drop by itself
             obj.header().set_buffered(false);
-            // FIXME: here drop is incorrect, for it is dropping PyObject with type information correctly.
             unsafe {
-                // drop_value(*i);
-                PyObject::drop_only(i.cast::<PyObject>());
+                // PyObject::drop_only(i.cast::<PyObject>());
             }
         }
         // drop first, deallocate later so to avoid heap corruption
@@ -333,7 +317,7 @@ impl CcSync {
         // access pointer of already dropped value's memory region
         for i in &white {
             unsafe {
-                PyObject::dealloc_only(i.cast::<PyObject>());
+                // PyObject::dealloc_only(i.cast::<PyObject>());
             }
         }
         len_white
