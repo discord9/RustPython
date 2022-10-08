@@ -322,7 +322,7 @@ impl CcSync {
         // access pointer of already dropped value's memory region
         for i in &white {
             unsafe {
-                // PyObject::dealloc_only(i.cast::<PyObject>());
+                PyObject::dealloc_only(i.cast::<PyObject>());
             }
         }
         len_white
@@ -331,8 +331,6 @@ impl CcSync {
         if obj.header().color() == Color::White && !obj.header().buffered() {
             obj.header().set_color(Color::Black);
             obj.trace(&mut |ch| self.collect_white(ch, white));
-            // because during trial deletion the reference count was already decremented.
-            // and drop() dec once more, so inc it to balance out
             white.push(obj.as_ptr());
         }
     }

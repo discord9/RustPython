@@ -39,10 +39,14 @@ impl GcHeader {
         }
     }
 
+    pub fn is_freed(&self) -> bool {
+        self.color() == Color::Black && self.rc() == 0
+    }
+
     pub(crate) fn check_set_drop_dealloc(&self) -> bool {
         let mut is_drop = self.is_drop.lock();
         let mut is_dealloc = self.is_dealloc.lock();
-        if *is_dealloc{
+        if *is_dealloc {
             warn!("Already deallocated! What?");
         }
         if !(*is_drop) && !(*is_dealloc) {
@@ -58,7 +62,7 @@ impl GcHeader {
     pub(crate) fn check_set_drop_only(&self) -> bool {
         let mut is_drop = self.is_drop.lock();
         let is_dealloc = self.is_dealloc.lock();
-        if *is_dealloc{
+        if *is_dealloc {
             warn!("Already deallocated!What?");
         }
         if !(*is_drop) && !(*is_dealloc) {
