@@ -16,6 +16,7 @@ pub struct GcHeader {
     ref_cnt: PyAtomic<usize>,
     color: PyMutex<Color>,
     buffered: PyMutex<bool>,
+    is_drop: PyMutex<bool>,
     pub exclusive: PyMutex<()>,
     pub gc: PyRc<CcSync>,
 }
@@ -26,11 +27,23 @@ impl GcHeader {
             ref_cnt: 1.into(),
             color: PyMutex::new(Color::Black),
             buffered: PyMutex::new(false),
+            is_drop: PyMutex::new(false),
             exclusive: PyMutex::new(()),
             #[cfg(feature = "threading")]
             gc: GLOBAL_COLLECTOR.clone(),
             #[cfg(not(feature = "threading"))]
             gc: GLOBAL_COLLECTOR.with(|v| v.clone()),
+        }
+    }
+
+    /// return true if can drop(also mark object as dropped)
+    pub(crate) fn can_drop(&self)-> bool {
+        let mut is_drop = self.is_drop.lock();
+        if !(*is_drop){
+            *is_drop = true;
+            true
+        }else{
+            false
         }
     }
 
