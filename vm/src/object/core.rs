@@ -23,7 +23,7 @@ use crate::common::{
     lock::{PyMutex, PyMutexGuard, PyRwLock},
 };
 #[cfg(feature = "gc")]
-use crate::object::gc::{GcHeader, GcObjPtr, GcStatus, GcTrace, TracerFn};
+use crate::object::gc::{Color, GcHeader, GcObjPtr, GcStatus, GcTrace, TracerFn};
 use crate::{
     builtins::{PyDictRef, PyTypeRef},
     vm::VirtualMachine,
@@ -1221,8 +1221,15 @@ impl Drop for PyObjectRef {
             // should I drop here(run deconstructor) anyway, and only do a dealloc for thing in buffered?
             let stat = self.dec();
             if stat == GcStatus::ShouldDrop {
-                unsafe {
-                    PyObject::drop_slow(self.ptr);
+                // member of garbage cycle can't be drop&dealloc immediately
+                if self.header().is_freed() {
+                    unsafe {
+                        PyObject::drop_only(self.ptr);
+                    }
+                } else {
+                    unsafe {
+                        PyObject::drop_slow(self.ptr);
+                    }
                 }
             } else if stat == GcStatus::BufferedDrop {
                 unsafe {
@@ -1351,8 +1358,15 @@ impl<T: PyObjectPayload> Drop for PyRef<T> {
         {
             let stat = self.dec();
             if stat == GcStatus::ShouldDrop {
-                unsafe {
-                    PyObject::drop_slow(self.ptr.cast::<PyObject>());
+                // member of garbage cycle can't be drop&dealloc immediately
+                if self.header().is_freed() {
+                    unsafe {
+                        PyObject::drop_only(self.ptr.cast::<PyObject>());
+                    }
+                } else {
+                    unsafe {
+                        PyObject::drop_slow(self.ptr.cast::<PyObject>());
+                    }
                 }
             } else if stat == GcStatus::BufferedDrop {
                 unsafe {
