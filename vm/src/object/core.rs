@@ -1053,6 +1053,7 @@ impl PyObject {
             let ret = crate::vm::thread::with_vm(zelf, |vm| {
                 #[cfg(feature = "gc")]
                 {
+                    // FIXME: confirm this is necessary
                     zelf.0.inc();
                 }
                 #[cfg(not(feature = "gc"))]
