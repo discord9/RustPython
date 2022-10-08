@@ -1106,6 +1106,10 @@ impl PyObject {
     /// Can only be called when ref_count has dropped to zero. `ptr` must be valid
     #[inline(never)]
     pub(in crate::object) unsafe fn drop_slow(ptr: NonNull<PyObject>) {
+        if !ptr.as_ref().header().can_drop() {
+            warn!("Can't drop a object twice (from drop_slow())!");
+            return;
+        }
         if let Err(()) = ptr.as_ref().drop_slow_inner() {
             // abort drop for whatever reason
             return;
@@ -1120,6 +1124,10 @@ impl PyObject {
     /// Can only be called when ref_count has dropped to zero. `ptr` must be valid
     #[inline(never)]
     pub(in crate::object) unsafe fn drop_only(ptr: NonNull<PyObject>) {
+        if !ptr.as_ref().header().can_drop() {
+            warn!("Can't drop a object twice (from drop_only())!");
+            return;
+        }
         if let Err(()) = ptr.as_ref().drop_slow_inner() {
             // abort drop for whatever reason
             return;

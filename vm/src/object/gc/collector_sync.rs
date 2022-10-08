@@ -188,6 +188,8 @@ impl CcSync {
         // self.decrement(ch);
         //});
         obj.header().set_color(Color::Black);
+        
+        // TODO(discord9): just drop in here, not by the caller, which is cleaner
         // before it is free in here,
         // but now change to passing message to allow it to drop outside
         if !obj.header().buffered() {
@@ -307,17 +309,20 @@ impl CcSync {
                 }
             });
             // so to allow drop() to drop by itself
-            obj.header().set_buffered(false);
+            // obj.header().set_buffered(false);
             unsafe {
-                // PyObject::drop_only(i.cast::<PyObject>());
+                // FIXME(discord9): unsound here, may ref to a deallocated space
+                PyObject::drop_only(i.cast::<PyObject>());
+                // PyObject::drop_slow(i.cast::<PyObject>());
             }
         }
+        warn!("Done drop");
         // drop first, deallocate later so to avoid heap corruption
         // cause by circular ref and therefore
         // access pointer of already dropped value's memory region
         for i in &white {
             unsafe {
-                PyObject::dealloc_only(i.cast::<PyObject>());
+                // PyObject::dealloc_only(i.cast::<PyObject>());
             }
         }
         len_white
