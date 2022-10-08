@@ -249,7 +249,6 @@ impl CcSync {
                             // FIXME(discord9): find correct way to drop
                             // can drop directly because no one is refering it by definition
                             // (unlike in collect_white where drop_in_place first and deallocate later)
-                            // PyObject::drop_slow(ptr.cast::<PyObject>());
                             PyObject::dealloc_only(ptr.cast::<PyObject>());
                             // obj is dangling after this line?
                         }
@@ -318,7 +317,7 @@ impl CcSync {
         // access pointer of already dropped value's memory region
         for i in &white {
             unsafe {
-                // PyObject::dealloc_only(i.cast::<PyObject>());
+                PyObject::dealloc_only(i.cast::<PyObject>());
             }
         }
         len_white
