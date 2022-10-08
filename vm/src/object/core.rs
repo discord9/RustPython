@@ -1208,7 +1208,7 @@ impl Drop for PyObjectRef {
             // should I drop here(run deconstructor) anyway, and only do a dealloc for thing in buffered?
             let stat = self.dec();
             if stat == GcStatus::ShouldDrop {
-                // member of garbage cycle can't be drop&dealloc immediately
+                // member of garbage cycle can't be dealloc immediately
                 if self.header().is_cycle() {
                     unsafe {
                         PyObject::drop_only(self.ptr);
@@ -1345,7 +1345,7 @@ impl<T: PyObjectPayload> Drop for PyRef<T> {
         {
             let stat = self.dec();
             if stat == GcStatus::ShouldDrop {
-                // member of garbage cycle can't be drop&dealloc immediately
+                // member of garbage cycle can't be dealloc immediately
                 if self.header().is_cycle() {
                     unsafe {
                         PyObject::drop_only(self.ptr.cast::<PyObject>());
