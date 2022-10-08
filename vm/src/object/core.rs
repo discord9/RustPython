@@ -75,7 +75,7 @@ use std::{
 
 /// A type to just represent "we've erased the type of this object, cast it before you use it"
 #[derive(Debug)]
-pub(in crate::object) struct Erased;
+struct Erased;
 
 struct PyObjVTable {
     drop_dealloc: unsafe fn(*mut PyObject),
