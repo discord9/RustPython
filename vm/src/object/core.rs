@@ -1137,10 +1137,6 @@ impl PyObject {
     /// Can only be called when ref_count has dropped to zero. `ptr` must be valid
     #[inline(never)]
     pub(in crate::object) unsafe fn dealloc_only(ptr: NonNull<PyObject>) {
-        if let Err(()) = ptr.as_ref().drop_slow_inner() {
-            // abort drop for whatever reason
-            return;
-        }
         let dealloc_only = ptr.as_ref().0.vtable.dealloc_only;
         // call drop only when there are no references in scope - stacked borrows stuff
         dealloc_only(ptr.as_ptr())
