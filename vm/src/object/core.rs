@@ -1066,7 +1066,7 @@ impl PyObject {
                 }
                 #[cfg(feature = "gc")]
                 {
-                    // FIXME(discord9): confirm this should return true always
+                    // FIXME(discord9): confirm this should return when should dropped
                     let stat = zelf.0.dec();
                     // case 1: no cyclic ref, drop now
                     // case 2: cyclic ref, drop later in gc?
@@ -1206,32 +1206,27 @@ impl<'a, T: PyObjectPayload> From<&'a Py<T>> for &'a PyObject {
 impl Drop for PyObjectRef {
     #[inline]
     fn drop(&mut self) {
-        /*
         #[cfg(feature = "gc")]
         {
-            if self.as_ref().0.dec() == GcStatus::ShouldDrop {
+            // FIXME(discord9): check this predicate is ok?
+            // should I drop here(run deconstructor) anyway, and only do a dealloc for thing in buffered?
+            let stat = self.dec();
+            if stat == GcStatus::ShouldDrop {
+                unsafe {
+                    PyObject::drop_slow(self.ptr);
+                }
+            } else if stat == GcStatus::BufferedDrop {
+                unsafe {
+                    PyObject::drop_only(self.ptr);
+                }
+            }
+        }
+        #[cfg(not(feature = "gc"))]
+        {
+            if self.0.ref_count.dec() {
                 unsafe { PyObject::drop_slow(self.ptr) }
             }
-        }
-
-        #[cfg(not(feature = "gc"))]
-        */
-
-        let predicate = {
-            #[cfg(feature = "gc")]
-            {
-                // FIXME(discord9): check this predicate is ok?
-                // should I drop here(run deconstructor) anyway, and only do a dealloc for thing in buffered?
-                self.dec() == GcStatus::ShouldDrop
-            }
-            #[cfg(not(feature = "gc"))]
-            {
-                self.0.ref_count.dec()
-            }
         };
-        if predicate {
-            unsafe { PyObject::drop_slow(self.ptr) }
-        }
     }
 }
 
@@ -1343,19 +1338,25 @@ impl<T: PyObjectPayload> fmt::Debug for PyRef<T> {
 impl<T: PyObjectPayload> Drop for PyRef<T> {
     #[inline]
     fn drop(&mut self) {
-        let predicate = {
-            #[cfg(feature = "gc")]
-            {
-                self.dec() == GcStatus::ShouldDrop
+        #[cfg(feature = "gc")]
+        {
+            let stat = self.dec();
+            if stat == GcStatus::ShouldDrop {
+                unsafe {
+                    PyObject::drop_slow(self.ptr.cast::<PyObject>());
+                }
+            } else if stat == GcStatus::BufferedDrop {
+                unsafe {
+                    PyObject::drop_only(self.ptr.cast::<PyObject>());
+                }
             }
-            #[cfg(not(feature = "gc"))]
-            {
-                self.as_object().0.ref_count.dec()
+        }
+        #[cfg(not(feature = "gc"))]
+        {
+            if self.as_object().0.ref_count.dec() {
+                unsafe { PyObject::drop_slow(self.ptr.cast::<PyObject>()) }
             }
         };
-        if predicate {
-            unsafe { PyObject::drop_slow(self.ptr.cast::<PyObject>()) }
-        }
     }
 }
 

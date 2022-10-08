@@ -11,7 +11,7 @@ use std::any::TypeId;
 pub enum GcStatus {
     /// should be drop by caller
     ShouldDrop,
-    /// already buffered, will be drop by collector, no more action is required at caller
+    /// already buffered, will be dealloc by collector, caller should call `drop_only` to run destructor only but not dealloc memory region
     BufferedDrop,
     /// should keep and not drop by caller
     ShouldKeep,
