@@ -172,20 +172,8 @@ impl GcTrace for PyInner<Erased> {
             tuple::PyTupleIterator,
         };
         use crate::builtins::{
-            PyBoundMethod,
-            PyDict,
-            PyEnumerate,
-            PyFilter,
-            PyFunction,
-            PyList,
-            PyMappingProxy,
-            PyProperty,
-            PySet,
-            PySlice,
-            PyStaticMethod,
-            PySuper,
-            PyTraceback,
-            PyTuple, // PyType,
+            PyBoundMethod, PyDict, PyEnumerate, PyFilter, PyFunction, PyList, PyMappingProxy,
+            PyProperty, PySet, PySlice, PyStaticMethod, PySuper, PyTraceback, PyTuple, PyType,
             PyZip,
         };
         use crate::function::{ArgCallable, ArgIterable, ArgMapping, ArgSequence};
@@ -194,7 +182,7 @@ impl GcTrace for PyInner<Erased> {
         };
         optional_trace!(
             // builtin types
-            // PyRange, PyStr is acyclic
+            // PyRange, PyStr is acyclic, therefore no trace needed for them
             PyBoundMethod,
             PyDict,
             PyEnumerate,
@@ -209,7 +197,7 @@ impl GcTrace for PyInner<Erased> {
             PySuper,
             PyTraceback,
             PyTuple,
-            // FIXME(discord9): PyType, (strange bug, see PyType's trace() for detail)
+            PyType,
             PyZip,
             // misc
             PyCell,

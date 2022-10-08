@@ -1,10 +1,6 @@
 use std::sync::Arc;
 use std::time::Instant;
-use std::{
-    fmt,
-    ops::Deref,
-    ptr::NonNull,
-};
+use std::{fmt, ops::Deref, ptr::NonNull};
 
 use crate::object::gc::header::Color;
 use crate::object::gc::trace::GcObjPtr;
