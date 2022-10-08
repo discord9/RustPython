@@ -112,9 +112,9 @@ impl CcSync {
     pub fn should_gc(&self) -> bool {
         let mut last_gc_time = self.last_gc_time.lock();
         // FIXME(discord9): better condition, could be important
-        if last_gc_time.elapsed().as_millis() >= 10 {
+        if self.roots_len() > 700 && last_gc_time.elapsed().as_millis() >= 10 {
             *last_gc_time = Instant::now();
-            self.roots_len() > 700
+            true
         } else {
             false
         }
@@ -127,7 +127,6 @@ impl CcSync {
         obj.header().do_pausing();
         obj.header().inc();
         obj.header().set_color(Color::Black);
-        obj.header().gc.gc();
     }
 
     /// # Safety
