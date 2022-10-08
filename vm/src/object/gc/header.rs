@@ -39,8 +39,8 @@ impl GcHeader {
         }
     }
 
-    pub fn is_freed(&self) -> bool {
-        self.color() == Color::Black && self.rc() == 0
+    pub fn is_cycle(&self) -> bool {
+        self.color() == Color::BlackFree && self.rc() == 0
     }
 
     pub(crate) fn check_set_drop_dealloc(&self) -> bool {
@@ -149,6 +149,8 @@ impl GcHeader {
 pub enum Color {
     /// In use or free
     Black,
+    /// free, as in white
+    BlackFree,
     /// Possible member of cycle
     Gray,
     /// Member of garbage cycle

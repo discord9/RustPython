@@ -1209,7 +1209,7 @@ impl Drop for PyObjectRef {
             let stat = self.dec();
             if stat == GcStatus::ShouldDrop {
                 // member of garbage cycle can't be drop&dealloc immediately
-                if self.header().is_freed() {
+                if self.header().is_cycle() {
                     unsafe {
                         PyObject::drop_only(self.ptr);
                     }
@@ -1346,7 +1346,7 @@ impl<T: PyObjectPayload> Drop for PyRef<T> {
             let stat = self.dec();
             if stat == GcStatus::ShouldDrop {
                 // member of garbage cycle can't be drop&dealloc immediately
-                if self.header().is_freed() {
+                if self.header().is_cycle() {
                     unsafe {
                         PyObject::drop_only(self.ptr.cast::<PyObject>());
                     }

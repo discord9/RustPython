@@ -2,9 +2,7 @@ use std::sync::Arc;
 use std::time::Instant;
 use std::{fmt, ops::Deref, ptr::NonNull};
 
-use crate::object::gc::header::Color;
-use crate::object::gc::trace::GcObjPtr;
-use crate::object::gc::GcStatus;
+use crate::object::gc::{GcStatus, Color, GcObjPtr};
 use crate::PyObject;
 
 use rustpython_common::lock::{PyMutex, PyRwLock, PyRwLockWriteGuard};
@@ -194,7 +192,7 @@ impl CcSync {
         }
     }
 
-    /// return `(acyclic garbage, cyclic garbage)`
+    /// return `(acyclic garbage collected, cyclic garbage collected)`
     fn collect_cycles(&self) -> (usize, usize) {
         if IS_GC_THREAD.with(|v| v.get()) {
             return (0, 0);
@@ -309,7 +307,7 @@ impl CcSync {
     }
     fn collect_white(&self, obj: ObjRef, white: &mut Vec<NonNull<dyn GcObjPtr>>) {
         if obj.header().color() == Color::White && !obj.header().buffered() {
-            obj.header().set_color(Color::Black);
+            obj.header().set_color(Color::BlackFree);
             obj.trace(&mut |ch| self.collect_white(ch, white));
             white.push(obj.as_ptr());
         }
