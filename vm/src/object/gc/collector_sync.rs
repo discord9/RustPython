@@ -293,7 +293,6 @@ impl CcSync {
             // so to allow drop() to drop by itself
             // obj.header().set_buffered(false);
             unsafe {
-                // FIXME(discord9): unsound here, may ref to a deallocated space
                 PyObject::drop_only(i.cast::<PyObject>());
                 // PyObject::drop_slow(i.cast::<PyObject>());
             }
