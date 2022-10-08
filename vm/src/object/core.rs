@@ -23,7 +23,7 @@ use crate::common::{
     lock::{PyMutex, PyMutexGuard, PyRwLock},
 };
 #[cfg(feature = "gc")]
-use crate::object::gc::{Color, GcHeader, GcObjPtr, GcStatus, GcTrace, TracerFn};
+use crate::object::gc::{GcHeader, GcObjPtr, GcStatus, GcTrace, TracerFn};
 use crate::{
     builtins::{PyDictRef, PyTypeRef},
     vm::VirtualMachine,
