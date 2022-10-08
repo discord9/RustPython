@@ -726,6 +726,7 @@ cfg_if::cfg_if! {
     }
 }
 
+#[derive(Debug)]
 #[repr(transparent)]
 pub struct PyObject(PyInner<Erased>);
 
