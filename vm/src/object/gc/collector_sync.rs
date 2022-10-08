@@ -72,8 +72,11 @@ pub struct GcResult {
 }
 
 impl GcResult {
-    fn new(tuple: (usize, usize))->Self{
-        Self { acyclic_cnt: tuple.0, cyclic_cnt: tuple.1 }
+    fn new(tuple: (usize, usize)) -> Self {
+        Self {
+            acyclic_cnt: tuple.0,
+            cyclic_cnt: tuple.1,
+        }
     }
 }
 
@@ -137,11 +140,15 @@ impl CcSync {
         if IS_GC_THREAD.with(|v| v.get()) {
             return false;
         }
-        let mut last_gc_time = self.last_gc_time.lock();
         // FIXME(discord9): better condition, could be important
-        if self.roots_len() > 700 && last_gc_time.elapsed().as_millis() >= 10 {
-            *last_gc_time = Instant::now();
-            true
+        if self.roots_len() > 700 {
+            let mut last_gc_time = self.last_gc_time.lock();
+            if last_gc_time.elapsed().as_millis() >= 10 {
+                *last_gc_time = Instant::now();
+                true
+            }else{
+                false
+            }
         } else {
             false
         }
@@ -232,7 +239,9 @@ impl CcSync {
         IS_GC_THREAD.with(|v| v.set(true));
         warn!("start gc.");
         let freed = self.mark_roots();
+        warn!("start scan.");
         self.scan_roots();
+        warn!("end gc.");
         // drop lock in here (where the lock should be check in every deref() for ObjectRef)
         // to not stop the world
         // what's left for collection should already be in garbage cycle,
