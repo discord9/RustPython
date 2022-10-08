@@ -1108,7 +1108,6 @@ impl PyObject {
     #[inline(never)]
     pub(in crate::object) unsafe fn drop_slow(ptr: NonNull<PyObject>) {
         if !ptr.as_ref().header().check_set_drop_dealloc() {
-            warn!("Can't drop a object twice (from drop_slow())");
             return;
         }
         if let Err(()) = ptr.as_ref().drop_slow_inner() {
@@ -1127,7 +1126,6 @@ impl PyObject {
     #[inline(never)]
     pub(in crate::object) unsafe fn drop_only(ptr: NonNull<PyObject>) {
         if !ptr.as_ref().header().check_set_drop_only() {
-            warn!("Can't drop a object twice (from drop_only())");
             return;
         }
         if let Err(()) = ptr.as_ref().drop_slow_inner() {

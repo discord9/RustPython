@@ -47,7 +47,7 @@ impl GcHeader {
         let mut is_drop = self.is_drop.lock();
         let mut is_dealloc = self.is_dealloc.lock();
         if *is_dealloc {
-            warn!("Already deallocated! What?");
+            warn!("Call a function inside a already deallocated object.");
         }
         if !(*is_drop) && !(*is_dealloc) {
             *is_drop = true;
@@ -63,7 +63,7 @@ impl GcHeader {
         let mut is_drop = self.is_drop.lock();
         let is_dealloc = self.is_dealloc.lock();
         if *is_dealloc {
-            warn!("Already deallocated!What?");
+            warn!("Call a function inside a already deallocated object.");
         }
         if !(*is_drop) && !(*is_dealloc) {
             *is_drop = true;
