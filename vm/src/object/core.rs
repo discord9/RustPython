@@ -37,7 +37,7 @@ use std::{
     marker::PhantomData,
     mem::ManuallyDrop,
     ops::Deref,
-    ptr::{self, NonNull}
+    ptr::{self, NonNull},
 };
 
 // so, PyObjectRef is basically equivalent to `PyRc<PyInner<dyn PyObjectPayload>>`, except it's
@@ -96,7 +96,10 @@ unsafe fn drop_only_obj<T: PyObjectPayload>(x: *mut PyObject) {
 /// - should only be called after its' destructor is done(i.e. called `drop_value`(which called drop_in_place))
 /// - panic on a null pointer
 unsafe fn dealloc_only<T: PyObjectPayload>(x: *mut PyObject) {
-    std::alloc::dealloc(x.cast(), std::alloc::Layout::for_value(x.cast::<PyInner<T>>().as_ref().unwrap()));
+    std::alloc::dealloc(
+        x.cast(),
+        std::alloc::Layout::for_value(x.cast::<PyInner<T>>().as_ref().unwrap()),
+    );
 }
 unsafe fn debug_obj<T: PyObjectPayload>(x: &PyObject, f: &mut fmt::Formatter) -> fmt::Result {
     let x = &*(x as *const PyObject as *const PyInner<T>);
@@ -1098,6 +1101,8 @@ impl PyObject {
         Ok(())
     }
 
+    /// # Safety
+    ///
     /// Can only be called when ref_count has dropped to zero. `ptr` must be valid
     #[inline(never)]
     pub(in crate::object) unsafe fn drop_slow(ptr: NonNull<PyObject>) {
@@ -1109,7 +1114,9 @@ impl PyObject {
         // call drop only when there are no references in scope - stacked borrows stuff
         drop_dealloc(ptr.as_ptr())
     }
-
+    /// Calls the `drop_only` function in vtable, which is usually a `drop_in_place`
+    ///
+    /// # Safety
     /// Can only be called when ref_count has dropped to zero. `ptr` must be valid
     #[inline(never)]
     pub(in crate::object) unsafe fn drop_only(ptr: NonNull<PyObject>) {
@@ -1122,6 +1129,11 @@ impl PyObject {
         drop_only(ptr.as_ptr())
     }
 
+    /// Calls the `dealloc_only` function in vtable,
+    /// which should dealloc memory region in heap but not run destructor
+    ///
+    /// # Safety
+    ///
     /// Can only be called when ref_count has dropped to zero. `ptr` must be valid
     #[inline(never)]
     pub(in crate::object) unsafe fn dealloc_only(ptr: NonNull<PyObject>) {
