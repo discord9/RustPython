@@ -1083,6 +1083,7 @@ impl PyObject {
     /// Can only be called when ref_count has dropped to zero. `ptr` must be valid
     #[inline(never)]
     pub(in crate::object) unsafe fn drop_slow(ptr: NonNull<PyObject>) {
+        #[cfg(feature = "gc")]
         if !ptr.as_ref().header().check_set_drop_dealloc() {
             return;
         }
@@ -1101,6 +1102,7 @@ impl PyObject {
     /// Can only be called when ref_count has dropped to zero. `ptr` must be valid
     #[inline(never)]
     pub(in crate::object) unsafe fn drop_only(ptr: NonNull<PyObject>) {
+        #[cfg(feature = "gc")]
         if !ptr.as_ref().header().check_set_drop_only() {
             return;
         }
