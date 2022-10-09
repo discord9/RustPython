@@ -154,9 +154,10 @@ impl GcTrace for PyInner<Erased> {
         ///
         /// fall back to use TypeId for now
         macro_rules! optional_trace {
-            ($($TY: ty),*) => {
+            ($($TY: ty),*$(,)?) => {
                 $(
                     if TypeId::of::<$TY>() == self.typeid{
+                        // Safety: because typeid said so!
                         let inner: &PyInner<$TY> = unsafe { std::mem::transmute(self) };
                         inner.payload.trace(tracer_fn);
                     }
@@ -182,13 +183,14 @@ impl GcTrace for PyInner<Erased> {
         };
         optional_trace!(
             // builtin types
-            // PyRange, PyStr is acyclic, therefore no trace needed for them
+            // PyRange, PyStr is acyclic, therefore no trace needed for them 
             PyBoundMethod,
             PyDict,
             PyEnumerate,
             PyFilter,
             PyFunction,
             PyList,
+            PyDict,
             PyMappingProxy,
             PyProperty,
             PySet,
