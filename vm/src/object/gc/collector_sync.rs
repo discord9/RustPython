@@ -8,12 +8,7 @@ use crate::PyObject;
 use rustpython_common::lock::{PyMutex, PyRwLock, PyRwLockWriteGuard};
 
 use std::cell::Cell;
-thread_local! {
-    /// assume any drop() impl doesn't create new thread, so gc only work in this one thread.
-    pub static IS_GC_THREAD: Cell<bool> = Cell::new(false);
-}
 /// The global cycle collector, which collect cycle references for PyInner<T>
-
 #[cfg(feature = "threading")]
 pub static GLOBAL_COLLECTOR: once_cell::sync::Lazy<Arc<CcSync>> =
     once_cell::sync::Lazy::new(|| {
@@ -117,6 +112,10 @@ impl std::fmt::Debug for CcSync {
 type ObjRef<'a> = &'a dyn GcObjPtr;
 
 impl CcSync {
+    thread_local! {
+        /// assume any drop() impl doesn't create new thread, so gc only work in this one thread.
+        pub static IS_GC_THREAD: Cell<bool> = Cell::new(false);
+    }
     /// _suggest_(may or may not) collector to collect garbage. return number of cyclic garbage being collected
     #[inline]
     pub fn gc(&self) -> GcResult {
@@ -141,7 +140,7 @@ impl CcSync {
     pub fn should_gc(&self) -> bool {
         // FIXME(discord9): better condition, could be important
         if self.roots_len() > 700 {
-            if IS_GC_THREAD.with(|v| v.get()) {
+            if Self::IS_GC_THREAD.with(|v| v.get()) {
                 // Already in gc, return early
                 return false;
             }
@@ -231,7 +230,7 @@ impl CcSync {
 
     /// The core of garbage collect process, return `(acyclic garbage collected, cyclic garbage collected)`.
     fn collect_cycles(&self) -> GcResult {
-        if IS_GC_THREAD.with(|v| v.get()) {
+        if Self::IS_GC_THREAD.with(|v| v.get()) {
             return (0, 0).into();
             // already call collect_cycle() once
         }
@@ -239,7 +238,7 @@ impl CcSync {
         // This prevent set multiple IS_GC_THREAD thread local variable to true
         // using write() to gain exclusive access
         let lock = self.pause.write();
-        IS_GC_THREAD.with(|v| v.set(true));
+        Self::IS_GC_THREAD.with(|v| v.set(true));
         let freed = self.mark_roots();
         self.scan_roots();
         // drop lock in here (where the lock should be check in every deref() for ObjectRef)
@@ -338,7 +337,7 @@ impl CcSync {
             }
         }
         // mark the end of GC here so another gc can begin(if end early could lead to stack overflow)
-        IS_GC_THREAD.with(|v| v.set(false));
+        Self::IS_GC_THREAD.with(|v| v.set(false));
 
         len_white
     }

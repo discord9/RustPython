@@ -1,6 +1,6 @@
 use std::sync::atomic::Ordering;
 
-use crate::object::gc::{CcSync, GLOBAL_COLLECTOR, IS_GC_THREAD};
+use crate::object::gc::{CcSync, GLOBAL_COLLECTOR};
 #[cfg(not(feature = "threading"))]
 use rustpython_common::atomic::Radium;
 use rustpython_common::{
@@ -74,7 +74,7 @@ impl GcHeader {
     }
 
     pub fn try_pausing(&self) -> Option<PyRwLockReadGuard<()>> {
-        if IS_GC_THREAD.with(|v| v.get()) {
+        if CcSync::IS_GC_THREAD.with(|v| v.get()) {
             // if is same thread, then this thread is already stop by gc itself,
             // no need to block.
             // and any call to do_pausing is probably from drop() or what so allow it to continue execute.
@@ -85,7 +85,7 @@ impl GcHeader {
 
     /// This function will block if is pausing by gc
     pub fn do_pausing(&self) {
-        if IS_GC_THREAD.with(|v| v.get()) {
+        if CcSync::IS_GC_THREAD.with(|v| v.get()) {
             // if is same thread, then this thread is already stop by gc itself,
             // no need to block.
             // and any call to do_pausing is probably from drop() or what so allow it to continue execute.
