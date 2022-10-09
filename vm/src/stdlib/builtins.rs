@@ -333,6 +333,22 @@ mod builtins {
     }
 
     #[pyfunction]
+    fn dbg_mem() -> PyResult<String>{
+        use std::process::Command;
+
+        let output: String = if cfg!(target_os = "windows") {
+            String::from_utf8_lossy(
+            &Command::new("powershell")
+                    .args(["/C", "Get-Process rustpython"])
+                    .output()
+                    .expect("failed to execute process").stdout).into()
+        } else {
+            String::from("Unsupported platform")
+        };
+        Ok(output)
+    }
+
+    #[pyfunction]
     fn getattr(
         obj: PyObjectRef,
         attr: PyStrRef,
