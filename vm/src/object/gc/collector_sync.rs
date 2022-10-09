@@ -1,26 +1,23 @@
-use std::sync::Arc;
 use std::time::Instant;
 use std::{fmt, ops::Deref, ptr::NonNull};
 
 use crate::object::gc::{Color, GcObjPtr, GcStatus};
 use crate::PyObject;
 
-use rustpython_common::lock::{PyMutex, PyRwLock, PyRwLockWriteGuard};
+use rustpython_common::{rc::PyRc, lock::{PyMutex, PyRwLock, PyRwLockWriteGuard}};
 
 use std::cell::Cell;
 /// The global cycle collector, which collect cycle references for PyInner<T>
 #[cfg(feature = "threading")]
-pub static GLOBAL_COLLECTOR: once_cell::sync::Lazy<Arc<CcSync>> =
+pub static GLOBAL_COLLECTOR: once_cell::sync::Lazy<PyRc<CcSync>> =
     once_cell::sync::Lazy::new(|| {
-        Arc::new(CcSync {
+        PyRc::new(CcSync {
             roots: PyMutex::new(Vec::new()),
             pause: PyRwLock::new(()),
             last_gc_time: PyMutex::new(Instant::now()),
         })
     });
 
-#[cfg(not(feature = "threading"))]
-use rustpython_common::rc::PyRc;
 #[cfg(not(feature = "threading"))]
 thread_local! {
     pub static GLOBAL_COLLECTOR: PyRc<CcSync> = PyRc::new(CcSync {
