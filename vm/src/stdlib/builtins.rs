@@ -333,15 +333,22 @@ mod builtins {
     }
 
     #[pyfunction]
-    fn dbg_mem() -> PyResult<String>{
+    fn dbg_mem() -> PyResult<String> {
         use std::process::Command;
 
         let output: String = if cfg!(target_os = "windows") {
-            String::from_utf8_lossy(
-            &Command::new("powershell")
-                    .args(["/C", "Get-Process rustpython"])
-                    .output()
-                    .expect("failed to execute process").stdout).into()
+            let out = Command::new("powershell")
+                .args(["/C", "Get-Process rustpython | Select-Object {$_.PM/1MB}"])
+                .output()
+                .expect("failed to execute process");
+            if !out.stderr.is_empty() {
+                let mut err = String::from_utf8_lossy(&out.stderr).to_owned().to_string();
+                let stdout = String::from_utf8_lossy(&out.stdout).to_owned().to_string();
+                err.push_str(&stdout);
+                err
+            } else {
+                String::from_utf8_lossy(&out.stdout).to_owned().into()
+            }
         } else {
             String::from("Unsupported platform")
         };
