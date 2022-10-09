@@ -263,9 +263,7 @@ impl CcSync {
                     if obj.header().color() == Color::Black && obj.rc() == 0 {
                         freed += 1;
                         unsafe {
-                            // FIXME(discord9): find correct way to drop
-                            // can drop directly because no one is refering it by definition
-                            // (unlike in collect_white where drop_in_place first and deallocate later)
+                            // only dealloc here, because already drop(only) in Object's impl Drop
                             PyObject::dealloc_only(ptr.cast::<PyObject>());
                             // obj is dangling after this line?
                         }
