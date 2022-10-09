@@ -1204,6 +1204,7 @@ impl Drop for PyObjectRef {
     fn drop(&mut self) {
         #[cfg(feature = "gc")]
         {
+            self.header().gc.gc();
             // FIXME(discord9): check this predicate is ok?
             // should I drop here(run deconstructor) anyway, and only do a dealloc for thing in buffered?
             let stat = self.dec();
@@ -1343,6 +1344,7 @@ impl<T: PyObjectPayload> Drop for PyRef<T> {
     fn drop(&mut self) {
         #[cfg(feature = "gc")]
         {
+            self.header().gc.gc();
             let stat = self.dec();
             if stat == GcStatus::ShouldDrop {
                 // member of garbage cycle can't be dealloc immediately
