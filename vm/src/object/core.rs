@@ -11,10 +11,6 @@
 //! PyRef<PyWeak> may looking like to be called as PyObjectWeak by the rule,
 //! but not to do to remember it is a PyRef object.
 
-use super::{
-    ext::{AsObject, PyResult},
-    payload::PyObjectPayload,
-};
 #[cfg(not(feature = "gc"))]
 use crate::common::refcount::RefCount;
 use crate::common::{
@@ -24,6 +20,10 @@ use crate::common::{
 };
 #[cfg(feature = "gc")]
 use crate::object::gc::{GcHeader, GcObjPtr, GcStatus, GcTrace, TracerFn};
+use crate::object::{
+    ext::{AsObject, PyResult},
+    payload::PyObjectPayload,
+};
 use crate::{
     builtins::{PyDictRef, PyTypeRef},
     vm::VirtualMachine,
