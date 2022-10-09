@@ -338,7 +338,7 @@ mod builtins {
 
         let output: String = if cfg!(target_os = "windows") {
             let out = Command::new("powershell")
-                .args(["/C", "Get-Process rustpython | Select-Object {$_.PM/1MB}"])
+                .args(["/C", "Get-Process rustpython | Select-Object -ExpandProperty PM"])
                 .output()
                 .expect("failed to execute process");
             if !out.stderr.is_empty() {
