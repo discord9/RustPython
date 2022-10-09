@@ -132,18 +132,23 @@ impl CcSync {
     pub fn force_gc(&self) -> GcResult {
         self.collect_cycles()
     }
+
+    #[inline]
     fn roots_len(&self) -> usize {
         self.roots.lock().len()
     }
+
     /// TODO: change to use roots'len or what to determine
+    #[inline]
     pub fn should_gc(&self) -> bool {
-        if IS_GC_THREAD.with(|v| v.get()) {
-            return false;
-        }
         // FIXME(discord9): better condition, could be important
         if self.roots_len() > 700 {
+            if IS_GC_THREAD.with(|v| v.get()) {
+                // Already in gc, return early
+                return false;
+            }
             let mut last_gc_time = self.last_gc_time.lock();
-            if last_gc_time.elapsed().as_millis() >= 10 {
+            if last_gc_time.elapsed().as_millis() >= 100 {
                 *last_gc_time = Instant::now();
                 true
             }else{
@@ -237,11 +242,8 @@ impl CcSync {
         // using write() to gain exclusive access
         let lock = self.pause.write();
         IS_GC_THREAD.with(|v| v.set(true));
-        warn!("start gc.");
         let freed = self.mark_roots();
-        warn!("start scan.");
         self.scan_roots();
-        warn!("end gc.");
         // drop lock in here (where the lock should be check in every deref() for ObjectRef)
         // to not stop the world
         // what's left for collection should already be in garbage cycle,
@@ -296,7 +298,7 @@ impl CcSync {
         let mut white = Vec::new();
         let roots: Vec<_> = { self.roots.lock().drain(..).collect() };
         // release gc pause lock in here, for after this line no white garbage will be access by mutator
-        IS_GC_THREAD.with(|v| v.set(false));
+        
         drop(lock);
 
         roots
@@ -331,6 +333,7 @@ impl CcSync {
                 // PyObject::drop_slow(i.cast::<PyObject>());
             }
         }
+        
         // drop first, deallocate later so to avoid heap corruption
         // cause by circular ref and therefore
         // access pointer of already dropped value's memory region
@@ -339,6 +342,9 @@ impl CcSync {
                 PyObject::dealloc_only(i.cast::<PyObject>());
             }
         }
+        // mark the end of GC here so another gc can begin(if end early could lead to stack overflow)
+        IS_GC_THREAD.with(|v| v.set(false));
+
         len_white
     }
     fn collect_white(&self, obj: ObjRef, white: &mut Vec<NonNull<dyn GcObjPtr>>) {
