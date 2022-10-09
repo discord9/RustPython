@@ -13,11 +13,11 @@
 
 #[cfg(not(feature = "gc"))]
 use crate::common::refcount::RefCount;
-use crate::{common::{
+use crate::common::{
     atomic::{OncePtr, PyAtomic, Radium},
     linked_list::{Link, LinkedList, Pointers},
     lock::{PyMutex, PyMutexGuard, PyRwLock},
-}, warn};
+};
 #[cfg(feature = "gc")]
 use crate::object::gc::{GcHeader, GcObjPtr, GcStatus, GcTrace, TracerFn};
 use crate::object::{
@@ -1084,16 +1084,20 @@ impl PyObject {
     #[inline(never)]
     pub(in crate::object) unsafe fn drop_slow(ptr: NonNull<PyObject>) {
         // sanity check
-        debug_assert!(!ptr.as_ref().header().is_dealloc());
-
         #[cfg(feature = "gc")]
-        if !ptr.as_ref().header().check_set_drop_dealloc() {
-            return;
-        }
+        {
+            debug_assert!(!ptr.as_ref().header().is_dealloc());
 
-        // sanity check
-        debug_assert!(ptr.as_ref().header().is_drop());
-        debug_assert!(ptr.as_ref().header().is_dealloc());
+            if !ptr.as_ref().header().check_set_drop_dealloc() {
+                return;
+            }
+
+            {
+                // sanity check
+                debug_assert!(ptr.as_ref().header().is_drop());
+                debug_assert!(ptr.as_ref().header().is_dealloc());
+            }
+        }
 
         if let Err(()) = ptr.as_ref().drop_slow_inner() {
             // abort drop for whatever reason
@@ -1111,17 +1115,18 @@ impl PyObject {
     #[inline(never)]
     pub(in crate::object) unsafe fn drop_only(ptr: NonNull<PyObject>) {
         // sanity check
-        debug_assert!(!ptr.as_ref().header().is_dealloc());
-
         #[cfg(feature = "gc")]
-        if !ptr.as_ref().header().check_set_drop_only() {
-            return;
+        {
+            debug_assert!(!ptr.as_ref().header().is_dealloc());
+
+            if !ptr.as_ref().header().check_set_drop_only() {
+                return;
+            }
+
+            // sanity check
+            debug_assert!(ptr.as_ref().header().is_drop());
+            debug_assert!(!ptr.as_ref().header().is_dealloc());
         }
-
-        // sanity check
-        debug_assert!(ptr.as_ref().header().is_drop());
-        debug_assert!(!ptr.as_ref().header().is_dealloc());
-
         if let Err(()) = ptr.as_ref().drop_slow_inner() {
             // abort drop for whatever reason
             return;
@@ -1140,13 +1145,17 @@ impl PyObject {
     #[inline(never)]
     pub(in crate::object) unsafe fn dealloc_only(ptr: NonNull<PyObject>) {
         // sanity check
-        debug_assert!(ptr.as_ref().header().is_drop());
-        debug_assert!(!ptr.as_ref().header().is_dealloc());
+        #[cfg(feature = "gc")]
+        {
+            debug_assert!(ptr.as_ref().header().is_drop());
+            debug_assert!(!ptr.as_ref().header().is_dealloc());
 
-        if !ptr.as_ref().header().check_set_dealloc_only() {
-            warn!("Can't dealloc a object!");
-            // prevent heap corruption by return early
-            return;
+            if !ptr.as_ref().header().check_set_dealloc_only() {
+                warn!("Can't dealloc a object!");
+                // prevent heap corruption by return early
+                return;
+            }
+            debug_assert!(ptr.as_ref().header().is_dealloc());
         }
 
         let dealloc_only = ptr.as_ref().0.vtable.dealloc_only;
