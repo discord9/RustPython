@@ -90,14 +90,22 @@ where
 impl<T: GcTrace> GcTrace for PyMutex<T> {
     #[inline]
     fn trace(&self, tracer_fn: &mut TracerFn) {
-        self.lock().trace(tracer_fn);
+        // FIXME(discord9): check if this may cause a deadlock or not
+        match self.try_lock() {
+            Some(v) => v.trace(tracer_fn),
+            None => warn!("Can't acquire lock in trace, could be in a deadlock."),
+        }
     }
 }
 
 impl<T: GcTrace> GcTrace for PyRwLock<T> {
     #[inline]
     fn trace(&self, tracer_fn: &mut TracerFn) {
-        self.read().trace(tracer_fn);
+        // FIXME(discord9): check if this may cause a deadlock or not, maybe try `recursive`?
+        match self.try_read() {
+            Some(v) => v.trace(tracer_fn),
+            None => warn!("Can't acquire read lock in trace, could be in a deadlock."),
+        }
     }
 }
 
