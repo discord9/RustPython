@@ -2,9 +2,8 @@ use rustpython_common::lock::{PyMutex, PyRwLock};
 
 use crate::object::gc::header::GcHeader;
 use crate::object::PyObjectPayload;
-use crate::{AsObject, PyObject, PyObjectRef, PyRef};
+use crate::{AsObject, PyObjectRef, PyRef};
 use core::ptr::NonNull;
-use std::any::TypeId;
 
 /// indicate what to do with the object afer calling dec()
 #[derive(PartialEq, Eq)]
