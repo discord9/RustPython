@@ -24,13 +24,6 @@ pub trait GcObjPtr: GcTrace {
     fn header(&self) -> &GcHeader;
     // as a NonNull pointer to a gc managed object
     fn as_ptr(&self) -> NonNull<dyn GcObjPtr>;
-    /// return a pointer to inner PyObject if possible
-    fn as_obj_ptr(&self) -> Option<NonNull<PyObject>> {
-        None
-    }
-    fn type_id(&self) -> Option<TypeId> {
-        None
-    }
 }
 
 /// use `trace()` to call on all owned ObjectRef
