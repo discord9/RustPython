@@ -1367,7 +1367,6 @@ impl<T: PyObjectPayload> Drop for PyRef<T> {
     fn drop(&mut self) {
         #[cfg(feature = "gc")]
         {
-            // self.header().gc.gc();
             let stat = self.dec();
             if stat == GcStatus::ShouldDrop {
                 // member of garbage cycle can't be dealloc immediately
