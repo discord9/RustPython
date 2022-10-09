@@ -13,11 +13,11 @@
 
 #[cfg(not(feature = "gc"))]
 use crate::common::refcount::RefCount;
-use crate::common::{
+use crate::{common::{
     atomic::{OncePtr, PyAtomic, Radium},
     linked_list::{Link, LinkedList, Pointers},
     lock::{PyMutex, PyMutexGuard, PyRwLock},
-};
+}, warn};
 #[cfg(feature = "gc")]
 use crate::object::gc::{GcHeader, GcObjPtr, GcStatus, GcTrace, TracerFn};
 use crate::object::{
@@ -1083,10 +1083,18 @@ impl PyObject {
     /// Can only be called when ref_count has dropped to zero. `ptr` must be valid
     #[inline(never)]
     pub(in crate::object) unsafe fn drop_slow(ptr: NonNull<PyObject>) {
+        // sanity check
+        debug_assert!(!ptr.as_ref().header().is_dealloc());
+
         #[cfg(feature = "gc")]
         if !ptr.as_ref().header().check_set_drop_dealloc() {
             return;
         }
+
+        // sanity check
+        debug_assert!(ptr.as_ref().header().is_drop());
+        debug_assert!(ptr.as_ref().header().is_dealloc());
+
         if let Err(()) = ptr.as_ref().drop_slow_inner() {
             // abort drop for whatever reason
             return;
@@ -1102,10 +1110,18 @@ impl PyObject {
     /// Can only be called when ref_count has dropped to zero. `ptr` must be valid
     #[inline(never)]
     pub(in crate::object) unsafe fn drop_only(ptr: NonNull<PyObject>) {
+        // sanity check
+        debug_assert!(!ptr.as_ref().header().is_dealloc());
+
         #[cfg(feature = "gc")]
         if !ptr.as_ref().header().check_set_drop_only() {
             return;
         }
+
+        // sanity check
+        debug_assert!(ptr.as_ref().header().is_drop());
+        debug_assert!(!ptr.as_ref().header().is_dealloc());
+
         if let Err(()) = ptr.as_ref().drop_slow_inner() {
             // abort drop for whatever reason
             return;
@@ -1123,6 +1139,16 @@ impl PyObject {
     /// Can only be called when ref_count has dropped to zero. `ptr` must be valid
     #[inline(never)]
     pub(in crate::object) unsafe fn dealloc_only(ptr: NonNull<PyObject>) {
+        // sanity check
+        debug_assert!(ptr.as_ref().header().is_drop());
+        debug_assert!(!ptr.as_ref().header().is_dealloc());
+
+        if !ptr.as_ref().header().check_set_dealloc_only() {
+            warn!("Can't dealloc a object!");
+            // prevent heap corruption by return early
+            return;
+        }
+
         let dealloc_only = ptr.as_ref().0.vtable.dealloc_only;
         // call drop only when there are no references in scope - stacked borrows stuff
         dealloc_only(ptr.as_ptr())
