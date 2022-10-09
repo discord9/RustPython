@@ -270,11 +270,6 @@ impl GcObjPtr for PyInner<Erased> {
     fn as_ptr(&self) -> NonNull<dyn GcObjPtr> {
         NonNull::from(self)
     }
-    fn as_obj_ptr(&self) -> Option<NonNull<PyObject>> {
-        // because repr(transparent) for PyObject
-        // Some(self.as_ptr().cast::<PyObject>())
-        None
-    }
 }
 
 #[cfg(feature = "gc")]
@@ -300,10 +295,6 @@ impl GcObjPtr for PyObject {
     fn as_ptr(&self) -> NonNull<dyn GcObjPtr> {
         self.0.as_ptr()
     }
-    fn as_obj_ptr(&self) -> Option<NonNull<PyObject>> {
-        // because repr(transparent)
-        Some(NonNull::from(self))
-    }
 }
 
 #[cfg(feature = "gc")]
@@ -328,10 +319,6 @@ impl<T: PyObjectPayload> GcObjPtr for Py<T> {
 
     fn as_ptr(&self) -> NonNull<dyn GcObjPtr> {
         self.as_object().0.as_ptr()
-    }
-    fn as_obj_ptr(&self) -> Option<NonNull<PyObject>> {
-        // because repr(transparent)
-        self.as_object().as_obj_ptr()
     }
 }
 
