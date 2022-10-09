@@ -118,8 +118,6 @@ type ObjRef<'a> = &'a dyn GcObjPtr;
 
 impl CcSync {
     /// _suggest_(may or may not) collector to collect garbage. return number of cyclic garbage being collected
-    ///
-    /// TODO(discord9): find a better place for gc()
     #[inline]
     pub fn gc(&self) -> GcResult {
         if self.should_gc() {
@@ -151,7 +149,7 @@ impl CcSync {
             if last_gc_time.elapsed().as_millis() >= 100 {
                 *last_gc_time = Instant::now();
                 true
-            }else{
+            } else {
                 false
             }
         } else {
@@ -172,7 +170,6 @@ impl CcSync {
     /// if the last ref to a object call decrement() on object,
     /// then this object should be considered freed.
     pub unsafe fn decrement(&self, obj: ObjRef) -> GcStatus {
-        // FIXME(discord9): if a call to decrement is happening when gc() is called on annother thread, what lock should be done to ensure correctness?
         if obj.header().is_leaked() {
             // a leaked object should always keep
             return GcStatus::ShouldKeep;
@@ -201,11 +198,12 @@ impl CcSync {
         // because drop obj itself will drop all ObjRef store by object itself once more,
         // so balance out in here
         // by doing nothing
-        // instead of minus one
-        //obj.trace(&mut |ch| {
-
-        // self.decrement(ch);
-        //});
+        // instead of minus one and do:
+        // ```ignore
+        // obj.trace(&mut |ch| {
+        //   self.decrement(ch);
+        // });
+        //```
         obj.header().set_color(Color::Black);
 
         // TODO(discord9): just drop in here, not by the caller, which is cleaner
@@ -231,7 +229,7 @@ impl CcSync {
         }
     }
 
-    /// return `(acyclic garbage collected, cyclic garbage collected)`
+    /// The core of garbage collect process, return `(acyclic garbage collected, cyclic garbage collected)`.
     fn collect_cycles(&self) -> GcResult {
         if IS_GC_THREAD.with(|v| v.get()) {
             return (0, 0).into();
@@ -298,7 +296,7 @@ impl CcSync {
         let mut white = Vec::new();
         let roots: Vec<_> = { self.roots.lock().drain(..).collect() };
         // release gc pause lock in here, for after this line no white garbage will be access by mutator
-        
+
         drop(lock);
 
         roots
@@ -326,14 +324,11 @@ impl CcSync {
                     ch.header().inc();
                 }
             });
-            // so to allow drop() to drop by itself
-            // obj.header().set_buffered(false);
             unsafe {
                 PyObject::drop_only(i.cast::<PyObject>());
-                // PyObject::drop_slow(i.cast::<PyObject>());
             }
         }
-        
+
         // drop first, deallocate later so to avoid heap corruption
         // cause by circular ref and therefore
         // access pointer of already dropped value's memory region
