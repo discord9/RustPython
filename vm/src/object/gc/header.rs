@@ -39,6 +39,14 @@ impl GcHeader {
         }
     }
 
+    pub fn is_drop(&self)->bool{
+        *self.is_drop.lock()
+    }
+
+    pub fn is_dealloc(&self)->bool{
+        *self.is_dealloc.lock()
+    }
+
     pub fn is_cycle(&self) -> bool {
         self.color() == Color::BlackFree && self.rc() == 0
     }
@@ -47,7 +55,8 @@ impl GcHeader {
         let mut is_drop = self.is_drop.lock();
         let mut is_dealloc = self.is_dealloc.lock();
         if *is_dealloc {
-            warn!("Call a function inside a already deallocated object.");
+            warn!("Call a function inside a already deallocated object!");
+            return false;
         }
         if !(*is_drop) && !(*is_dealloc) {
             *is_drop = true;
@@ -64,9 +73,26 @@ impl GcHeader {
         let is_dealloc = self.is_dealloc.lock();
         if *is_dealloc {
             warn!("Call a function inside a already deallocated object.");
+            return false;
         }
         if !(*is_drop) && !(*is_dealloc) {
             *is_drop = true;
+            true
+        } else {
+            false
+        }
+    }
+
+    /// return true if can dealloc(that is already drop)
+    pub(crate) fn check_set_dealloc_only(&self) -> bool {
+        let is_drop = self.is_drop.lock();
+        let mut is_dealloc = self.is_dealloc.lock();
+        if !*is_drop {
+            warn!("Try to dealloc a object that haven't drop.");
+            return false;
+        }
+        if (*is_drop) && !(*is_dealloc) {
+            *is_dealloc = true;
             true
         } else {
             false
