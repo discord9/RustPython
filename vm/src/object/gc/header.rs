@@ -39,11 +39,11 @@ impl GcHeader {
         }
     }
 
-    pub fn is_drop(&self)->bool{
+    pub fn is_drop(&self) -> bool {
         *self.is_drop.lock()
     }
 
-    pub fn is_dealloc(&self)->bool{
+    pub fn is_dealloc(&self) -> bool {
         *self.is_dealloc.lock()
     }
 

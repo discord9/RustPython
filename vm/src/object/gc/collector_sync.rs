@@ -4,7 +4,10 @@ use std::{fmt, ops::Deref, ptr::NonNull};
 use crate::object::gc::{Color, GcObjPtr, GcStatus};
 use crate::PyObject;
 
-use rustpython_common::{rc::PyRc, lock::{PyMutex, PyRwLock, PyRwLockWriteGuard}};
+use rustpython_common::{
+    lock::{PyMutex, PyRwLock, PyRwLockWriteGuard},
+    rc::PyRc,
+};
 
 use std::cell::Cell;
 /// The global cycle collector, which collect cycle references for PyInner<T>
