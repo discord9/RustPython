@@ -199,6 +199,7 @@ impl GcTrace for PyInner<Erased> {
             PySuper,
             PyTraceback,
             PyTuple,
+            // FIXME(discord9): PyType's trace cause dead lock
             PyType,
             PyZip,
             // misc
@@ -743,7 +744,7 @@ impl ToOwned for PyObject {
     fn to_owned(&self) -> Self::Owned {
         #[cfg(feature = "gc")]
         {
-            self.0.header().gc.gc();
+            // self.0.header().gc.gc();
             self.0.inc();
         }
         #[cfg(not(feature = "gc"))]
@@ -1289,7 +1290,7 @@ impl<T: PyObjectPayload> ToOwned for Py<T> {
     fn to_owned(&self) -> Self::Owned {
         #[cfg(feature = "gc")]
         {
-            self.as_object().0.header().gc.gc();
+            // self.as_object().0.header().gc.gc();
             self.as_object().0.inc();
         }
         #[cfg(not(feature = "gc"))]

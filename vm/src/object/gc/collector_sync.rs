@@ -246,7 +246,7 @@ impl CcSync {
             // already call collect_cycle() once
         }
 
-        warn!("GC begin.");
+        debug!("GC begin.");
         // order of acquire lock and check IS_GC_THREAD here is important
         // This prevent set multiple IS_GC_THREAD thread local variable to true
         // using write() to gain exclusive access
@@ -255,20 +255,20 @@ impl CcSync {
             .try_write_for(LOCK_TIMEOUT)
             .unwrap_or_else(|| deadlock_handler());
         Self::IS_GC_THREAD.with(|v| v.set(true));
-        warn!("mark begin.");
+        debug!("mark begin.");
         let freed = self.mark_roots();
-        warn!("mark done.");
-        warn!("scan begin.");
+        debug!("mark done.");
+        debug!("scan begin.");
         self.scan_roots();
-        warn!("scan done.");
+        debug!("scan done.");
         // drop lock in here (where the lock should be check in every deref() for ObjectRef)
         // to not stop the world
         // what's left for collection should already be in garbage cycle,
         // no mutator will operate on them
-        warn!("collect begin.");
+        debug!("collect begin.");
         let ret = (freed, self.collect_roots(lock)).into();
-        warn!("collect done.");
-        warn!("GC done.");
+        debug!("collect done.");
+        debug!("GC done.");
         ret
     }
 
@@ -286,12 +286,9 @@ impl CcSync {
             .filter(|ptr| {
                 let obj = unsafe { ptr.as_ref() };
                 if obj.header().color() == Color::Purple {
-                    warn!("mark_gray begin.");
                     self.mark_gray(obj);
-                    warn!("mark_gray end.");
                     true
                 } else {
-                    warn!("free begin.");
                     obj.header().set_buffered(false);
                     if obj.header().color() == Color::Black && obj.rc() == 0 {
                         freed += 1;
@@ -301,7 +298,6 @@ impl CcSync {
                             // obj is dangling after this line?
                         }
                     }
-                    warn!("free end.");
                     false
                 }
             })
