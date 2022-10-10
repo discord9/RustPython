@@ -1,6 +1,6 @@
 use std::sync::atomic::Ordering;
 
-use crate::object::gc::{deadlock_handler, CcSync, GLOBAL_COLLECTOR, LOCK_TIMEOUT};
+use crate::object::gc::{deadlock_handler, CcSync, GLOBAL_COLLECTOR};
 
 #[cfg(not(feature = "threading"))]
 use rustpython_common::atomic::Radium;
@@ -110,7 +110,7 @@ impl GcHeader {
         Some(
             self.gc
                 .pause
-                .try_read_for(LOCK_TIMEOUT)
+                .try_read()
                 .unwrap_or_else(|| deadlock_handler()),
         )
     }
@@ -126,7 +126,7 @@ impl GcHeader {
         let _lock = self
             .gc
             .pause
-            .try_read_for(LOCK_TIMEOUT)
+            .try_read()
             .unwrap_or_else(|| deadlock_handler());
     }
     pub fn color(&self) -> Color {

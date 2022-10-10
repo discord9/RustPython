@@ -1,7 +1,7 @@
 use std::time::Instant;
 use std::{fmt, ops::Deref, ptr::NonNull};
 
-use crate::object::gc::{deadlock_handler, Color, GcObjPtr, GcStatus, LOCK_TIMEOUT};
+use crate::object::gc::{deadlock_handler, Color, GcObjPtr, GcStatus};
 use crate::PyObject;
 
 use rustpython_common::{
@@ -133,10 +133,7 @@ impl CcSync {
 
     #[inline]
     fn roots_len(&self) -> usize {
-        self.roots
-            .try_lock_for(LOCK_TIMEOUT)
-            .unwrap_or_else(|| deadlock_handler())
-            .len()
+        self.roots.lock().len()
     }
 
     /// TODO: change to use roots'len or what to determine
@@ -182,11 +179,7 @@ impl CcSync {
             obj.header().do_pausing();
             // acquire exclusive access to obj
             #[cfg(feature = "threading")]
-            let _lock = obj
-                .header()
-                .exclusive
-                .try_lock_for(LOCK_TIMEOUT)
-                .unwrap_or_else(|| deadlock_handler());
+            let _lock = obj.header().exclusive.lock();
 
             let rc = obj.header().dec();
             if rc == 0 {
@@ -229,10 +222,7 @@ impl CcSync {
             if !obj.header().buffered() {
                 let _lock = obj.header().try_pausing();
                 // lock here to serialize access to root&gc
-                let mut roots = self
-                    .roots
-                    .try_lock_for(LOCK_TIMEOUT)
-                    .unwrap_or_else(|| deadlock_handler());
+                let mut roots = self.roots.lock();
                 obj.header().set_buffered(true);
                 roots.push(obj.as_ptr().into());
             }
@@ -250,10 +240,7 @@ impl CcSync {
         // order of acquire lock and check IS_GC_THREAD here is important
         // This prevent set multiple IS_GC_THREAD thread local variable to true
         // using write() to gain exclusive access
-        let lock = self
-            .pause
-            .try_write_for(LOCK_TIMEOUT)
-            .unwrap_or_else(|| deadlock_handler());
+        let lock = self.pause.try_write().unwrap_or_else(|| deadlock_handler());
         Self::IS_GC_THREAD.with(|v| v.set(true));
         debug!("mark begin.");
         let freed = self.mark_roots();
@@ -274,13 +261,7 @@ impl CcSync {
 
     fn mark_roots(&self) -> usize {
         let mut freed = 0;
-        let old_roots: Vec<_> = {
-            self.roots
-                .try_lock_for(LOCK_TIMEOUT)
-                .unwrap_or_else(|| deadlock_handler())
-                .drain(..)
-                .collect()
-        };
+        let old_roots: Vec<_> = { self.roots.lock().drain(..).collect() };
         let mut new_roots = old_roots
             .into_iter()
             .filter(|ptr| {
@@ -302,17 +283,12 @@ impl CcSync {
                 }
             })
             .collect();
-        (*self
-            .roots
-            .try_lock_for(LOCK_TIMEOUT)
-            .unwrap_or_else(|| deadlock_handler()))
-        .append(&mut new_roots);
+        (*self.roots.lock()).append(&mut new_roots);
         freed
     }
     fn scan_roots(&self) {
         self.roots
-            .try_lock_for(LOCK_TIMEOUT)
-            .unwrap_or_else(|| deadlock_handler())
+            .lock()
             .iter()
             .map(|ptr| {
                 let obj = unsafe { ptr.as_ref() };
@@ -326,13 +302,7 @@ impl CcSync {
         // running them during traversal will cause cycles to be broken which
         // ruins the rest of our traversal.
         let mut white = Vec::new();
-        let roots: Vec<_> = {
-            self.roots
-                .try_lock_for(LOCK_TIMEOUT)
-                .unwrap_or_else(|| deadlock_handler())
-                .drain(..)
-                .collect()
-        };
+        let roots: Vec<_> = { self.roots.lock().drain(..).collect() };
         // release gc pause lock in here, for after this line no white garbage will be access by mutator
         roots
             .into_iter()
