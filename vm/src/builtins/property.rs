@@ -52,7 +52,7 @@ pub struct PyProperty {
 }
 
 #[cfg(feature = "gc")]
-impl crate::object::gc::GcTrace for PyProperty {
+unsafe impl crate::object::gc::GcTrace for PyProperty {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         self.getter.read().trace(tracer_fn);
         self.setter.read().trace(tracer_fn);

@@ -109,7 +109,7 @@ pub struct PyMapping<'a> {
 }
 
 #[cfg(feature = "gc")]
-impl<'a> crate::object::gc::GcTrace for PyMapping<'a> {
+unsafe impl<'a> crate::object::gc::GcTrace for PyMapping<'a> {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         self.obj.trace(tracer_fn)
     }

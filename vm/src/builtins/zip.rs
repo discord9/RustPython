@@ -17,7 +17,7 @@ pub struct PyZip {
 }
 
 #[cfg(feature = "gc")]
-impl crate::object::gc::GcTrace for PyZip {
+unsafe impl crate::object::gc::GcTrace for PyZip {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         self.iterators.trace(tracer_fn);
     }

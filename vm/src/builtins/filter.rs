@@ -18,7 +18,7 @@ pub struct PyFilter {
 }
 
 #[cfg(feature = "gc")]
-impl crate::object::gc::GcTrace for PyFilter {
+unsafe impl crate::object::gc::GcTrace for PyFilter {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         self.predicate.trace(tracer_fn);
         self.iterator.trace(tracer_fn);

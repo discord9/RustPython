@@ -28,7 +28,7 @@ pub enum IterStatus<T> {
 }
 
 #[cfg(feature = "gc")]
-impl<T: GcTrace> crate::object::gc::GcTrace for IterStatus<T> {
+unsafe impl<T: GcTrace> crate::object::gc::GcTrace for IterStatus<T> {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         match self {
             IterStatus::Active(ref r) => r.trace(tracer_fn),
@@ -44,7 +44,7 @@ pub struct PositionIterInternal<T> {
 }
 
 #[cfg(feature = "gc")]
-impl<T: GcTrace> crate::object::gc::GcTrace for PositionIterInternal<T> {
+unsafe impl<T: GcTrace> crate::object::gc::GcTrace for PositionIterInternal<T> {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         self.status.trace(tracer_fn)
     }
@@ -187,7 +187,7 @@ pub struct PySequenceIterator {
 }
 
 #[cfg(feature = "gc")]
-impl crate::object::gc::GcTrace for PySequenceIterator {
+unsafe impl crate::object::gc::GcTrace for PySequenceIterator {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         self.internal.trace(tracer_fn)
     }
@@ -257,7 +257,7 @@ pub struct PyCallableIterator {
 }
 
 #[cfg(feature = "gc")]
-impl crate::object::gc::GcTrace for PyCallableIterator {
+unsafe impl crate::object::gc::GcTrace for PyCallableIterator {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         self.sentinel.trace(tracer_fn);
         self.status.trace(tracer_fn)

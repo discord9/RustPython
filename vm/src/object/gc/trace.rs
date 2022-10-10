@@ -26,11 +26,16 @@ pub trait GcObjPtr: GcTrace {
 }
 
 /// use `trace()` to call on all owned ObjectRef
-pub trait GcTrace {
+/// 
+/// # Safety
+/// 
+/// see `trace()`'s requirement
+pub unsafe trait GcTrace {
     /// call tracer_fn for every object(childrens) owned by a Object
-    /// # API Contract
+    /// # Safety
+    /// 
     /// must make sure that every owned object(Every stored `PyObjectRef` to be exactly) is called with tracer_fn **at most once**.
-    /// If some field is not called, the worse results is memory leak, but if some field is called repeatly, panic and deadlock can happen.
+    /// If some field is not called, the worst results is memory leak, but if some field is called repeatly, panic and deadlock can happen.
     ///
     /// _**DO NOT**_ clone a `PyObjectRef`(which mess up the ref count system) in `trace()`, use `ref`erence or, if actually had to, use `as_ptr()`(which is a last resort and better not to use) instead and operate on NonNull
     ///
@@ -47,26 +52,26 @@ pub trait GcTrace {
 /// by an instance of something.
 pub type TracerFn<'a> = dyn FnMut(&dyn GcObjPtr) + 'a;
 
-impl GcTrace for PyObjectRef {
+unsafe impl GcTrace for PyObjectRef {
     #[inline]
     fn trace(&self, tracer_fn: &mut TracerFn) {
         tracer_fn(self.as_ref())
     }
 }
 
-impl GcTrace for () {
+unsafe impl GcTrace for () {
     #[inline]
     fn trace(&self, _tracer_fn: &mut TracerFn) {}
 }
 
-impl<T: PyObjectPayload> GcTrace for PyRef<T> {
+unsafe impl<T: PyObjectPayload> GcTrace for PyRef<T> {
     #[inline]
     fn trace(&self, tracer_fn: &mut TracerFn) {
         tracer_fn((*self).as_object())
     }
 }
 
-impl<T: GcTrace> GcTrace for Option<T> {
+unsafe impl<T: GcTrace> GcTrace for Option<T> {
     #[inline]
     fn trace(&self, tracer_fn: &mut TracerFn) {
         if let Some(v) = self {
@@ -75,7 +80,7 @@ impl<T: GcTrace> GcTrace for Option<T> {
     }
 }
 
-impl<T> GcTrace for [T]
+unsafe impl<T> GcTrace for [T]
 where
     T: GcTrace,
 {
@@ -87,7 +92,7 @@ where
     }
 }
 
-impl<T> GcTrace for Vec<T>
+unsafe impl<T> GcTrace for Vec<T>
 where
     T: GcTrace,
 {
@@ -99,7 +104,7 @@ where
     }
 }
 
-impl<T: GcTrace> GcTrace for PyMutex<T> {
+unsafe impl<T: GcTrace> GcTrace for PyMutex<T> {
     #[inline]
     fn trace(&self, tracer_fn: &mut TracerFn) {
         // FIXME(discord9): check if this may cause a deadlock or not
@@ -114,7 +119,7 @@ impl<T: GcTrace> GcTrace for PyMutex<T> {
     }
 }
 
-impl<T: GcTrace> GcTrace for PyRwLock<T> {
+unsafe impl<T: GcTrace> GcTrace for PyRwLock<T> {
     #[inline]
     fn trace(&self, tracer_fn: &mut TracerFn) {
         // FIXME(discord9): check if this may cause a deadlock or not, maybe try `recursive`?
@@ -127,7 +132,7 @@ impl<T: GcTrace> GcTrace for PyRwLock<T> {
 
 // TODO(discord9): impl_tuples!(impossible with declarative macros)
 // TODO(discord9): GcTrace as a derive proc macro
-impl<A: GcTrace, B: GcTrace> GcTrace for (A, B) {
+unsafe impl<A: GcTrace, B: GcTrace> GcTrace for (A, B) {
     #[inline]
     fn trace(&self, tracer_fn: &mut TracerFn) {
         self.0.trace(tracer_fn);

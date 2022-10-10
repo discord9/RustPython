@@ -20,7 +20,7 @@ pub struct PyMap {
 }
 
 #[cfg(feature = "gc")]
-impl crate::object::gc::GcTrace for PyMap {
+unsafe impl crate::object::gc::GcTrace for PyMap {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         self.mapper.trace(tracer_fn);
         self.iterators.trace(tracer_fn);

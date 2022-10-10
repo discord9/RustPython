@@ -30,7 +30,7 @@ pub struct PyTuple {
 }
 
 #[cfg(feature = "gc")]
-impl crate::object::gc::GcTrace for PyTuple {
+unsafe impl crate::object::gc::GcTrace for PyTuple {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         self.elements.trace(tracer_fn);
     }
@@ -419,7 +419,7 @@ pub(crate) struct PyTupleIterator {
 }
 
 #[cfg(feature = "gc")]
-impl crate::object::gc::GcTrace for PyTupleIterator {
+unsafe impl crate::object::gc::GcTrace for PyTupleIterator {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         self.internal.lock().trace(tracer_fn)
     }

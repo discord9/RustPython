@@ -37,7 +37,7 @@ pub struct PyFunction {
 }
 
 #[cfg(feature = "gc")]
-impl crate::object::gc::GcTrace for PyFunction {
+unsafe impl crate::object::gc::GcTrace for PyFunction {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         self.code.trace(tracer_fn);
         self.globals.trace(tracer_fn);
@@ -477,7 +477,7 @@ pub struct PyBoundMethod {
 }
 
 #[cfg(feature = "gc")]
-impl crate::object::gc::GcTrace for PyBoundMethod {
+unsafe impl crate::object::gc::GcTrace for PyBoundMethod {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         self.object.trace(tracer_fn);
         self.function.trace(tracer_fn);
@@ -632,7 +632,7 @@ pub(crate) struct PyCell {
     contents: PyMutex<Option<PyObjectRef>>,
 }
 #[cfg(feature = "gc")]
-impl crate::object::gc::GcTrace for PyCell {
+unsafe impl crate::object::gc::GcTrace for PyCell {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         self.contents.trace(tracer_fn)
     }

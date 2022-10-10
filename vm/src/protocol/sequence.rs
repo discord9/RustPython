@@ -66,7 +66,7 @@ pub struct PySequence<'a> {
 }
 
 #[cfg(feature = "gc")]
-impl<'a> crate::object::gc::GcTrace for PySequence<'a> {
+unsafe impl<'a> crate::object::gc::GcTrace for PySequence<'a> {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         self.obj.trace(tracer_fn)
     }
