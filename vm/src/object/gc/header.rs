@@ -1,6 +1,7 @@
 use std::sync::atomic::Ordering;
 
-use crate::object::gc::{CcSync, GLOBAL_COLLECTOR};
+use crate::object::gc::{deadlock_handler, CcSync, GLOBAL_COLLECTOR, LOCK_TIMEOUT};
+
 #[cfg(not(feature = "threading"))]
 use rustpython_common::atomic::Radium;
 use rustpython_common::{
@@ -106,10 +107,15 @@ impl GcHeader {
             // and any call to do_pausing is probably from drop() or what so allow it to continue execute.
             return None;
         }
-        Some(self.gc.pause.read())
+        Some(
+            self.gc
+                .pause
+                .try_read_for(LOCK_TIMEOUT)
+                .unwrap_or_else(|| deadlock_handler()),
+        )
     }
 
-    /// This function will block if is pausing by gc
+    /// This function will block if is a garbage collect is happening
     pub fn do_pausing(&self) {
         if CcSync::IS_GC_THREAD.with(|v| v.get()) {
             // if is same thread, then this thread is already stop by gc itself,
@@ -117,7 +123,11 @@ impl GcHeader {
             // and any call to do_pausing is probably from drop() or what so allow it to continue execute.
             return;
         }
-        let _lock = self.gc.pause.read();
+        let _lock = self
+            .gc
+            .pause
+            .try_read_for(LOCK_TIMEOUT)
+            .unwrap_or_else(|| deadlock_handler());
     }
     pub fn color(&self) -> Color {
         *self.color.lock()
