@@ -19,6 +19,7 @@ pub static GLOBAL_COLLECTOR: once_cell::sync::Lazy<PyRc<CcSync>> =
             roots: PyMutex::new(Vec::new()),
             pause: PyRwLock::new(()),
             last_gc_time: PyMutex::new(Instant::now()),
+            is_enabled: PyMutex::new(true),
         })
     });
 
@@ -88,12 +89,19 @@ impl From<GcResult> for (usize, usize) {
     }
 }
 
+impl From<GcResult> for usize {
+    fn from(g: GcResult) -> Self {
+        g.acyclic_cnt + g.cyclic_cnt
+    }
+}
+
 pub struct CcSync {
     roots: PyMutex<Vec<WrappedPtr<dyn GcObjPtr>>>,
     /// for stop the world, will be try to check lock every time deref ObjecteRef
     /// to achive pausing
     pub pause: PyRwLock<()>,
     last_gc_time: PyMutex<Instant>,
+    is_enabled: PyMutex<bool>,
 }
 
 impl std::fmt::Debug for CcSync {
@@ -126,9 +134,22 @@ impl CcSync {
             (0, 0).into()
         }
     }
+    pub(crate) fn is_enabled(&self) -> bool {
+        *self.is_enabled.lock()
+    }
+    pub(crate) fn enable(&self) {
+        *self.is_enabled.lock() = true
+    }
+    pub(crate) fn disable(&self) {
+        *self.is_enabled.lock() = false
+    }
     #[inline]
     pub fn force_gc(&self) -> GcResult {
-        self.collect_cycles()
+        if *self.is_enabled.lock() {
+            self.collect_cycles()
+        } else {
+            GcResult::new((0, 0))
+        }
     }
 
     #[inline]

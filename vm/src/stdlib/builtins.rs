@@ -332,21 +332,6 @@ mod builtins {
         call_object_format(vm, value, None, format_spec.as_str())
     }
 
-    /// force a gc to happen
-    #[pyfunction]
-    fn gc() -> PyResult<(usize, usize)> {
-        #[cfg(feature = "gc")]
-        {
-            use crate::object::gc::GLOBAL_COLLECTOR;
-            #[cfg(feature = "threading")]
-            return Ok(GLOBAL_COLLECTOR.force_gc().into());
-            #[cfg(not(feature = "threading"))]
-            return Ok(GLOBAL_COLLECTOR.with(|v| v.force_gc().into()));
-        }
-        #[cfg(not(feature = "gc"))]
-        Ok((0, 0))
-    }
-
     #[pyfunction]
     fn getattr(
         obj: PyObjectRef,
