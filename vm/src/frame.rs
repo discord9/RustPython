@@ -350,7 +350,7 @@ impl ExecutingFrame<'_> {
             GLOBAL_COLLECTOR.gc();
             #[cfg(not(feature = "threading"))]
             GLOBAL_COLLECTOR.with(|v| v.gc());
-            
+
             let idx = self.lasti() as usize;
             self.update_lasti(|i| *i += 1);
             let instr = &instrs[idx];
