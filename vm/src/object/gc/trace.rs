@@ -1,6 +1,6 @@
 use rustpython_common::lock::{PyMutex, PyRwLock};
 
-use crate::object::gc::{header::GcHeader, LOCK_TIMEOUT, deadlock_handler};
+use crate::object::gc::{deadlock_handler, header::GcHeader, LOCK_TIMEOUT};
 use crate::object::PyObjectPayload;
 use crate::{AsObject, PyObjectRef, PyRef};
 use core::ptr::NonNull;

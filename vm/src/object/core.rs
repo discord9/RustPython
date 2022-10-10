@@ -183,7 +183,7 @@ impl GcTrace for PyInner<Erased> {
         };
         optional_trace!(
             // builtin types
-            // PyRange, PyStr is acyclic, therefore no trace needed for them 
+            // PyRange, PyStr is acyclic, therefore no trace needed for them
             PyBoundMethod,
             PyDict,
             PyEnumerate,

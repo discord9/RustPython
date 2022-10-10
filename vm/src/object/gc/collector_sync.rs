@@ -1,7 +1,7 @@
 use std::time::Instant;
 use std::{fmt, ops::Deref, ptr::NonNull};
 
-use crate::object::gc::{Color, GcObjPtr, GcStatus};
+use crate::object::gc::{deadlock_handler, Color, GcObjPtr, GcStatus, LOCK_TIMEOUT};
 use crate::PyObject;
 
 use rustpython_common::{
@@ -10,6 +10,7 @@ use rustpython_common::{
 };
 
 use std::cell::Cell;
+
 /// The global cycle collector, which collect cycle references for PyInner<T>
 #[cfg(feature = "threading")]
 pub static GLOBAL_COLLECTOR: once_cell::sync::Lazy<PyRc<CcSync>> =
@@ -132,7 +133,10 @@ impl CcSync {
 
     #[inline]
     fn roots_len(&self) -> usize {
-        self.roots.lock().len()
+        self.roots
+            .try_lock_for(LOCK_TIMEOUT)
+            .unwrap_or_else(|| deadlock_handler())
+            .len()
     }
 
     /// TODO: change to use roots'len or what to determine
@@ -178,7 +182,11 @@ impl CcSync {
             obj.header().do_pausing();
             // acquire exclusive access to obj
             #[cfg(feature = "threading")]
-            let _lock = obj.header().exclusive.lock();
+            let _lock = obj
+                .header()
+                .exclusive
+                .try_lock_for(LOCK_TIMEOUT)
+                .unwrap_or_else(|| deadlock_handler());
 
             let rc = obj.header().dec();
             if rc == 0 {
@@ -221,7 +229,10 @@ impl CcSync {
             if !obj.header().buffered() {
                 let _lock = obj.header().try_pausing();
                 // lock here to serialize access to root&gc
-                let mut roots = self.roots.lock();
+                let mut roots = self
+                    .roots
+                    .try_lock_for(LOCK_TIMEOUT)
+                    .unwrap_or_else(|| deadlock_handler());
                 obj.header().set_buffered(true);
                 roots.push(obj.as_ptr().into());
             }
@@ -234,31 +245,53 @@ impl CcSync {
             return (0, 0).into();
             // already call collect_cycle() once
         }
+
+        warn!("GC begin.");
         // order of acquire lock and check IS_GC_THREAD here is important
         // This prevent set multiple IS_GC_THREAD thread local variable to true
         // using write() to gain exclusive access
-        let lock = self.pause.write();
+        let lock = self
+            .pause
+            .try_write_for(LOCK_TIMEOUT)
+            .unwrap_or_else(|| deadlock_handler());
         Self::IS_GC_THREAD.with(|v| v.set(true));
+        warn!("mark begin.");
         let freed = self.mark_roots();
+        warn!("mark done.");
+        warn!("scan begin.");
         self.scan_roots();
+        warn!("scan done.");
         // drop lock in here (where the lock should be check in every deref() for ObjectRef)
         // to not stop the world
         // what's left for collection should already be in garbage cycle,
         // no mutator will operate on them
-        (freed, self.collect_roots(lock)).into()
+        warn!("collect begin.");
+        let ret = (freed, self.collect_roots(lock)).into();
+        warn!("collect done.");
+        warn!("GC done.");
+        ret
     }
 
     fn mark_roots(&self) -> usize {
         let mut freed = 0;
-        let old_roots: Vec<_> = { self.roots.lock().drain(..).collect() };
+        let old_roots: Vec<_> = {
+            self.roots
+                .try_lock_for(LOCK_TIMEOUT)
+                .unwrap_or_else(|| deadlock_handler())
+                .drain(..)
+                .collect()
+        };
         let mut new_roots = old_roots
             .into_iter()
             .filter(|ptr| {
                 let obj = unsafe { ptr.as_ref() };
                 if obj.header().color() == Color::Purple {
+                    warn!("mark_gray begin.");
                     self.mark_gray(obj);
+                    warn!("mark_gray end.");
                     true
                 } else {
+                    warn!("free begin.");
                     obj.header().set_buffered(false);
                     if obj.header().color() == Color::Black && obj.rc() == 0 {
                         freed += 1;
@@ -268,16 +301,22 @@ impl CcSync {
                             // obj is dangling after this line?
                         }
                     }
+                    warn!("free end.");
                     false
                 }
             })
             .collect();
-        (*self.roots.lock()).append(&mut new_roots);
+        (*self
+            .roots
+            .try_lock_for(LOCK_TIMEOUT)
+            .unwrap_or_else(|| deadlock_handler()))
+        .append(&mut new_roots);
         freed
     }
     fn scan_roots(&self) {
         self.roots
-            .lock()
+            .try_lock_for(LOCK_TIMEOUT)
+            .unwrap_or_else(|| deadlock_handler())
             .iter()
             .map(|ptr| {
                 let obj = unsafe { ptr.as_ref() };
@@ -291,11 +330,14 @@ impl CcSync {
         // running them during traversal will cause cycles to be broken which
         // ruins the rest of our traversal.
         let mut white = Vec::new();
-        let roots: Vec<_> = { self.roots.lock().drain(..).collect() };
+        let roots: Vec<_> = {
+            self.roots
+                .try_lock_for(LOCK_TIMEOUT)
+                .unwrap_or_else(|| deadlock_handler())
+                .drain(..)
+                .collect()
+        };
         // release gc pause lock in here, for after this line no white garbage will be access by mutator
-
-        drop(lock);
-
         roots
             .into_iter()
             .map(|ptr| {
@@ -334,8 +376,10 @@ impl CcSync {
                 PyObject::dealloc_only(i.cast::<PyObject>());
             }
         }
+
         // mark the end of GC here so another gc can begin(if end early could lead to stack overflow)
         Self::IS_GC_THREAD.with(|v| v.set(false));
+        drop(lock);
 
         len_white
     }
