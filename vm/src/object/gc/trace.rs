@@ -109,7 +109,7 @@ impl<T: GcTrace> GcTrace for PyMutex<T> {
                 error!("Could be in dead lock.");
                 // not kill the thread for now
                 // deadlock_handler()
-            },
+            }
         }
     }
 }
