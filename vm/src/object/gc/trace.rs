@@ -105,7 +105,11 @@ impl<T: GcTrace> GcTrace for PyMutex<T> {
         // FIXME(discord9): check if this may cause a deadlock or not
         match self.try_lock_for(LOCK_TIMEOUT) {
             Some(v) => v.trace(tracer_fn),
-            None => deadlock_handler(),
+            None => {
+                error!("Could be in dead lock.");
+                // not kill the thread for now
+                // deadlock_handler()
+            },
         }
     }
 }
@@ -114,7 +118,7 @@ impl<T: GcTrace> GcTrace for PyRwLock<T> {
     #[inline]
     fn trace(&self, tracer_fn: &mut TracerFn) {
         // FIXME(discord9): check if this may cause a deadlock or not, maybe try `recursive`?
-        match self.try_read_for(LOCK_TIMEOUT) {
+        match self.try_read_recursive_for(LOCK_TIMEOUT) {
             Some(v) => v.trace(tracer_fn),
             None => deadlock_handler(),
         }
