@@ -19,7 +19,7 @@ pub struct PySuper {
 }
 
 #[cfg(feature = "gc")]
-impl crate::object::gc::GcTrace for PySuper {
+unsafe impl crate::object::gc::GcTrace for PySuper {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         self.typ.trace(tracer_fn);
         self.obj.trace(tracer_fn);

@@ -16,7 +16,7 @@ pub struct PyMappingProxy {
 }
 
 #[cfg(feature = "gc")]
-impl crate::object::gc::GcTrace for PyMappingProxy {
+unsafe impl crate::object::gc::GcTrace for PyMappingProxy {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         self.mapping.trace(tracer_fn)
     }
@@ -29,7 +29,7 @@ enum MappingProxyInner {
 }
 
 #[cfg(feature = "gc")]
-impl crate::object::gc::GcTrace for MappingProxyInner {
+unsafe impl crate::object::gc::GcTrace for MappingProxyInner {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         match self {
             MappingProxyInner::Class(ref r) => r.trace(tracer_fn),

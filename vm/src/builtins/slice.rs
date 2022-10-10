@@ -20,7 +20,7 @@ pub struct PySlice {
 }
 
 #[cfg(feature = "gc")]
-impl crate::object::gc::GcTrace for PySlice {
+unsafe impl crate::object::gc::GcTrace for PySlice {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         self.start.trace(tracer_fn);
         self.stop.trace(tracer_fn);

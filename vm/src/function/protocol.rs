@@ -15,7 +15,7 @@ pub struct ArgCallable {
 }
 
 #[cfg(feature = "gc")]
-impl crate::object::gc::GcTrace for ArgCallable {
+unsafe impl crate::object::gc::GcTrace for ArgCallable {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         self.obj.trace(tracer_fn)
     }
@@ -73,7 +73,7 @@ pub struct ArgIterable<T = PyObjectRef> {
 }
 
 #[cfg(feature = "gc")]
-impl<T: crate::object::gc::GcTrace> crate::object::gc::GcTrace for ArgIterable<T> {
+unsafe impl<T: crate::object::gc::GcTrace> crate::object::gc::GcTrace for ArgIterable<T> {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         self.iterable.trace(tracer_fn)
     }
@@ -121,7 +121,7 @@ pub struct ArgMapping {
 }
 
 #[cfg(feature = "gc")]
-impl crate::object::gc::GcTrace for ArgMapping {
+unsafe impl crate::object::gc::GcTrace for ArgMapping {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         self.obj.trace(tracer_fn)
     }
@@ -196,7 +196,7 @@ impl TryFromObject for ArgMapping {
 pub struct ArgSequence<T = PyObjectRef>(Vec<T>);
 
 #[cfg(feature = "gc")]
-impl<T: crate::object::gc::GcTrace> crate::object::gc::GcTrace for ArgSequence<T> {
+unsafe impl<T: crate::object::gc::GcTrace> crate::object::gc::GcTrace for ArgSequence<T> {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         self.0.trace(tracer_fn)
     }

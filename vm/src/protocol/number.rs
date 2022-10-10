@@ -222,7 +222,7 @@ pub struct PyNumber<'a> {
 }
 
 #[cfg(feature = "gc")]
-impl<'a> crate::object::gc::GcTrace for PyNumber<'a> {
+unsafe impl<'a> crate::object::gc::GcTrace for PyNumber<'a> {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         self.obj.trace(tracer_fn)
     }

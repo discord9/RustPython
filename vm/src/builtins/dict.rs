@@ -48,7 +48,7 @@ pub struct PyDict {
 }
 
 #[cfg(feature = "gc")]
-impl GcTrace for PyDict {
+unsafe impl GcTrace for PyDict {
     fn trace(&self, tracer_fn: &mut TracerFn) {
         self.entries.trace(tracer_fn)
     }

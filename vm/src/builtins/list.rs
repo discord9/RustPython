@@ -32,7 +32,7 @@ pub struct PyList {
 }
 
 #[cfg(feature = "gc")]
-impl crate::object::gc::GcTrace for PyList {
+unsafe impl crate::object::gc::GcTrace for PyList {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         self.elements.trace(tracer_fn);
     }
@@ -534,7 +534,7 @@ pub struct PyListIterator {
 }
 
 #[cfg(feature = "gc")]
-impl crate::object::gc::GcTrace for PyListIterator {
+unsafe impl crate::object::gc::GcTrace for PyListIterator {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         self.internal.trace(tracer_fn)
     }
@@ -586,7 +586,7 @@ pub struct PyListReverseIterator {
 }
 
 #[cfg(feature = "gc")]
-impl crate::object::gc::GcTrace for PyListReverseIterator {
+unsafe impl crate::object::gc::GcTrace for PyListReverseIterator {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         self.internal.trace(tracer_fn)
     }

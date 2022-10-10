@@ -13,7 +13,7 @@ pub struct PyTraceback {
 }
 
 #[cfg(feature = "gc")]
-impl crate::object::gc::GcTrace for PyTraceback {
+unsafe impl crate::object::gc::GcTrace for PyTraceback {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         self.next.lock().trace(tracer_fn);
         self.frame.trace(tracer_fn);

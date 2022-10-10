@@ -146,7 +146,7 @@ pub(in crate::object) struct PyInner<T> {
 }
 
 #[cfg(feature = "gc")]
-impl GcTrace for PyInner<Erased> {
+unsafe impl GcTrace for PyInner<Erased> {
     fn trace(&self, tracer_fn: &mut TracerFn) {
         /// FIXME(discord9): Optional trait bound(Like a ?GcTrace) require specialization
         ///
@@ -237,14 +237,14 @@ impl GcTrace for PyInner<Erased> {
 }
 
 #[cfg(feature = "gc")]
-impl<T: PyObjectPayload> GcTrace for Py<T> {
+unsafe impl<T: PyObjectPayload> GcTrace for Py<T> {
     fn trace(&self, tracer_fn: &mut TracerFn) {
         self.as_object().0.trace(tracer_fn)
     }
 }
 
 #[cfg(feature = "gc")]
-impl GcTrace for PyObject {
+unsafe impl GcTrace for PyObject {
     fn trace(&self, tracer_fn: &mut TracerFn) {
         self.0.trace(tracer_fn)
     }
@@ -554,7 +554,7 @@ pub struct PyWeak {
 }
 
 #[cfg(feature = "gc")]
-impl crate::object::gc::GcTrace for PyWeak {
+unsafe impl crate::object::gc::GcTrace for PyWeak {
     fn trace(&self, _tracer_fn: &mut crate::object::gc::TracerFn) {
         // PyWeak doesn't own the object by define
         // FIXME(discord9): confirm this and test

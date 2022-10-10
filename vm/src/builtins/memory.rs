@@ -1113,7 +1113,7 @@ pub struct PyMemoryViewIterator {
 }
 
 #[cfg(feature = "gc")]
-impl crate::object::gc::GcTrace for PyMemoryViewIterator {
+unsafe impl crate::object::gc::GcTrace for PyMemoryViewIterator {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         self.internal.trace(tracer_fn)
     }

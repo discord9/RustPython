@@ -15,7 +15,7 @@ pub struct PyStaticMethod {
 }
 
 #[cfg(feature = "gc")]
-impl crate::object::gc::GcTrace for PyStaticMethod {
+unsafe impl crate::object::gc::GcTrace for PyStaticMethod {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         self.callable.trace(tracer_fn)
     }
