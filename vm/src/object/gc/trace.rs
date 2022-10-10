@@ -1,6 +1,6 @@
 use rustpython_common::lock::{PyMutex, PyRwLock};
 
-use crate::object::gc::header::GcHeader;
+use crate::object::gc::{header::GcHeader, LOCK_TIMEOUT, deadlock_handler};
 use crate::object::PyObjectPayload;
 use crate::{AsObject, PyObjectRef, PyRef};
 use core::ptr::NonNull;
@@ -87,13 +87,25 @@ where
     }
 }
 
+impl<T> GcTrace for Vec<T>
+where
+    T: GcTrace,
+{
+    #[inline]
+    fn trace(&self, tracer_fn: &mut TracerFn) {
+        for elem in self {
+            elem.trace(tracer_fn);
+        }
+    }
+}
+
 impl<T: GcTrace> GcTrace for PyMutex<T> {
     #[inline]
     fn trace(&self, tracer_fn: &mut TracerFn) {
         // FIXME(discord9): check if this may cause a deadlock or not
-        match self.try_lock() {
+        match self.try_lock_for(LOCK_TIMEOUT) {
             Some(v) => v.trace(tracer_fn),
-            None => warn!("Can't acquire lock in trace, could be in a deadlock."),
+            None => deadlock_handler(),
         }
     }
 }
@@ -102,9 +114,9 @@ impl<T: GcTrace> GcTrace for PyRwLock<T> {
     #[inline]
     fn trace(&self, tracer_fn: &mut TracerFn) {
         // FIXME(discord9): check if this may cause a deadlock or not, maybe try `recursive`?
-        match self.try_read() {
+        match self.try_read_for(LOCK_TIMEOUT) {
             Some(v) => v.trace(tracer_fn),
-            None => warn!("Can't acquire read lock in trace, could be in a deadlock."),
+            None => deadlock_handler(),
         }
     }
 }

@@ -53,7 +53,7 @@ impl crate::object::gc::GcTrace for PyType {
         self.base.trace(tracer_fn);
         self.bases.trace(tracer_fn);
         self.mro.trace(tracer_fn);
-        self.subclasses.read().trace(tracer_fn);
+        self.subclasses.trace(tracer_fn);
     }
 }
 
