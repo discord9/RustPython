@@ -1,6 +1,6 @@
 use rustpython_common::lock::{PyMutex, PyRwLock};
 
-use crate::object::gc::{deadlock_handler, header::GcHeader, LOCK_TIMEOUT};
+use crate::object::gc::{deadlock_handler, header::GcHeader};
 use crate::object::PyObjectPayload;
 use crate::{AsObject, PyObjectRef, PyRef};
 use core::ptr::NonNull;
@@ -103,7 +103,7 @@ impl<T: GcTrace> GcTrace for PyMutex<T> {
     #[inline]
     fn trace(&self, tracer_fn: &mut TracerFn) {
         // FIXME(discord9): check if this may cause a deadlock or not
-        match self.try_lock_for(LOCK_TIMEOUT) {
+        match self.try_lock() {
             Some(v) => v.trace(tracer_fn),
             None => {
                 error!("Could be in dead lock.");
@@ -118,7 +118,7 @@ impl<T: GcTrace> GcTrace for PyRwLock<T> {
     #[inline]
     fn trace(&self, tracer_fn: &mut TracerFn) {
         // FIXME(discord9): check if this may cause a deadlock or not, maybe try `recursive`?
-        match self.try_read_recursive_for(LOCK_TIMEOUT) {
+        match self.try_read_recursive() {
             Some(v) => v.trace(tracer_fn),
             None => deadlock_handler(),
         }
