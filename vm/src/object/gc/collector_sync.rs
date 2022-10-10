@@ -29,6 +29,7 @@ thread_local! {
         roots: PyMutex::new(Vec::new()),
         pause: PyRwLock::new(()),
         last_gc_time: PyMutex::new(Instant::now()),
+        is_enabled: PyMutex::new(true),
     });
 }
 
@@ -134,18 +135,23 @@ impl CcSync {
             (0, 0).into()
         }
     }
+
+    #[inline]
     pub(crate) fn is_enabled(&self) -> bool {
         *self.is_enabled.lock()
     }
+    #[inline]
     pub(crate) fn enable(&self) {
         *self.is_enabled.lock() = true
     }
+    #[inline]
     pub(crate) fn disable(&self) {
         *self.is_enabled.lock() = false
     }
+
     #[inline]
     pub fn force_gc(&self) -> GcResult {
-        if *self.is_enabled.lock() {
+        if self.is_enabled() {
             self.collect_cycles()
         } else {
             GcResult::new((0, 0))

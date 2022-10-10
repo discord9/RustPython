@@ -1,8 +1,9 @@
+use enum_dispatch::enum_dispatch;
 use rustpython_common::lock::{PyMutex, PyRwLock};
 
 use crate::object::gc::{deadlock_handler, header::GcHeader};
-use crate::object::PyObjectPayload;
-use crate::{AsObject, PyObjectRef, PyRef};
+use crate::object::{Erased, PyInner, PyObjectPayload};
+use crate::{AsObject, Py, PyObject, PyObjectRef, PyRef};
 use core::ptr::NonNull;
 
 /// indicate what to do with the object afer calling dec()
@@ -15,6 +16,8 @@ pub enum GcStatus {
     /// should keep and not drop by caller
     ShouldKeep,
 }
+
+#[enum_dispatch]
 pub trait GcObjPtr: GcTrace {
     fn inc(&self);
     fn dec(&self) -> GcStatus;
@@ -25,15 +28,31 @@ pub trait GcObjPtr: GcTrace {
     fn as_ptr(&self) -> NonNull<dyn GcObjPtr>;
 }
 
+#[enum_dispatch(GcObjPtr)]
+pub(in crate::object) enum GcObj<T: PyObjectPayload> {
+    PyInner(PyInner<Erased>),
+    PyObject(PyObject),
+    Py(Py<T>),
+}
+
+unsafe impl<T: PyObjectPayload> GcTrace for GcObj<T> {
+    fn trace(&self, tracer_fn: &mut TracerFn) {
+        match self {
+            GcObj::PyInner(v) => v.trace(tracer_fn),
+            GcObj::PyObject(v) => v.trace(tracer_fn),
+            GcObj::Py(v) => v.trace(tracer_fn),
+        }
+    }
+}
 /// use `trace()` to call on all owned ObjectRef
-/// 
+///
 /// # Safety
-/// 
+///
 /// see `trace()`'s requirement
 pub unsafe trait GcTrace {
     /// call tracer_fn for every object(childrens) owned by a Object
     /// # Safety
-    /// 
+    ///
     /// must make sure that every owned object(Every stored `PyObjectRef` to be exactly) is called with tracer_fn **at most once**.
     /// If some field is not called, the worst results is memory leak, but if some field is called repeatly, panic and deadlock can happen.
     ///
