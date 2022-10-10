@@ -410,6 +410,7 @@ impl WeakRefList {
             parent: inner_ptr,
             callback: UnsafeCell::new(callback),
             hash: Radium::new(crate::common::hash::SENTINEL),
+            is_dead: PyMutex::new(false)
         };
         let weak = PyRef::new_ref(obj, cls, dict);
         // SAFETY: we don't actually own the PyObjectWeaks inside `list`, and every time we take
@@ -466,6 +467,7 @@ impl WeakRefList {
                                 let _ = vm.invoke(&cb, (wr.clone(),));
                             });
                         }
+                        wr.set_dead();
                     }
                 })
             }
@@ -551,6 +553,7 @@ pub struct PyWeak {
     // this is treated as part of parent's mutex - you must hold that lock to access it
     callback: UnsafeCell<Option<PyObjectRef>>,
     pub(crate) hash: PyAtomic<crate::common::hash::PyHash>,
+    is_dead: PyMutex<bool>
 }
 
 #[cfg(feature = "gc")]
@@ -570,7 +573,15 @@ cfg_if::cfg_if! {
 }
 
 impl PyWeak {
+    /// set this Weak Ref to dead so further upgrade will not success
+    fn set_dead(&self){
+        *self.is_dead.lock() = true
+    }
     pub(crate) fn upgrade(&self) -> Option<PyObjectRef> {
+        // FIXME(discord9): somehow update PyWeak to return early here if pointee object is already dropped
+        if self.is_dead(){
+            return None;
+        }
         let guard = unsafe { self.parent.as_ref().lock() };
         let obj_ptr = guard.obj?;
         unsafe {
@@ -592,6 +603,9 @@ impl PyWeak {
     }
 
     pub(crate) fn is_dead(&self) -> bool {
+        if *self.is_dead.lock(){
+            return true;
+        }
         let guard = unsafe { self.parent.as_ref().lock() };
         guard.obj.is_none()
     }
