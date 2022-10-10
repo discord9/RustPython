@@ -1,4 +1,5 @@
 use crate::common::{boxvec::BoxVec, lock::PyMutex};
+use crate::object::gc::GLOBAL_COLLECTOR;
 use crate::{
     builtins::{
         asyncgenerator::PyAsyncGenWrappedValue,
@@ -345,6 +346,11 @@ impl ExecutingFrame<'_> {
         // Execute until return or exception:
         let instrs = &self.code.instructions;
         loop {
+            #[cfg(feature = "threading")]
+            GLOBAL_COLLECTOR.gc();
+            #[cfg(not(feature = "threading"))]
+            GLOBAL_COLLECTOR.with(|v| v.gc());
+            
             let idx = self.lasti() as usize;
             self.update_lasti(|i| *i += 1);
             let instr = &instrs[idx];
