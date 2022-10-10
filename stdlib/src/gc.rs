@@ -6,22 +6,25 @@ mod gc {
 
     #[pyfunction]
     fn collect(_args: FuncArgs, _vm: &VirtualMachine) -> i32 {
-        0
+        let ret: usize = rustpython_vm::object::gc::collect().into();
+        ret as i32
     }
 
     #[pyfunction]
     fn isenabled(_args: FuncArgs, _vm: &VirtualMachine) -> bool {
-        false
+        rustpython_vm::object::gc::isenabled()
     }
 
     #[pyfunction]
     fn enable(_args: FuncArgs, vm: &VirtualMachine) -> PyResult {
-        Err(vm.new_not_implemented_error("".to_owned()))
+        rustpython_vm::object::gc::enable();
+        Ok(vm.new_pyobj(true))
     }
 
     #[pyfunction]
     fn disable(_args: FuncArgs, vm: &VirtualMachine) -> PyResult {
-        Err(vm.new_not_implemented_error("".to_owned()))
+        rustpython_vm::object::gc::disable();
+        Ok(vm.new_pyobj(true))
     }
 
     #[pyfunction]
