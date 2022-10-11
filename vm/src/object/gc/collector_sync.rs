@@ -1,7 +1,7 @@
 use std::time::Instant;
 use std::{fmt, ops::Deref, ptr::NonNull};
 
-use crate::object::gc::{deadlock_handler, Color, GcObjPtr, GcStatus, GcTrace, GcObj, GcObjRef};
+use crate::object::gc::{deadlock_handler, Color, GcObj, GcObjPtr, GcObjRef, GcStatus, GcTrace};
 use crate::PyObject;
 
 use rustpython_common::{
@@ -119,7 +119,6 @@ impl std::fmt::Debug for CcSync {
 }
 
 // TODO: change to use PyInner<Erased> directly
-
 
 impl CcSync {
     thread_local! {
