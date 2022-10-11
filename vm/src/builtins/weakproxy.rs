@@ -14,6 +14,13 @@ pub struct PyWeakProxy {
     pub(crate) weak: PyRef<PyWeak>,
 }
 
+#[cfg(feature = "gc")]
+unsafe impl crate::object::gc::GcTrace for PyWeakProxy {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.weak.trace(tracer_fn);
+    }
+}
+
 impl PyPayload for PyWeakProxy {
     fn class(vm: &VirtualMachine) -> &'static Py<PyType> {
         vm.ctx.types.weakproxy_type
