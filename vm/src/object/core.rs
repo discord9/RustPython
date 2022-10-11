@@ -634,13 +634,14 @@ impl PyWeak {
 impl Drop for PyWeak {
     #[inline(always)]
     fn drop(&mut self) {
-        if self.is_dead(){
-            return
+        if self.is_dead() {
+            return;
         }
         // we do NOT have actual exclusive access!
         // no clue if doing this actually reduces chance of UB
-        let me: &Self = self;
-        me.drop_inner();
+        // let me: &Self = self;
+        // deallocate&drop is handle by garbage collector, don't do it here.
+        // me.drop_inner();
     }
 }
 
