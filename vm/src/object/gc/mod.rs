@@ -8,6 +8,9 @@ pub use collector_sync::GcResult;
 pub(crate) use collector_sync::{CcSync, GLOBAL_COLLECTOR};
 pub(crate) use header::{Color, GcHeader};
 pub(crate) use trace::{GcObjPtr, GcStatus, GcTrace, TracerFn};
+use crate::PyObject;
+type GcObj = PyObject;
+type GcObjRef<'a> = &'a GcObj;
 
 fn deadlock_handler() -> ! {
     error!("Dead lock!");
