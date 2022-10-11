@@ -1,4 +1,6 @@
 use crate::common::{boxvec::BoxVec, lock::PyMutex};
+#[cfg(feature = "gc")]
+use crate::object::gc::GLOBAL_COLLECTOR;
 use crate::{
     builtins::{
         asyncgenerator::PyAsyncGenWrappedValue,
@@ -349,6 +351,18 @@ impl ExecutingFrame<'_> {
             self.update_lasti(|i| *i += 1);
             let instr = &instrs[idx];
             let result = self.execute_instruction(instr, vm);
+            if matches!(instr, &bytecode::Instruction::ReturnValue) {
+                // only do gc if after certain instruction(to be decided), so to avoid strange bugs?
+                // it seems ReturnValue is safe enough & frequent enough to do gc() after execute it?
+                // &bytecode::Instruction::ReturnValue | &bytecode::Instruction::StoreLocal(..)
+                #[cfg(feature = "gc")]
+                {
+                    #[cfg(feature = "threading")]
+                    GLOBAL_COLLECTOR.gc();
+                    #[cfg(not(feature = "threading"))]
+                    GLOBAL_COLLECTOR.with(|v| v.gc());
+                }
+            }
             match result {
                 Ok(None) => continue,
                 Ok(Some(value)) => {
