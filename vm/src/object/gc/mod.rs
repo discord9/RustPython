@@ -4,11 +4,11 @@ mod collector_sync;
 mod header;
 mod trace;
 
+use crate::PyObject;
 pub use collector_sync::GcResult;
 pub(crate) use collector_sync::{CcSync, GLOBAL_COLLECTOR};
 pub(crate) use header::{Color, GcHeader};
 pub(crate) use trace::{GcObjPtr, GcStatus, GcTrace, TracerFn};
-use crate::PyObject;
 type GcObj = PyObject;
 type GcObjRef<'a> = &'a GcObj;
 

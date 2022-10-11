@@ -252,9 +252,7 @@ unsafe impl GcTrace for PyObject {
 impl From<&PyInner<Erased>> for &PyObject {
     fn from(inner: &PyInner<Erased>) -> Self {
         // Safety: PyObject is #[repr(transparent)], so cast is safe
-        unsafe {
-            NonNull::from(inner).cast::<PyObject>().as_ref()
-        }
+        unsafe { NonNull::from(inner).cast::<PyObject>().as_ref() }
     }
 }
 
@@ -647,9 +645,9 @@ impl Drop for PyWeak {
     fn drop(&mut self) {
         // we do NOT have actual exclusive access!
         // no clue if doing this actually reduces chance of UB
-        // let me: &Self = self;
+        let me: &Self = self;
         // deallocate&drop is handle by garbage collector, don't do it here.
-        // me.drop_inner();
+        me.drop_inner();
     }
 }
 
@@ -877,7 +875,6 @@ impl PyObjectRef {
 }
 
 impl PyObject {
-
     #[inline(always)]
     fn weak_ref_list(&self) -> Option<&WeakRefList> {
         Some(&self.0.weak_list)
@@ -1183,11 +1180,11 @@ impl PyObject {
                     ($ID: tt, $($TY: ty),*$(,)?) => {
                         $(
                             if TypeId::of::<$TY>()==$ID{
-                                std::stringify!($TY)
+                                String::from(std::stringify!($TY))
                             }
                         )else*
                         else{
-                            "Unknown type"
+                            format!("Unknown type, id={:?}", $ID)
                         }
                     };
                 }
