@@ -100,21 +100,6 @@ impl GcHeader {
         }
     }
 
-    pub fn try_pausing(&self) -> Option<PyRwLockReadGuard<()>> {
-        if CcSync::IS_GC_THREAD.with(|v| v.get()) {
-            // if is same thread, then this thread is already stop by gc itself,
-            // no need to block.
-            // and any call to do_pausing is probably from drop() or what so allow it to continue execute.
-            return None;
-        }
-        Some(
-            self.gc
-                .pause
-                .try_read()
-                .unwrap_or_else(|| deadlock_handler()),
-        )
-    }
-
     /// This function will block if is a garbage collect is happening
     pub fn do_pausing(&self) {
         if CcSync::IS_GC_THREAD.with(|v| v.get()) {

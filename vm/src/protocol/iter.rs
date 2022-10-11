@@ -15,9 +15,9 @@ where
     O: Borrow<PyObject>;
 
 #[cfg(feature = "gc")]
-unsafe impl<O: Borrow<PyObject>> crate::object::gc::GcTrace for PyIter<O> {
+unsafe impl<O: crate::object::gc::GcTrace + Borrow<PyObject>> crate::object::gc::GcTrace for PyIter<O> {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
-        self.0.as_object().trace(tracer_fn);
+        self.0.trace(tracer_fn);
     }
 }
 

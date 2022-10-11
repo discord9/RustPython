@@ -417,7 +417,7 @@ pub(crate) struct PyTupleIterator {
 #[cfg(feature = "gc")]
 unsafe impl crate::object::gc::GcTrace for PyTupleIterator {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
-        self.internal.lock().trace(tracer_fn)
+        self.internal.trace(tracer_fn)
     }
 }
 
