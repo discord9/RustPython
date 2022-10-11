@@ -29,16 +29,16 @@ pub trait GcObjPtr: GcTrace {
 }
 
 #[enum_dispatch(GcObjPtr)]
-pub(in crate::object) enum GcObj{
+pub(in crate::object) enum GcObj {
     PyInner(PyInner<Erased>),
-    PyObject(PyObject)
+    PyObject(PyObject),
 }
 
 unsafe impl GcTrace for GcObj {
     fn trace(&self, tracer_fn: &mut TracerFn) {
         match self {
             GcObj::PyInner(v) => v.trace(tracer_fn),
-            GcObj::PyObject(v) => v.trace(tracer_fn)
+            GcObj::PyObject(v) => v.trace(tracer_fn),
         }
     }
 }
