@@ -3,7 +3,7 @@ use rustpython_common::lock::{PyMutex, PyRwLock};
 
 use crate::object::gc::{deadlock_handler, header::GcHeader};
 use crate::object::{Erased, PyInner, PyObjectPayload};
-use crate::{AsObject, Py, PyObject, PyObjectRef, PyRef};
+use crate::{AsObject, PyObject, PyObjectRef, PyRef};
 use core::ptr::NonNull;
 
 /// indicate what to do with the object afer calling dec()
@@ -29,18 +29,16 @@ pub trait GcObjPtr: GcTrace {
 }
 
 #[enum_dispatch(GcObjPtr)]
-pub(in crate::object) enum GcObj<T: PyObjectPayload> {
+pub(in crate::object) enum GcObj{
     PyInner(PyInner<Erased>),
-    PyObject(PyObject),
-    Py(Py<T>),
+    PyObject(PyObject)
 }
 
-unsafe impl<T: PyObjectPayload> GcTrace for GcObj<T> {
+unsafe impl GcTrace for GcObj {
     fn trace(&self, tracer_fn: &mut TracerFn) {
         match self {
             GcObj::PyInner(v) => v.trace(tracer_fn),
-            GcObj::PyObject(v) => v.trace(tracer_fn),
-            GcObj::Py(v) => v.trace(tracer_fn),
+            GcObj::PyObject(v) => v.trace(tracer_fn)
         }
     }
 }
