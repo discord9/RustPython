@@ -14,6 +14,13 @@ pub struct PyStaticMethod {
     pub callable: PyMutex<PyObjectRef>,
 }
 
+#[cfg(feature = "gc")]
+unsafe impl crate::object::gc::GcTrace for PyStaticMethod {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.callable.trace(tracer_fn)
+    }
+}
+
 impl PyPayload for PyStaticMethod {
     fn class(vm: &VirtualMachine) -> &'static Py<PyType> {
         vm.ctx.types.staticmethod_type

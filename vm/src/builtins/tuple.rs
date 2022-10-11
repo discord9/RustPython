@@ -29,6 +29,13 @@ pub struct PyTuple {
     elements: Box<[PyObjectRef]>,
 }
 
+#[cfg(feature = "gc")]
+unsafe impl crate::object::gc::GcTrace for PyTuple {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.elements.trace(tracer_fn);
+    }
+}
+
 impl fmt::Debug for PyTuple {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // TODO: implement more informational, non-recursive Debug formatter
@@ -409,6 +416,13 @@ impl Iterable for PyTuple {
 #[derive(Debug)]
 pub(crate) struct PyTupleIterator {
     internal: PyMutex<PositionIterInternal<PyTupleRef>>,
+}
+
+#[cfg(feature = "gc")]
+unsafe impl crate::object::gc::GcTrace for PyTupleIterator {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.internal.trace(tracer_fn)
+    }
 }
 
 impl PyPayload for PyTupleIterator {

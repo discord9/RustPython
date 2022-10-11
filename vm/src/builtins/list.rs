@@ -32,6 +32,13 @@ pub struct PyList {
     elements: PyRwLock<Vec<PyObjectRef>>,
 }
 
+#[cfg(feature = "gc")]
+unsafe impl crate::object::gc::GcTrace for PyList {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.elements.trace(tracer_fn);
+    }
+}
+
 impl fmt::Debug for PyList {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // TODO: implement more detailed, non-recursive Debug formatter
@@ -527,6 +534,13 @@ pub struct PyListIterator {
     internal: PyMutex<PositionIterInternal<PyListRef>>,
 }
 
+#[cfg(feature = "gc")]
+unsafe impl crate::object::gc::GcTrace for PyListIterator {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.internal.trace(tracer_fn)
+    }
+}
+
 impl PyPayload for PyListIterator {
     fn class(vm: &VirtualMachine) -> &'static Py<PyType> {
         vm.ctx.types.list_iterator_type
@@ -570,6 +584,13 @@ impl IterNext for PyListIterator {
 #[derive(Debug)]
 pub struct PyListReverseIterator {
     internal: PyMutex<PositionIterInternal<PyListRef>>,
+}
+
+#[cfg(feature = "gc")]
+unsafe impl crate::object::gc::GcTrace for PyListReverseIterator {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.internal.trace(tracer_fn)
+    }
 }
 
 impl PyPayload for PyListReverseIterator {

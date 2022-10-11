@@ -16,6 +16,13 @@ pub struct PyZip {
     strict: PyAtomic<bool>,
 }
 
+#[cfg(feature = "gc")]
+unsafe impl crate::object::gc::GcTrace for PyZip {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.iterators.trace(tracer_fn);
+    }
+}
+
 impl PyPayload for PyZip {
     fn class(vm: &VirtualMachine) -> &'static Py<PyType> {
         vm.ctx.types.zip_type

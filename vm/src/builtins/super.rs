@@ -18,6 +18,14 @@ pub struct PySuper {
     obj: Option<(PyObjectRef, PyTypeRef)>,
 }
 
+#[cfg(feature = "gc")]
+unsafe impl crate::object::gc::GcTrace for PySuper {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.typ.trace(tracer_fn);
+        self.obj.trace(tracer_fn);
+    }
+}
+
 impl PyPayload for PySuper {
     fn class(vm: &VirtualMachine) -> &'static Py<PyType> {
         vm.ctx.types.super_type

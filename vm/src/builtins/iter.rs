@@ -10,6 +10,9 @@ use crate::{
     types::{IterNext, IterNextIterable},
     Context, Py, PyObject, PyObjectRef, PyPayload, PyResult, VirtualMachine,
 };
+
+#[cfg(feature = "gc")]
+use crate::object::gc::GcTrace;
 use rustpython_common::{
     lock::{PyMutex, PyRwLock, PyRwLockUpgradableReadGuard},
     static_cell,
@@ -24,10 +27,27 @@ pub enum IterStatus<T> {
     Exhausted,
 }
 
+#[cfg(feature = "gc")]
+unsafe impl<T: GcTrace> crate::object::gc::GcTrace for IterStatus<T> {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        match self {
+            IterStatus::Active(ref r) => r.trace(tracer_fn),
+            IterStatus::Exhausted => (),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct PositionIterInternal<T> {
     pub status: IterStatus<T>,
     pub position: usize,
+}
+
+#[cfg(feature = "gc")]
+unsafe impl<T: GcTrace> crate::object::gc::GcTrace for PositionIterInternal<T> {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.status.trace(tracer_fn)
+    }
 }
 
 impl<T> PositionIterInternal<T> {
@@ -166,6 +186,13 @@ pub struct PySequenceIterator {
     internal: PyMutex<PositionIterInternal<PyObjectRef>>,
 }
 
+#[cfg(feature = "gc")]
+unsafe impl crate::object::gc::GcTrace for PySequenceIterator {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.internal.trace(tracer_fn)
+    }
+}
+
 impl PyPayload for PySequenceIterator {
     fn class(vm: &VirtualMachine) -> &'static Py<PyType> {
         vm.ctx.types.iter_type
@@ -227,6 +254,14 @@ impl IterNext for PySequenceIterator {
 pub struct PyCallableIterator {
     sentinel: PyObjectRef,
     status: PyRwLock<IterStatus<ArgCallable>>,
+}
+
+#[cfg(feature = "gc")]
+unsafe impl crate::object::gc::GcTrace for PyCallableIterator {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.sentinel.trace(tracer_fn);
+        self.status.trace(tracer_fn)
+    }
 }
 
 impl PyPayload for PyCallableIterator {

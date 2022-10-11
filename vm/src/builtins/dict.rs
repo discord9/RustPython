@@ -2,6 +2,8 @@ use super::{
     set::PySetInner, IterStatus, PositionIterInternal, PyBaseExceptionRef, PyGenericAlias,
     PyMappingProxy, PySet, PyStrRef, PyTupleRef, PyType, PyTypeRef,
 };
+#[cfg(feature = "gc")]
+use crate::object::gc::{GcTrace, TracerFn};
 use crate::{
     atomic_func,
     builtins::{
@@ -45,6 +47,14 @@ pub type DictContentType = dictdatatype::Dict;
 pub struct PyDict {
     entries: DictContentType,
 }
+
+#[cfg(feature = "gc")]
+unsafe impl GcTrace for PyDict {
+    fn trace(&self, tracer_fn: &mut TracerFn) {
+        self.entries.trace(tracer_fn)
+    }
+}
+
 pub type PyDictRef = PyRef<PyDict>;
 
 impl fmt::Debug for PyDict {

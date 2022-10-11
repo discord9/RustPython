@@ -19,6 +19,15 @@ pub struct PySlice {
     pub step: Option<PyObjectRef>,
 }
 
+#[cfg(feature = "gc")]
+unsafe impl crate::object::gc::GcTrace for PySlice {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.start.trace(tracer_fn);
+        self.stop.trace(tracer_fn);
+        self.step.trace(tracer_fn);
+    }
+}
+
 impl PyPayload for PySlice {
     fn class(vm: &VirtualMachine) -> &'static Py<PyType> {
         vm.ctx.types.slice_type

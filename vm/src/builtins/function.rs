@@ -36,6 +36,24 @@ pub struct PyFunction {
     jitted_code: OnceCell<CompiledCode>,
 }
 
+#[cfg(feature = "gc")]
+unsafe impl crate::object::gc::GcTrace for PyFunction {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.code.trace(tracer_fn);
+        self.globals.trace(tracer_fn);
+        if let Some(closure) = &self.closure {
+            for elem in closure.as_ref() {
+                elem.trace(tracer_fn);
+            }
+        }
+
+        self.defaults_and_kwdefaults.trace(tracer_fn);
+
+        self.name.trace(tracer_fn);
+        self.qualname.trace(tracer_fn);
+    }
+}
+
 impl PyFunction {
     pub(crate) fn new(
         code: PyRef<PyCode>,
@@ -459,6 +477,14 @@ pub struct PyBoundMethod {
     function: PyObjectRef,
 }
 
+#[cfg(feature = "gc")]
+unsafe impl crate::object::gc::GcTrace for PyBoundMethod {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.object.trace(tracer_fn);
+        self.function.trace(tracer_fn);
+    }
+}
+
 impl Callable for PyBoundMethod {
     type Args = FuncArgs;
     #[inline]
@@ -605,6 +631,12 @@ impl PyPayload for PyBoundMethod {
 #[derive(Debug, Default)]
 pub(crate) struct PyCell {
     contents: PyMutex<Option<PyObjectRef>>,
+}
+#[cfg(feature = "gc")]
+unsafe impl crate::object::gc::GcTrace for PyCell {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.contents.trace(tracer_fn)
+    }
 }
 pub(crate) type PyCellRef = PyRef<PyCell>;
 

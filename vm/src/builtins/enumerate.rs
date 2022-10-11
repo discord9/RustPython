@@ -20,6 +20,13 @@ pub struct PyEnumerate {
     iterator: PyIter,
 }
 
+#[cfg(feature = "gc")]
+unsafe impl crate::object::gc::GcTrace for PyEnumerate {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.iterator.trace(tracer_fn);
+    }
+}
+
 impl PyPayload for PyEnumerate {
     fn class(vm: &VirtualMachine) -> &'static Py<PyType> {
         vm.ctx.types.enumerate_type
@@ -84,6 +91,13 @@ impl IterNext for PyEnumerate {
 #[derive(Debug)]
 pub struct PyReverseSequenceIterator {
     internal: PyMutex<PositionIterInternal<PyObjectRef>>,
+}
+
+#[cfg(feature = "gc")]
+unsafe impl crate::object::gc::GcTrace for PyReverseSequenceIterator {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.internal.trace(tracer_fn)
+    }
 }
 
 impl PyPayload for PyReverseSequenceIterator {

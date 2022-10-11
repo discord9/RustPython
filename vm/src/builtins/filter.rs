@@ -17,6 +17,14 @@ pub struct PyFilter {
     iterator: PyIter,
 }
 
+#[cfg(feature = "gc")]
+unsafe impl crate::object::gc::GcTrace for PyFilter {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.predicate.trace(tracer_fn);
+        self.iterator.trace(tracer_fn);
+    }
+}
+
 impl PyPayload for PyFilter {
     fn class(vm: &VirtualMachine) -> &'static Py<PyType> {
         vm.ctx.types.filter_type

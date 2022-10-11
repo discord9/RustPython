@@ -40,6 +40,13 @@ pub struct PyBuffer {
     methods: &'static BufferMethods,
 }
 
+#[cfg(feature = "gc")]
+unsafe impl crate::object::gc::GcTrace for PyBuffer {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.obj.trace(tracer_fn)
+    }
+}
+
 impl PyBuffer {
     pub fn new(obj: PyObjectRef, desc: BufferDescriptor, methods: &'static BufferMethods) -> Self {
         let zelf = Self {

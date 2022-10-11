@@ -35,6 +35,13 @@ pub struct PySet {
     pub(super) inner: PySetInner,
 }
 
+#[cfg(feature = "gc")]
+unsafe impl crate::object::gc::GcTrace for PySet {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.inner.trace(tracer_fn)
+    }
+}
+
 impl PySet {
     pub fn new_ref(ctx: &Context) -> PyRef<Self> {
         // Initialized empty, as calling __hash__ is required for adding each object to the set
@@ -153,7 +160,15 @@ impl PyPayload for PyFrozenSet {
 
 #[derive(Default, Clone)]
 pub(super) struct PySetInner {
-    content: PyRc<SetContentType>,
+    pub(crate) content: PyRc<SetContentType>,
+}
+
+#[cfg(feature = "gc")]
+unsafe impl crate::object::gc::GcTrace for PySetInner {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        // FIXME(discord9): check access through a PyRc is ok
+        self.content.trace(tracer_fn);
+    }
 }
 
 impl PySetInner {
