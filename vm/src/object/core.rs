@@ -579,7 +579,8 @@ impl PyWeak {
     }
     pub(crate) fn upgrade(&self) -> Option<PyObjectRef> {
         // FIXME(discord9): somehow update PyWeak to return early here if pointee object is already dropped
-        if self.is_dead() {
+        let is_dead = self.is_dead.lock();
+        if *is_dead {
             return None;
         }
         let guard = unsafe { self.parent.as_ref().lock() };
@@ -603,7 +604,9 @@ impl PyWeak {
     }
 
     pub(crate) fn is_dead(&self) -> bool {
-        if *self.is_dead.lock() {
+        // hold lock to is_dead so other droping may not happen
+        let is_dead = self.is_dead.lock();
+        if *is_dead {
             return true;
         }
         let guard = unsafe { self.parent.as_ref().lock() };
@@ -634,9 +637,6 @@ impl PyWeak {
 impl Drop for PyWeak {
     #[inline(always)]
     fn drop(&mut self) {
-        if self.is_dead() {
-            return;
-        }
         // we do NOT have actual exclusive access!
         // no clue if doing this actually reduces chance of UB
         // let me: &Self = self;
