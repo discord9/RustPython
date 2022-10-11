@@ -553,7 +553,7 @@ pub struct PyWeak {
     // this is treated as part of parent's mutex - you must hold that lock to access it
     callback: UnsafeCell<Option<PyObjectRef>>,
     pub(crate) hash: PyAtomic<crate::common::hash::PyHash>,
-    is_dead: PyMutex<bool>,
+    pub(crate) is_dead: PyMutex<bool>,
 }
 
 #[cfg(feature = "gc")]
@@ -634,6 +634,9 @@ impl PyWeak {
 impl Drop for PyWeak {
     #[inline(always)]
     fn drop(&mut self) {
+        if self.is_dead(){
+            return
+        }
         // we do NOT have actual exclusive access!
         // no clue if doing this actually reduces chance of UB
         let me: &Self = self;
