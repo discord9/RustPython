@@ -1174,7 +1174,7 @@ impl PyObject {
             }
 
             if !ptr.as_ref().header().check_set_dealloc_only() {
-                warn!("Can't dealloc a object!");
+                error!("Can't dealloc a object!");
                 // prevent heap corruption by return early
                 return;
             }
