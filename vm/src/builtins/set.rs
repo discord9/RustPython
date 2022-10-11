@@ -38,11 +38,7 @@ pub struct PySet {
 #[cfg(feature = "gc")]
 unsafe impl crate::object::gc::GcTrace for PySet {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
-        let dict = &self.inner.content;
-        let entries = &dict.read().entries;
-        for entry in entries.iter().flatten() {
-            tracer_fn(entry.key.as_ref())
-        }
+        self.inner.trace(tracer_fn)
     }
 }
 
@@ -165,6 +161,14 @@ impl PyPayload for PyFrozenSet {
 #[derive(Default, Clone)]
 pub(super) struct PySetInner {
     pub(crate) content: PyRc<SetContentType>,
+}
+
+#[cfg(feature = "gc")]
+unsafe impl crate::object::gc::GcTrace for PySetInner {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        // FIXME(discord9): check access through a PyRc is ok
+        self.content.trace(tracer_fn);
+    }
 }
 
 impl PySetInner {

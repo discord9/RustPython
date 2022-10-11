@@ -50,6 +50,7 @@ unsafe impl crate::object::gc::GcTrace for PyFunction {
         self.defaults_and_kwdefaults.trace(tracer_fn);
 
         self.name.trace(tracer_fn);
+        self.qualname.trace(tracer_fn);
     }
 }
 

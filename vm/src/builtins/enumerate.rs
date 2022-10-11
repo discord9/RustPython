@@ -96,7 +96,7 @@ pub struct PyReverseSequenceIterator {
 #[cfg(feature = "gc")]
 unsafe impl crate::object::gc::GcTrace for PyReverseSequenceIterator {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
-        self.internal.lock().trace(tracer_fn)
+        self.internal.trace(tracer_fn)
     }
 }
 
