@@ -16,7 +16,7 @@ use rustpython_common::{
 pub struct GcHeader {
     ref_cnt: PyAtomic<usize>,
     color: PyMutex<Color>,
-    buffered: PyMutex<bool>,
+    pub(crate) buffered: PyMutex<bool>,
     is_drop: PyMutex<bool>,
     /// check for soundness
     is_dealloc: PyMutex<bool>,
