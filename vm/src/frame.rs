@@ -347,18 +347,22 @@ impl ExecutingFrame<'_> {
         // Execute until return or exception:
         let instrs = &self.code.instructions;
         loop {
-            #[cfg(feature = "gc")]
-            {
-                #[cfg(feature = "threading")]
-                GLOBAL_COLLECTOR.gc();
-                #[cfg(not(feature = "threading"))]
-                GLOBAL_COLLECTOR.with(|v| v.gc());
-            }
-
             let idx = self.lasti() as usize;
             self.update_lasti(|i| *i += 1);
             let instr = &instrs[idx];
             let result = self.execute_instruction(instr, vm);
+            if matches!(instr, &bytecode::Instruction::ReturnValue){
+                // only do gc if after certain instruction(to be decided), so to avoid strange bugs?
+                // it seems ReturnValue is safe enough& frequent enough to do gc() after execute it?
+                //  | &bytecode::Instruction::StoreLocal(..)
+                #[cfg(feature = "gc")]
+                {
+                    #[cfg(feature = "threading")]
+                    GLOBAL_COLLECTOR.gc();
+                    #[cfg(not(feature = "threading"))]
+                    GLOBAL_COLLECTOR.with(|v| v.gc());
+                }
+            }
             match result {
                 Ok(None) => continue,
                 Ok(Some(value)) => {
