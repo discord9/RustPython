@@ -17,7 +17,6 @@ pub enum GcStatus {
     ShouldKeep,
 }
 
-#[enum_dispatch]
 pub trait GcObjPtr: GcTrace {
     fn inc(&self);
     fn dec(&self) -> GcStatus;
@@ -28,20 +27,6 @@ pub trait GcObjPtr: GcTrace {
     fn as_ptr(&self) -> NonNull<dyn GcObjPtr>;
 }
 
-#[enum_dispatch(GcObjPtr)]
-pub(in crate::object) enum GcObj {
-    PyInner(PyInner<Erased>),
-    PyObject(PyObject),
-}
-
-unsafe impl GcTrace for GcObj {
-    fn trace(&self, tracer_fn: &mut TracerFn) {
-        match self {
-            GcObj::PyInner(v) => v.trace(tracer_fn),
-            GcObj::PyObject(v) => v.trace(tracer_fn),
-        }
-    }
-}
 /// use `trace()` to call on all owned ObjectRef
 ///
 /// # Safety
@@ -67,7 +52,7 @@ pub unsafe trait GcTrace {
 
 /// A `TracerFn` is a callback function that is invoked for each `PyGcObjectRef` owned
 /// by an instance of something.
-pub type TracerFn<'a> = dyn FnMut(&dyn GcObjPtr) + 'a;
+pub type TracerFn<'a> = dyn FnMut(&PyObject) + 'a;
 
 unsafe impl GcTrace for PyObjectRef {
     #[inline]
