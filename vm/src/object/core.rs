@@ -1169,7 +1169,91 @@ impl PyObject {
         {
             debug_assert!(ptr.as_ref().header().is_drop());
             if ptr.as_ref().header().is_dealloc() {
+                macro_rules! show_typeid {
+                    ($ID: tt, $($TY: ty),*$(,)?) => {
+                        $(
+                            if TypeId::of::<$TY>()==$ID{
+                                std::stringify!($TY)
+                            }
+                        )else*
+                        else{
+                            "Unknown type"
+                        }
+                    };
+                }
                 error!("Double deallocate!");
+                let tid = ptr.as_ref().0.typeid;
+                use crate::builtins::iter::{PyCallableIterator, PySequenceIterator};
+                use crate::builtins::{
+                    enumerate::PyReverseSequenceIterator,
+                    function::PyCell,
+                    list::{PyListIterator, PyListReverseIterator},
+                    memory::PyMemoryViewIterator,
+                    tuple::PyTupleIterator,
+                };
+                use crate::builtins::{
+                    PyBoundMethod, PyDict, PyEnumerate, PyFilter, PyFunction, PyList,
+                    PyMappingProxy, PyProperty, PySet, PySlice, PyStaticMethod, PySuper,
+                    PyTraceback, PyTuple, PyType, PyWeakProxy, PyZip,
+                };
+                use crate::function::{ArgCallable, ArgIterable, ArgMapping, ArgSequence};
+                use crate::protocol::{
+                    PyBuffer, PyIter, PyIterIter, PyIterReturn, PyMapping, PyNumber, PySequence,
+                };
+                error!(
+                    "typeid={:?}",
+                    show_typeid!(
+                        tid, // builtin types
+                        // PyRange, PyStr is acyclic, therefore no trace needed for them
+                        PyBoundMethod,
+                        PyDict,
+                        PyEnumerate,
+                        PyFilter,
+                        PyFunction,
+                        PyList,
+                        PyMappingProxy,
+                        PyProperty,
+                        PySet,
+                        PySlice,
+                        PyStaticMethod,
+                        PySuper,
+                        PyTraceback,
+                        PyTuple,
+                        PyType,
+                        PyWeakProxy,
+                        PyZip,
+                        // misc
+                        PyCell,
+                        // iter in iter.rs
+                        PySequenceIterator,
+                        PyCallableIterator,
+                        // iter on types
+                        // PyList's iter
+                        PyListIterator,
+                        PyListReverseIterator,
+                        // PyTuple's iter
+                        PyTupleIterator,
+                        // PyEnumerate's iter
+                        PyReverseSequenceIterator,
+                        // PyMemory's iter
+                        PyMemoryViewIterator,
+                        // function/Arg protocol
+                        ArgCallable,
+                        ArgIterable,
+                        ArgMapping,
+                        ArgSequence,
+                        // protocol
+                        // struct like
+                        PyBuffer,
+                        PyIter,
+                        // FIXME(discord9): confirm this is ok to do
+                        PyIterIter<Erased>,
+                        PyIterReturn,
+                        PyMapping,
+                        PyNumber,
+                        PySequence
+                    )
+                );
                 return;
             }
 
