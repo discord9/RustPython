@@ -246,11 +246,13 @@ impl CcSync {
     fn possible_root(&self, obj: ObjRef) {
         if obj.header().color() != Color::Purple {
             obj.header().set_color(Color::Purple);
-            if !obj.header().buffered() {
-                let _lock = obj.header().try_pausing();
+            // prevent add to buffer for multiple times
+            let mut buffered = obj.header().buffered.lock();
+            if !*buffered {
+                // let _lock = obj.header().try_pausing();
                 // lock here to serialize access to root&gc
                 let mut roots = self.roots.lock();
-                obj.header().set_buffered(true);
+                *buffered = true;
                 roots.push(obj.as_ptr().into());
             }
         }
