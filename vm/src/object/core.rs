@@ -175,7 +175,7 @@ unsafe impl GcTrace for PyInner<Erased> {
         use crate::builtins::{
             PyBoundMethod, PyDict, PyEnumerate, PyFilter, PyFunction, PyList, PyMappingProxy,
             PyProperty, PySet, PySlice, PyStaticMethod, PySuper, PyTraceback, PyTuple, PyType,
-            PyZip,
+            PyWeakProxy, PyZip,
         };
         use crate::function::{ArgCallable, ArgIterable, ArgMapping, ArgSequence};
         use crate::protocol::{
@@ -190,7 +190,6 @@ unsafe impl GcTrace for PyInner<Erased> {
             PyFilter,
             PyFunction,
             PyList,
-            PyDict,
             PyMappingProxy,
             PyProperty,
             PySet,
@@ -199,8 +198,8 @@ unsafe impl GcTrace for PyInner<Erased> {
             PySuper,
             PyTraceback,
             PyTuple,
-            // FIXME(discord9): PyType's trace cause dead lock
             PyType,
+            PyWeakProxy,
             PyZip,
             // misc
             PyCell,
@@ -1169,7 +1168,10 @@ impl PyObject {
         #[cfg(feature = "gc")]
         {
             debug_assert!(ptr.as_ref().header().is_drop());
-            debug_assert!(!ptr.as_ref().header().is_dealloc());
+            if ptr.as_ref().header().is_dealloc() {
+                error!("Double deallocate!");
+                return;
+            }
 
             if !ptr.as_ref().header().check_set_dealloc_only() {
                 warn!("Can't dealloc a object!");
