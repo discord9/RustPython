@@ -249,16 +249,25 @@ unsafe impl GcTrace for PyObject {
     }
 }
 
+impl From<&PyInner<Erased>> for &PyObject {
+    fn from(inner: &PyInner<Erased>) -> Self {
+        // Safety: PyObject is #[repr(transparent)], so cast is safe
+        unsafe {
+            NonNull::from(inner).cast::<PyObject>().as_ref()
+        }
+    }
+}
+
 #[cfg(feature = "gc")]
 impl GcObjPtr for PyInner<Erased> {
     /// call increment() of gc
     fn inc(&self) {
-        self.header().gc.increment(self)
+        self.header().gc.increment(self.into())
     }
 
     /// call decrement() of gc
     fn dec(&self) -> GcStatus {
-        unsafe { self.header().gc.decrement(self) }
+        unsafe { self.header().gc.decrement(self.into()) }
     }
 
     fn rc(&self) -> usize {
@@ -868,6 +877,7 @@ impl PyObjectRef {
 }
 
 impl PyObject {
+
     #[inline(always)]
     fn weak_ref_list(&self) -> Option<&WeakRefList> {
         Some(&self.0.weak_list)

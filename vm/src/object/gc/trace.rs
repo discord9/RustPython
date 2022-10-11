@@ -1,9 +1,8 @@
-use enum_dispatch::enum_dispatch;
 use rustpython_common::lock::{PyMutex, PyRwLock};
 
-use crate::object::gc::{deadlock_handler, header::GcHeader};
-use crate::object::{Erased, PyInner, PyObjectPayload};
-use crate::{AsObject, PyObject, PyObjectRef, PyRef};
+use crate::object::gc::{deadlock_handler, header::GcHeader, GcObjRef};
+use crate::object::PyObjectPayload;
+use crate::{AsObject, PyObjectRef, PyRef};
 use core::ptr::NonNull;
 
 /// indicate what to do with the object afer calling dec()
@@ -52,12 +51,12 @@ pub unsafe trait GcTrace {
 
 /// A `TracerFn` is a callback function that is invoked for each `PyGcObjectRef` owned
 /// by an instance of something.
-pub type TracerFn<'a> = dyn FnMut(&PyObject) + 'a;
+pub type TracerFn<'a> = dyn FnMut(GcObjRef) + 'a;
 
 unsafe impl GcTrace for PyObjectRef {
     #[inline]
     fn trace(&self, tracer_fn: &mut TracerFn) {
-        tracer_fn(self.as_ref())
+        tracer_fn(self)
     }
 }
 

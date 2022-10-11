@@ -1,7 +1,7 @@
 use std::time::Instant;
 use std::{fmt, ops::Deref, ptr::NonNull};
 
-use crate::object::gc::{deadlock_handler, Color, GcObjPtr, GcStatus};
+use crate::object::gc::{deadlock_handler, Color, GcObjPtr, GcStatus, GcTrace, GcObj, GcObjRef};
 use crate::PyObject;
 
 use rustpython_common::{
@@ -97,7 +97,7 @@ impl From<GcResult> for usize {
 }
 
 pub struct CcSync {
-    roots: PyMutex<Vec<WrappedPtr<dyn GcObjPtr>>>,
+    roots: PyMutex<Vec<WrappedPtr<GcObj>>>,
     /// for stop the world, will be try to check lock every time deref ObjecteRef
     /// to achive pausing
     pub pause: PyRwLock<()>,
@@ -119,7 +119,7 @@ impl std::fmt::Debug for CcSync {
 }
 
 // TODO: change to use PyInner<Erased> directly
-type ObjRef<'a> = &'a dyn GcObjPtr;
+
 
 impl CcSync {
     thread_local! {
@@ -184,7 +184,7 @@ impl CcSync {
             false
         }
     }
-    pub fn increment(&self, obj: ObjRef) {
+    pub fn increment(&self, obj: GcObjRef) {
         if obj.header().is_leaked() {
             // by define a leaked object's rc should not change?
             return;
@@ -197,7 +197,7 @@ impl CcSync {
     /// # Safety
     /// if the last ref to a object call decrement() on object,
     /// then this object should be considered freed.
-    pub unsafe fn decrement(&self, obj: ObjRef) -> GcStatus {
+    pub unsafe fn decrement(&self, obj: GcObjRef) -> GcStatus {
         if obj.header().is_leaked() {
             // a leaked object should always keep
             return GcStatus::ShouldKeep;
@@ -222,7 +222,7 @@ impl CcSync {
         }
     }
 
-    unsafe fn release(&self, obj: ObjRef) -> GcStatus {
+    unsafe fn release(&self, obj: GcObjRef) -> GcStatus {
         // because drop obj itself will drop all ObjRef store by object itself once more,
         // so balance out in here
         // by doing nothing
@@ -244,7 +244,7 @@ impl CcSync {
         }
     }
 
-    fn possible_root(&self, obj: ObjRef) {
+    fn possible_root(&self, obj: GcObjRef) {
         if obj.header().color() != Color::Purple {
             obj.header().set_color(Color::Purple);
             // prevent add to buffer for multiple times
@@ -254,7 +254,7 @@ impl CcSync {
                 // lock here to serialize access to root&gc
                 let mut roots = self.roots.lock();
                 *buffered = true;
-                roots.push(obj.as_ptr().into());
+                roots.push(NonNull::from(obj).into());
             }
         }
     }
@@ -379,14 +379,14 @@ impl CcSync {
 
         len_white
     }
-    fn collect_white(&self, obj: ObjRef, white: &mut Vec<NonNull<dyn GcObjPtr>>) {
+    fn collect_white(&self, obj: GcObjRef, white: &mut Vec<NonNull<GcObj>>) {
         if obj.header().color() == Color::White && !obj.header().buffered() {
             obj.header().set_color(Color::BlackFree);
             obj.trace(&mut |ch| self.collect_white(ch, white));
-            white.push(obj.as_ptr());
+            white.push(NonNull::from(obj));
         }
     }
-    fn mark_gray(&self, obj: ObjRef) {
+    fn mark_gray(&self, obj: GcObjRef) {
         if obj.header().color() != Color::Gray {
             obj.header().set_color(Color::Gray);
             obj.trace(&mut |ch| {
@@ -395,7 +395,7 @@ impl CcSync {
             });
         }
     }
-    fn scan(&self, obj: ObjRef) {
+    fn scan(&self, obj: GcObjRef) {
         if obj.header().color() == Color::Gray {
             if obj.rc() > 0 {
                 self.scan_black(obj)
@@ -407,7 +407,7 @@ impl CcSync {
             }
         }
     }
-    fn scan_black(&self, obj: ObjRef) {
+    fn scan_black(&self, obj: GcObjRef) {
         obj.header().set_color(Color::Black);
         obj.trace(&mut |ch| {
             ch.header().inc();
