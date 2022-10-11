@@ -1173,11 +1173,12 @@ impl PyObject {
     pub(in crate::object) unsafe fn dealloc_only(ptr: NonNull<PyObject>) {
         // sanity check
         #[cfg(feature = "gc")]
+        #[allow(unused)]
         {
             debug_assert!(ptr.as_ref().header().is_drop());
             if ptr.as_ref().header().is_dealloc() {
                 macro_rules! show_typeid {
-                    ($ID: tt, $($TY: ty),*$(,)?) => {
+                    ($ID: tt: $($TY: ty),*$(,)?) => {
                         $(
                             if TypeId::of::<$TY>()==$ID{
                                 String::from(std::stringify!($TY))
@@ -1199,9 +1200,14 @@ impl PyObject {
                     tuple::PyTupleIterator,
                 };
                 use crate::builtins::{
-                    PyBoundMethod, PyDict, PyEnumerate, PyFilter, PyFunction, PyList,
-                    PyMappingProxy, PyProperty, PySet, PySlice, PyStaticMethod, PySuper,
-                    PyTraceback, PyTuple, PyType, PyWeakProxy, PyZip,
+                    PyArithmeticError, PyAssertionError, PyAsyncGen, PyAttributeError,
+                    PyBaseException, PyBaseExceptionRef, PyBaseObject, PyBlockingIOError, PyBool,
+                    PyBoundMethod, PyBrokenPipeError, PyBufferError, PyByteArray, PyBytes,
+                    PyBytesRef, PyBytesWarning, PyChildProcessError, PyClassMethod, PyCode,
+                    PyComplex, PyConnectionAbortedError, PyConnectionError,
+                    PyConnectionRefusedError, PyDict, PyEnumerate, PyFilter, PyFunction, PyList,
+                    PyMappingProxy, PyProperty, PyRange, PySet, PySlice, PyStaticMethod, PyStr,
+                    PySuper, PyTraceback, PyTuple, PyType, PyWeakProxy, PyZip,
                 };
                 use crate::function::{ArgCallable, ArgIterable, ArgMapping, ArgSequence};
                 use crate::protocol::{
@@ -1210,9 +1216,30 @@ impl PyObject {
                 error!(
                     "typeid={:?}",
                     show_typeid!(
-                        tid, // builtin types
-                        // PyRange, PyStr is acyclic, therefore no trace needed for them
+                        tid: // builtin types
+                        PyArithmeticError,
+                        PyAssertionError,
+                        PyAsyncGen,
+                        PyAttributeError,
+                        PyBaseException,
+                        PyBaseExceptionRef,
+                        PyBaseObject,
+                        PyBlockingIOError,
+                        PyBool,
                         PyBoundMethod,
+                        PyBrokenPipeError,
+                        PyBufferError,
+                        PyByteArray,
+                        PyBytes,
+                        PyBytesRef,
+                        PyBytesWarning,
+                        PyChildProcessError,
+                        PyClassMethod,
+                        PyCode,
+                        PyComplex,
+                        PyConnectionAbortedError,
+                        PyConnectionError,
+                        PyConnectionRefusedError,
                         PyDict,
                         PyEnumerate,
                         PyFilter,
@@ -1220,9 +1247,11 @@ impl PyObject {
                         PyList,
                         PyMappingProxy,
                         PyProperty,
+                        PyRange,
                         PySet,
                         PySlice,
                         PyStaticMethod,
+                        PyStr,
                         PySuper,
                         PyTraceback,
                         PyTuple,

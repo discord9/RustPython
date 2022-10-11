@@ -217,6 +217,7 @@ impl CcSync {
             }
         } else {
             // FIXME(discord9): confirm if rc==0 then should drop
+            // This is for Rust's RAII caused ref cycle's drop
             GcStatus::ShouldDrop
         }
     }
