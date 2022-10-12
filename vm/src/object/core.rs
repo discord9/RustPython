@@ -202,8 +202,10 @@ unsafe impl GcTrace for PyInner<Erased> {
             PyWeakProxy,
             PyZip,
             // misc
+            // causing dead lock
             PyCell,
             // iter in iter.rs
+            // seems to cause dead lock
             PySequenceIterator,
             PyCallableIterator,
             // iter on types
@@ -211,6 +213,7 @@ unsafe impl GcTrace for PyInner<Erased> {
             PyListIterator,
             PyListReverseIterator,
             // PyTuple's iter
+            // causing dead lock
             PyTupleIterator,
             // PyEnumerate's iter
             PyReverseSequenceIterator,
@@ -276,8 +279,8 @@ impl GcObjPtr for PyInner<Erased> {
         &self.header
     }
 
-    fn as_ptr(&self) -> NonNull<dyn GcObjPtr> {
-        NonNull::from(self)
+    unsafe fn as_ptr(&self) -> NonNull<PyObject> {
+        NonNull::from(self).cast::<PyObject>()
     }
 }
 
@@ -301,7 +304,7 @@ impl GcObjPtr for PyObject {
         self.0.header()
     }
 
-    fn as_ptr(&self) -> NonNull<dyn GcObjPtr> {
+    unsafe fn as_ptr(&self) -> NonNull<PyObject> {
         self.0.as_ptr()
     }
 }
@@ -326,8 +329,8 @@ impl<T: PyObjectPayload> GcObjPtr for Py<T> {
         self.as_object().0.header()
     }
 
-    fn as_ptr(&self) -> NonNull<dyn GcObjPtr> {
-        self.as_object().0.as_ptr()
+    unsafe fn as_ptr(&self) -> NonNull<PyObject> {
+        self.as_object().as_ptr()
     }
 }
 

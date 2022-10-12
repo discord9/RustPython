@@ -1,8 +1,8 @@
-use rustpython_common::lock::{PyMutex, PyRwLock};
+use rustpython_common::lock::{PyMutex, PyRwLock, PyMutexGuard};
 
-use crate::object::gc::{deadlock_handler, header::GcHeader, GcObjRef};
+use crate::object::gc::{deadlock_handler, header::GcHeader, GcObjRef, LOCK_TIMEOUT};
 use crate::object::PyObjectPayload;
-use crate::{AsObject, PyObjectRef, PyRef};
+use crate::{AsObject, PyObjectRef, PyRef, PyObject};
 use core::ptr::NonNull;
 
 /// indicate what to do with the object afer calling dec()
@@ -23,7 +23,7 @@ pub trait GcObjPtr: GcTrace {
     /// return object header
     fn header(&self) -> &GcHeader;
     // as a NonNull pointer to a gc managed object
-    fn as_ptr(&self) -> NonNull<dyn GcObjPtr>;
+    unsafe fn as_ptr(&self) -> NonNull<PyObject>;
 }
 
 /// use `trace()` to call on all owned ObjectRef
@@ -109,12 +109,33 @@ unsafe impl<T: GcTrace> GcTrace for PyMutex<T> {
     #[inline]
     fn trace(&self, tracer_fn: &mut TracerFn) {
         // FIXME(discord9): check if this may cause a deadlock or not
+        // TODO: acquire raw pointer and iter over them?(That would be both unsafe&unsound if not in gc pausing or done by a)
+        #[cfg(feature = "threading")]
+        match self.try_lock() {
+            Some(inner) => {
+                // instead of the sound way of getting a lock and trace
+                inner.trace(tracer_fn);
+            },
+            None => {
+                // that is likely a cause of wrong `trace()` impl
+                error!("Could be in dead lock.");
+                // can't find better way to trace with that
+                // not kill the thread for now(So to test our unsound way of tracing)
+                use backtrace::Backtrace;
+                let bt = Backtrace::new();
+                panic!("Dead lock on {}: \n--------\n{:?}", std::any::type_name::<T>(), bt);
+                // deadlock_handler()
+            }
+        }
+
+        #[cfg(not(feature = "threading"))]
         match self.try_lock() {
             Some(v) => v.trace(tracer_fn),
             None => {
+                // that is likely a cause of wrong `trace()` impl
                 error!("Could be in dead lock.");
                 // not kill the thread for now
-                // deadlock_handler()
+                deadlock_handler()
             }
         }
     }
@@ -124,7 +145,14 @@ unsafe impl<T: GcTrace> GcTrace for PyRwLock<T> {
     #[inline]
     fn trace(&self, tracer_fn: &mut TracerFn) {
         // FIXME(discord9): check if this may cause a deadlock or not, maybe try `recursive`?
-        match self.try_read_recursive() {
+        #[cfg(feature = "threading")]
+        match self.try_read_for(LOCK_TIMEOUT) {
+            Some(v) => v.trace(tracer_fn),
+            None => deadlock_handler(),
+        }
+
+        #[cfg(not(feature = "threading"))]
+        match self.try_read() {
             Some(v) => v.trace(tracer_fn),
             None => deadlock_handler(),
         }

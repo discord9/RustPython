@@ -239,10 +239,21 @@ impl CcSync {
         // order of acquire lock and check IS_GC_THREAD here is important
         // This prevent set multiple IS_GC_THREAD thread local variable to true
         // using write() to gain exclusive access
-        let lock = self
-            .pause
-            .try_write_for(LOCK_TIMEOUT)
-            .unwrap_or_else(|| deadlock_handler());
+        let lock = {
+            #[cfg(feature = "threading")]
+            {
+                self.pause
+                    .try_write_for(LOCK_TIMEOUT)
+                    .unwrap_or_else(|| deadlock_handler())
+            }
+
+            // also when no threading, there is actually no need to get a lock,(because every thread have it's own gc)
+            // but for the sake of using same code(and defendsive), we acquire one anyway
+            #[cfg(not(feature = "threading"))]
+            {
+                self.pause.write()
+            }
+        };
         Self::IS_GC_THREAD.with(|v| v.set(true));
         debug!("mark begin.");
         let freed = self.mark_roots();
