@@ -123,7 +123,7 @@ unsafe impl<T: GcTrace> GcTrace for PyMutex<T> {
                 // not kill the thread for now(So to test our unsound way of tracing)
                 use backtrace::Backtrace;
                 let bt = Backtrace::new();
-                panic!("Dead lock on {}: \n--------\n{:?}", std::any::type_name::<T>(), bt);
+                error!("Dead lock on {}: \n--------\n{:?}", std::any::type_name::<T>(), bt);
                 // deadlock_handler()
             }
         }
