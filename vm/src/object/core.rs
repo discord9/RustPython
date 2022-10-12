@@ -203,9 +203,9 @@ unsafe impl GcTrace for PyInner<Erased> {
             PyZip,
             // misc
             // causing dead lock
-            PyCell,
+            // PyCell,
             // iter in iter.rs
-            // seems to cause dead lock
+            // PositionIterInternal seems to cause dead lock on trace
             PySequenceIterator,
             PyCallableIterator,
             // iter on types
@@ -213,7 +213,6 @@ unsafe impl GcTrace for PyInner<Erased> {
             PyListIterator,
             PyListReverseIterator,
             // PyTuple's iter
-            // causing dead lock
             PyTupleIterator,
             // PyEnumerate's iter
             PyReverseSequenceIterator,
