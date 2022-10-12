@@ -202,11 +202,12 @@ unsafe impl GcTrace for PyInner<Erased> {
             PyWeakProxy,
             PyZip,
             // misc
-            // causing dead lock
+            // FIXME(discord9): causing dead lock on very rare occasion
             // PyCell,
             // iter in iter.rs
-            // PositionIterInternal seems to cause dead lock on trace
-            PySequenceIterator,
+            // FIXME(discord9): PositionIterInternal seems to cause dead lock on trace on very rare occasion
+            // which is called in PySequenceIterator(and many other iters, but they are less frequent so appeal fine?)
+            // PySequenceIterator,
             PyCallableIterator,
             // iter on types
             // PyList's iter
@@ -1292,6 +1293,10 @@ impl PyObject {
                         PySequence
                     )
                 );
+
+                use backtrace::Backtrace;
+                let bt = Backtrace::new();
+                error!("Double deallocate's stack: \n--------\n{:?}", bt);
                 return;
             }
 

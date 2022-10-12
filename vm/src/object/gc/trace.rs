@@ -1,4 +1,4 @@
-use rustpython_common::lock::{PyMutex, PyRwLock, PyMutexGuard};
+use rustpython_common::lock::{PyMutex, PyRwLock};
 
 use crate::object::gc::{deadlock_handler, header::GcHeader, GcObjRef, LOCK_TIMEOUT};
 use crate::object::PyObjectPayload;
