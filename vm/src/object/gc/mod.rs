@@ -1,16 +1,58 @@
 /// sync version of cycle collector
 /// #[cfg(not(feature = "threading"))]
+#[cfg(feature = "gc")]
 mod collector_sync;
+#[cfg(feature = "gc")]
 mod header;
+#[cfg(feature = "gc")]
 mod trace;
 
+use std::time::Duration;
+
 use crate::PyObject;
-pub use collector_sync::GcResult;
+#[cfg(feature = "gc")]
 pub(crate) use collector_sync::{CcSync, GLOBAL_COLLECTOR};
+#[cfg(feature = "gc")]
 pub(crate) use header::{Color, GcHeader};
+#[cfg(feature = "gc")]
 pub(crate) use trace::{GcObjPtr, GcStatus, GcTrace, TracerFn};
 type GcObj = PyObject;
 type GcObjRef<'a> = &'a GcObj;
+
+#[derive(Debug, Default)]
+pub struct GcResult {
+    acyclic_cnt: usize,
+    cyclic_cnt: usize,
+}
+
+impl GcResult {
+    fn new(tuple: (usize, usize)) -> Self {
+        Self {
+            acyclic_cnt: tuple.0,
+            cyclic_cnt: tuple.1,
+        }
+    }
+}
+
+impl From<(usize, usize)> for GcResult {
+    fn from(t: (usize, usize)) -> Self {
+        Self::new(t)
+    }
+}
+
+impl From<GcResult> for (usize, usize) {
+    fn from(g: GcResult) -> Self {
+        (g.acyclic_cnt, g.cyclic_cnt)
+    }
+}
+
+impl From<GcResult> for usize {
+    fn from(g: GcResult) -> Self {
+        g.acyclic_cnt + g.cyclic_cnt
+    }
+}
+
+static LOCK_TIMEOUT: Duration = Duration::from_secs(10);
 
 fn deadlock_handler() -> ! {
     error!("Dead lock!");
@@ -18,45 +60,69 @@ fn deadlock_handler() -> ! {
 }
 
 pub fn collect() -> GcResult {
-    #[cfg(feature = "threading")]
+    #[cfg(feature = "gc")]
     {
-        GLOBAL_COLLECTOR.force_gc()
+        #[cfg(feature = "threading")]
+        {
+            GLOBAL_COLLECTOR.force_gc()
+        }
+        #[cfg(not(feature = "threading"))]
+        {
+            GLOBAL_COLLECTOR.with(|v| v.force_gc().into())
+        }
     }
-    #[cfg(not(feature = "threading"))]
+    #[cfg(not(feature = "gc"))]
     {
-        GLOBAL_COLLECTOR.with(|v| v.force_gc().into())
+        Default::default()
     }
 }
 
 pub fn isenabled() -> bool {
-    #[cfg(feature = "threading")]
+    #[cfg(feature = "gc")]
     {
-        GLOBAL_COLLECTOR.is_enabled()
+        #[cfg(feature = "threading")]
+        {
+            GLOBAL_COLLECTOR.is_enabled()
+        }
+        #[cfg(not(feature = "threading"))]
+        {
+            GLOBAL_COLLECTOR.with(|v| v.is_enabled())
+        }
     }
-    #[cfg(not(feature = "threading"))]
+    #[cfg(not(feature = "gc"))]
     {
-        GLOBAL_COLLECTOR.with(|v| v.is_enabled())
+        false
     }
 }
 
 pub fn enable() {
-    #[cfg(feature = "threading")]
+    #[cfg(feature = "gc")]
     {
-        GLOBAL_COLLECTOR.enable()
+        #[cfg(feature = "threading")]
+        {
+            GLOBAL_COLLECTOR.enable()
+        }
+        #[cfg(not(feature = "threading"))]
+        {
+            GLOBAL_COLLECTOR.with(|v| v.enable())
+        }
     }
-    #[cfg(not(feature = "threading"))]
-    {
-        GLOBAL_COLLECTOR.with(|v| v.enable())
-    }
+    #[cfg(not(feature = "gc"))]
+    return;
 }
 
 pub fn disable() {
-    #[cfg(feature = "threading")]
+    #[cfg(feature = "gc")]
     {
-        GLOBAL_COLLECTOR.disable()
+        #[cfg(feature = "threading")]
+        {
+            GLOBAL_COLLECTOR.disable()
+        }
+        #[cfg(not(feature = "threading"))]
+        {
+            GLOBAL_COLLECTOR.with(|v| v.disable())
+        }
     }
-    #[cfg(not(feature = "threading"))]
-    {
-        GLOBAL_COLLECTOR.with(|v| v.disable())
-    }
+    #[cfg(not(feature = "gc"))]
+    return;
 }

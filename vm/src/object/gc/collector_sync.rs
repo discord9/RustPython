@@ -1,7 +1,9 @@
 use std::time::Instant;
 use std::{fmt, ops::Deref, ptr::NonNull};
 
-use crate::object::gc::{deadlock_handler, Color, GcObj, GcObjPtr, GcObjRef, GcStatus, GcTrace};
+use crate::object::gc::{
+    deadlock_handler, Color, GcObj, GcObjPtr, GcObjRef, GcResult, GcStatus, GcTrace, LOCK_TIMEOUT,
+};
 use crate::PyObject;
 
 use rustpython_common::{
@@ -60,39 +62,6 @@ impl<T: ?Sized> From<NonNull<T>> for WrappedPtr<T> {
 impl<T: ?Sized> From<WrappedPtr<T>> for NonNull<T> {
     fn from(w: WrappedPtr<T>) -> Self {
         w.0
-    }
-}
-
-#[derive(Debug)]
-pub struct GcResult {
-    acyclic_cnt: usize,
-    cyclic_cnt: usize,
-}
-
-impl GcResult {
-    fn new(tuple: (usize, usize)) -> Self {
-        Self {
-            acyclic_cnt: tuple.0,
-            cyclic_cnt: tuple.1,
-        }
-    }
-}
-
-impl From<(usize, usize)> for GcResult {
-    fn from(t: (usize, usize)) -> Self {
-        Self::new(t)
-    }
-}
-
-impl From<GcResult> for (usize, usize) {
-    fn from(g: GcResult) -> Self {
-        (g.acyclic_cnt, g.cyclic_cnt)
-    }
-}
-
-impl From<GcResult> for usize {
-    fn from(g: GcResult) -> Self {
-        g.acyclic_cnt + g.cyclic_cnt
     }
 }
 
@@ -270,7 +239,10 @@ impl CcSync {
         // order of acquire lock and check IS_GC_THREAD here is important
         // This prevent set multiple IS_GC_THREAD thread local variable to true
         // using write() to gain exclusive access
-        let lock = self.pause.try_write().unwrap_or_else(|| deadlock_handler());
+        let lock = self
+            .pause
+            .try_write_for(LOCK_TIMEOUT)
+            .unwrap_or_else(|| deadlock_handler());
         Self::IS_GC_THREAD.with(|v| v.set(true));
         debug!("mark begin.");
         let freed = self.mark_roots();
