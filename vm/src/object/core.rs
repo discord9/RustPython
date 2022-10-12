@@ -249,10 +249,10 @@ unsafe impl GcTrace for PyObject {
     }
 }
 
-impl From<&PyInner<Erased>> for &PyObject {
-    fn from(inner: &PyInner<Erased>) -> Self {
-        // Safety: PyObject is #[repr(transparent)], so cast is safe
-        unsafe { NonNull::from(inner).cast::<PyObject>().as_ref() }
+impl PyInner<Erased> {
+    fn as_object_ref(&self) -> &PyObject {
+        // Safety: PyObject is #[repr(transparent)], so cast is safe, do note because lifetime issue we are not using From<PyInner<Erased>> for PyObject
+        unsafe { NonNull::from(self).cast::<PyObject>().as_ref() }
     }
 }
 
@@ -260,12 +260,12 @@ impl From<&PyInner<Erased>> for &PyObject {
 impl GcObjPtr for PyInner<Erased> {
     /// call increment() of gc
     fn inc(&self) {
-        self.header().gc.increment(self.into())
+        self.header().gc.increment(self.as_object_ref())
     }
 
     /// call decrement() of gc
     fn dec(&self) -> GcStatus {
-        unsafe { self.header().gc.decrement(self.into()) }
+        unsafe { self.header().gc.decrement(self.as_object_ref()) }
     }
 
     fn rc(&self) -> usize {
