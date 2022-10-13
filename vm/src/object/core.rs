@@ -13,11 +13,11 @@
 
 #[cfg(not(feature = "gc"))]
 use crate::common::refcount::RefCount;
-use crate::common::{
+use crate::{common::{
     atomic::{OncePtr, PyAtomic, Radium},
     linked_list::{Link, LinkedList, Pointers},
     lock::{PyMutex, PyMutexGuard, PyRwLock},
-};
+}, list_traceable};
 #[cfg(feature = "gc")]
 use crate::object::gc::{GcHeader, GcObjPtr, GcStatus, GcTrace, TracerFn};
 use crate::object::{
@@ -180,78 +180,7 @@ unsafe impl GcTrace for PyInner<Erased> {
                 )else*
             };
         }
-        use crate::builtins::iter::{PyCallableIterator, PySequenceIterator};
-        use crate::builtins::{
-            enumerate::PyReverseSequenceIterator,
-            function::PyCell,
-            list::{PyListIterator, PyListReverseIterator},
-            memory::PyMemoryViewIterator,
-            tuple::PyTupleIterator,
-        };
-        use crate::builtins::{
-            PyBoundMethod, PyDict, PyEnumerate, PyFilter, PyFunction, PyList, PyMappingProxy,
-            PyProperty, PySet, PySlice, PyStaticMethod, PySuper, PyTraceback, PyTuple, PyType,
-            PyWeakProxy, PyZip,
-        };
-        use crate::function::{ArgCallable, ArgIterable, ArgMapping, ArgSequence};
-        use crate::protocol::{
-            PyBuffer, PyIter, PyIterIter, PyIterReturn, PyMapping, PyNumber, PySequence,
-        };
-        optional_trace!(
-            // builtin types
-            // PyRange, PyStr is acyclic, therefore no trace needed for them
-            PyBoundMethod,
-            PyDict,
-            PyEnumerate,
-            PyFilter,
-            PyFunction,
-            PyList,
-            PyMappingProxy,
-            PyProperty,
-            PySet,
-            PySlice,
-            PyStaticMethod,
-            PySuper,
-            PyTraceback,
-            PyTuple,
-            // FIXME(discord9): deal with static PyType properly
-            // PyType,
-            PyWeakProxy,
-            PyZip,
-            // misc
-            // FIXME(discord9): causing dead lock on very rare occasion
-            // PyCell,
-            // iter in iter.rs
-            // FIXME(discord9): PositionIterInternal seems to cause dead lock on trace on very rare occasion
-            // which is called in PySequenceIterator(and many other iters, but they are less frequent so appeal fine?)
-            // PySequenceIterator,
-            PyCallableIterator,
-            // iter on types
-            // PyList's iter
-            PyListIterator,
-            PyListReverseIterator,
-            // PyTuple's iter
-            PyTupleIterator,
-            // PyEnumerate's iter
-            PyReverseSequenceIterator,
-            // PyMemory's iter
-            PyMemoryViewIterator,
-            // function/Arg protocol
-            ArgCallable,
-            ArgIterable,
-            ArgMapping,
-            ArgSequence,
-            // protocol
-            // struct like
-            PyBuffer,
-            PyIter,
-            // FIXME(discord9): confirm this is ok to do
-            PyIterIter<Erased>,
-            PyIterReturn,
-            PyMapping,
-            PyNumber,
-            PySequence
-        );
+        list_traceable!(optional_trace);
     }
 }
 

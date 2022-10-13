@@ -10,6 +10,7 @@ use std::collections::HashSet;
 // TODO: make a function that exec code on traceable data type
 pub struct TraceHelper {}
 
+#[macro_export]
 macro_rules! list_traceable {
     ($MACRO_NAME: tt) => {
         {
