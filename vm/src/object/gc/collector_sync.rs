@@ -1,8 +1,10 @@
+use std::any::Any;
 use std::time::Instant;
 use std::{fmt, ops::Deref, ptr::NonNull};
 
 use crate::object::gc::{
-    deadlock_handler, Color, GcObj, GcObjPtr, GcObjRef, GcResult, GcStatus, GcTrace, LOCK_TIMEOUT,
+    deadlock_handler, trace::TraceHelper, Color, GcObj, GcObjPtr, GcObjRef, GcResult, GcStatus,
+    GcTrace, LOCK_TIMEOUT,
 };
 use crate::PyObject;
 
@@ -184,12 +186,11 @@ impl CcSync {
             let rc = obj.header().dec();
             if rc == 0 {
                 self.release(obj)
-            } else {
-                // TODO: make a check of being acyclic data type function
-                if obj.payload_is::<crate::stdlib::io::_io::BufferedReader>(){
-                    return GcStatus::ShouldKeep;
-                }
+            } else if TraceHelper::is_traceable(obj.0.type_id()) {
                 self.possible_root(obj);
+                GcStatus::ShouldKeep
+            } else {
+                // if is not traceable, which could be actually acyclic or not, keep them anyway
                 GcStatus::ShouldKeep
             }
         } else {
