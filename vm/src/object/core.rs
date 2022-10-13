@@ -13,11 +13,11 @@
 
 #[cfg(not(feature = "gc"))]
 use crate::common::refcount::RefCount;
-use crate::common::{
+use crate::{common::{
     atomic::{OncePtr, PyAtomic, Radium},
     linked_list::{Link, LinkedList, Pointers},
     lock::{PyMutex, PyMutexGuard, PyRwLock},
-};
+}, list_traceable};
 #[cfg(feature = "gc")]
 use crate::object::gc::{GcHeader, GcObjPtr, GcStatus, GcTrace, TracerFn};
 use crate::object::{
@@ -85,7 +85,17 @@ struct PyObjVTable {
 }
 
 unsafe fn drop_dealloc_obj<T: PyObjectPayload>(x: *mut PyObject) {
-    drop(Box::from_raw(x as *mut PyInner<T>));
+    // 4440315479889519190: rustpython_vm::stdlib::io::fileio::FileIO,
+    // 4627466729215426581: crate::stdlib::io::_io::BufferedReader
+    if format!("{:?}", std::any::TypeId::of::<T>()).contains("4440315479889519190") {
+        // error!("Found you!, the type is {}", std::any::type_name::<T>());
+    }
+    if x.as_ref().unwrap().header().buffered() {
+        error!("Try to drop&dealloc a buffered object! Drop only for now!");
+        drop_only_obj::<T>(x);
+    } else {
+        drop(Box::from_raw(x as *mut PyInner<T>));
+    }
 }
 /// drop only(doesn't deallocate)
 unsafe fn drop_only_obj<T: PyObjectPayload>(x: *mut PyObject) {
@@ -148,6 +158,12 @@ pub(in crate::object) struct PyInner<T> {
 #[cfg(feature = "gc")]
 unsafe impl GcTrace for PyInner<Erased> {
     fn trace(&self, tracer_fn: &mut TracerFn) {
+        // trace PyInner's other field(that is except payload)
+        self.typ.trace(tracer_fn);
+        self.dict.trace(tracer_fn);
+        // weak_list keeps a *pointer* to a struct for maintaince weak ref, so no ownership, no trace
+        self.slots.trace(tracer_fn);
+
         /// FIXME(discord9): Optional trait bound(Like a ?GcTrace) require specialization
         ///
         /// https://stackoverflow.com/questions/68701910/function-optional-trait-bound-in-rust
@@ -164,74 +180,7 @@ unsafe impl GcTrace for PyInner<Erased> {
                 )else*
             };
         }
-        use crate::builtins::iter::{PyCallableIterator, PySequenceIterator};
-        use crate::builtins::{
-            enumerate::PyReverseSequenceIterator,
-            function::PyCell,
-            list::{PyListIterator, PyListReverseIterator},
-            memory::PyMemoryViewIterator,
-            tuple::PyTupleIterator,
-        };
-        use crate::builtins::{
-            PyBoundMethod, PyDict, PyEnumerate, PyFilter, PyFunction, PyList, PyMappingProxy,
-            PyProperty, PySet, PySlice, PyStaticMethod, PySuper, PyTraceback, PyTuple, PyType,
-            PyWeakProxy, PyZip,
-        };
-        use crate::function::{ArgCallable, ArgIterable, ArgMapping, ArgSequence};
-        use crate::protocol::{
-            PyBuffer, PyIter, PyIterIter, PyIterReturn, PyMapping, PyNumber, PySequence,
-        };
-        optional_trace!(
-            // builtin types
-            // PyRange, PyStr is acyclic, therefore no trace needed for them
-            PyBoundMethod,
-            PyDict,
-            PyEnumerate,
-            PyFilter,
-            PyFunction,
-            PyList,
-            PyMappingProxy,
-            PyProperty,
-            PySet,
-            PySlice,
-            PyStaticMethod,
-            PySuper,
-            PyTraceback,
-            PyTuple,
-            PyType,
-            PyWeakProxy,
-            PyZip,
-            // misc
-            PyCell,
-            // iter in iter.rs
-            PySequenceIterator,
-            PyCallableIterator,
-            // iter on types
-            // PyList's iter
-            PyListIterator,
-            PyListReverseIterator,
-            // PyTuple's iter
-            PyTupleIterator,
-            // PyEnumerate's iter
-            PyReverseSequenceIterator,
-            // PyMemory's iter
-            PyMemoryViewIterator,
-            // function/Arg protocol
-            ArgCallable,
-            ArgIterable,
-            ArgMapping,
-            ArgSequence,
-            // protocol
-            // struct like
-            PyBuffer,
-            PyIter,
-            // FIXME(discord9): confirm this is ok to do
-            PyIterIter<Erased>,
-            PyIterReturn,
-            PyMapping,
-            PyNumber,
-            PySequence
-        );
+        list_traceable!(optional_trace);
     }
 }
 
@@ -249,10 +198,12 @@ unsafe impl GcTrace for PyObject {
     }
 }
 
-impl From<&PyInner<Erased>> for &PyObject {
-    fn from(inner: &PyInner<Erased>) -> Self {
-        // Safety: PyObject is #[repr(transparent)], so cast is safe
-        unsafe { NonNull::from(inner).cast::<PyObject>().as_ref() }
+impl PyInner<Erased> {
+    fn as_object_ref(&self) -> &PyObject {
+        static_assertions::assert_eq_size!(PyObject, PyInner<Erased>);
+        static_assertions::assert_eq_align!(PyObject, PyInner<Erased>);
+        // Safety: PyObject is #[repr(transparent)], so cast is safe, do note because lifetime issue we are not using From<PyInner<Erased>> for PyObject
+        unsafe { NonNull::from(self).cast::<PyObject>().as_ref() }
     }
 }
 
@@ -260,12 +211,12 @@ impl From<&PyInner<Erased>> for &PyObject {
 impl GcObjPtr for PyInner<Erased> {
     /// call increment() of gc
     fn inc(&self) {
-        self.header().gc.increment(self.into())
+        self.header().gc.increment(self.as_object_ref())
     }
 
     /// call decrement() of gc
     fn dec(&self) -> GcStatus {
-        unsafe { self.header().gc.decrement(self.into()) }
+        unsafe { self.header().gc.decrement(self.as_object_ref()) }
     }
 
     fn rc(&self) -> usize {
@@ -276,8 +227,8 @@ impl GcObjPtr for PyInner<Erased> {
         &self.header
     }
 
-    fn as_ptr(&self) -> NonNull<dyn GcObjPtr> {
-        NonNull::from(self)
+    unsafe fn as_ptr(&self) -> NonNull<PyObject> {
+        NonNull::from(self).cast::<PyObject>()
     }
 }
 
@@ -301,7 +252,7 @@ impl GcObjPtr for PyObject {
         self.0.header()
     }
 
-    fn as_ptr(&self) -> NonNull<dyn GcObjPtr> {
+    unsafe fn as_ptr(&self) -> NonNull<PyObject> {
         self.0.as_ptr()
     }
 }
@@ -326,8 +277,8 @@ impl<T: PyObjectPayload> GcObjPtr for Py<T> {
         self.as_object().0.header()
     }
 
-    fn as_ptr(&self) -> NonNull<dyn GcObjPtr> {
-        self.as_object().0.as_ptr()
+    unsafe fn as_ptr(&self) -> NonNull<PyObject> {
+        self.as_object().as_ptr()
     }
 }
 
@@ -646,7 +597,6 @@ impl Drop for PyWeak {
         // we do NOT have actual exclusive access!
         // no clue if doing this actually reduces chance of UB
         let me: &Self = self;
-        // deallocate&drop is handle by garbage collector, don't do it here.
         me.drop_inner();
     }
 }
@@ -661,6 +611,13 @@ impl PyRef<PyWeak> {
 #[derive(Debug)]
 struct InstanceDict {
     d: PyRwLock<PyDictRef>,
+}
+
+#[cfg(feature = "gc")]
+unsafe impl GcTrace for InstanceDict {
+    fn trace(&self, tracer_fn: &mut TracerFn) {
+        self.d.trace(tracer_fn)
+    }
 }
 
 impl From<PyDictRef> for InstanceDict {
@@ -742,7 +699,7 @@ cfg_if::cfg_if! {
 
 #[derive(Debug)]
 #[repr(transparent)]
-pub struct PyObject(PyInner<Erased>);
+pub struct PyObject(pub(in crate::object) PyInner<Erased>);
 
 impl Deref for PyObjectRef {
     type Target = PyObject;
@@ -875,6 +832,12 @@ impl PyObjectRef {
 }
 
 impl PyObject {
+
+    /// return payload's `TypeId`
+    #[inline]
+    pub(crate) fn inner_typeid(&self) -> TypeId{
+        self.0.typeid
+    }
     #[inline(always)]
     fn weak_ref_list(&self) -> Option<&WeakRefList> {
         Some(&self.0.weak_list)
@@ -1177,119 +1140,12 @@ impl PyObject {
         {
             debug_assert!(ptr.as_ref().header().is_drop());
             if ptr.as_ref().header().is_dealloc() {
-                macro_rules! show_typeid {
-                    ($ID: tt: $($TY: ty),*$(,)?) => {
-                        $(
-                            if TypeId::of::<$TY>()==$ID{
-                                String::from(std::stringify!($TY))
-                            }
-                        )else*
-                        else{
-                            format!("Unknown type, id={:?}", $ID)
-                        }
-                    };
-                }
-                error!("Double deallocate!");
                 let tid = ptr.as_ref().0.typeid;
-                use crate::builtins::iter::{PyCallableIterator, PySequenceIterator};
-                use crate::builtins::{
-                    enumerate::PyReverseSequenceIterator,
-                    function::PyCell,
-                    list::{PyListIterator, PyListReverseIterator},
-                    memory::PyMemoryViewIterator,
-                    tuple::PyTupleIterator,
-                };
-                use crate::builtins::{
-                    PyArithmeticError, PyAssertionError, PyAsyncGen, PyAttributeError,
-                    PyBaseException, PyBaseExceptionRef, PyBaseObject, PyBlockingIOError, PyBool,
-                    PyBoundMethod, PyBrokenPipeError, PyBufferError, PyByteArray, PyBytes,
-                    PyBytesRef, PyBytesWarning, PyChildProcessError, PyClassMethod, PyCode,
-                    PyComplex, PyConnectionAbortedError, PyConnectionError,
-                    PyConnectionRefusedError, PyDict, PyEnumerate, PyFilter, PyFunction, PyList,
-                    PyMappingProxy, PyProperty, PyRange, PySet, PySlice, PyStaticMethod, PyStr,
-                    PySuper, PyTraceback, PyTuple, PyType, PyWeakProxy, PyZip,
-                };
-                use crate::function::{ArgCallable, ArgIterable, ArgMapping, ArgSequence};
-                use crate::protocol::{
-                    PyBuffer, PyIter, PyIterIter, PyIterReturn, PyMapping, PyNumber, PySequence,
-                };
-                error!(
-                    "typeid={:?}",
-                    show_typeid!(
-                        tid: // builtin types
-                        PyArithmeticError,
-                        PyAssertionError,
-                        PyAsyncGen,
-                        PyAttributeError,
-                        PyBaseException,
-                        PyBaseExceptionRef,
-                        PyBaseObject,
-                        PyBlockingIOError,
-                        PyBool,
-                        PyBoundMethod,
-                        PyBrokenPipeError,
-                        PyBufferError,
-                        PyByteArray,
-                        PyBytes,
-                        PyBytesRef,
-                        PyBytesWarning,
-                        PyChildProcessError,
-                        PyClassMethod,
-                        PyCode,
-                        PyComplex,
-                        PyConnectionAbortedError,
-                        PyConnectionError,
-                        PyConnectionRefusedError,
-                        PyDict,
-                        PyEnumerate,
-                        PyFilter,
-                        PyFunction,
-                        PyList,
-                        PyMappingProxy,
-                        PyProperty,
-                        PyRange,
-                        PySet,
-                        PySlice,
-                        PyStaticMethod,
-                        PyStr,
-                        PySuper,
-                        PyTraceback,
-                        PyTuple,
-                        PyType,
-                        PyWeakProxy,
-                        PyZip,
-                        // misc
-                        PyCell,
-                        // iter in iter.rs
-                        PySequenceIterator,
-                        PyCallableIterator,
-                        // iter on types
-                        // PyList's iter
-                        PyListIterator,
-                        PyListReverseIterator,
-                        // PyTuple's iter
-                        PyTupleIterator,
-                        // PyEnumerate's iter
-                        PyReverseSequenceIterator,
-                        // PyMemory's iter
-                        PyMemoryViewIterator,
-                        // function/Arg protocol
-                        ArgCallable,
-                        ArgIterable,
-                        ArgMapping,
-                        ArgSequence,
-                        // protocol
-                        // struct like
-                        PyBuffer,
-                        PyIter,
-                        // FIXME(discord9): confirm this is ok to do
-                        PyIterIter<Erased>,
-                        PyIterReturn,
-                        PyMapping,
-                        PyNumber,
-                        PySequence
-                    )
-                );
+                error!("Double deallocate!, Unknown type, id={:?}", tid);
+                error!("Header: {:?}", ptr.as_ref().header());
+                use backtrace::Backtrace;
+                let bt = Backtrace::new();
+                error!("Double deallocate's stack: \n--------\n{:?}", bt);
                 return;
             }
 
@@ -1716,6 +1572,7 @@ pub(crate) fn init_type_hierarchy() -> (PyTypeRef, PyTypeRef, PyTypeRef) {
     // and both `type` and `object are instances of `type`.
     // to produce this circular dependency, we need an unsafe block.
     // (and yes, this will never get dropped. TODO?)
+    // FIXME(discord9): check if this need a leak
     let (type_type, object_type) = {
         type UninitRef<T> = PyRwLock<NonNull<PyInner<T>>>;
 
@@ -1781,8 +1638,8 @@ pub(crate) fn init_type_hierarchy() -> (PyTypeRef, PyTypeRef, PyTypeRef) {
         unsafe {
             #[cfg(feature = "gc")]
             {
-                // FIXME: figure out if this is correct way.
-                (*type_type_ptr.cast::<PyInner<Erased>>()).inc();
+                // FIXME(discord9): figure out if this is correct way.
+                (*type_type_ptr.cast::<PyInner<Erased>>()).header().leak();
             }
             #[cfg(not(feature = "gc"))]
             {
@@ -1795,8 +1652,8 @@ pub(crate) fn init_type_hierarchy() -> (PyTypeRef, PyTypeRef, PyTypeRef) {
             );
             #[cfg(feature = "gc")]
             {
-                // FIXME: figure out if this is correct way.
-                (*type_type_ptr.cast::<PyInner<Erased>>()).inc();
+                // FIXME(discord9): figure out if this is correct way.
+                // (*type_type_ptr.cast::<PyInner<Erased>>()).header().leak();
             }
             #[cfg(not(feature = "gc"))]
             {

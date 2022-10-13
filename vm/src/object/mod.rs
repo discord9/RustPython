@@ -1,6 +1,6 @@
 mod core;
 mod ext;
-#[cfg(feature = "gc")]
+#[macro_use]
 pub mod gc;
 mod payload;
 

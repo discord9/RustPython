@@ -1,6 +1,6 @@
 use std::sync::atomic::Ordering;
 
-use crate::object::gc::{deadlock_handler, CcSync, GLOBAL_COLLECTOR};
+use crate::object::gc::{deadlock_handler, CcSync, GLOBAL_COLLECTOR, LOCK_TIMEOUT};
 
 #[cfg(not(feature = "threading"))]
 use rustpython_common::atomic::Radium;
@@ -29,8 +29,10 @@ impl GcHeader {
             is_drop: PyMutex::new(false),
             is_dealloc: PyMutex::new(false),
             exclusive: PyMutex::new(()),
+            /// when threading, using a global GC
             #[cfg(feature = "threading")]
             gc: GLOBAL_COLLECTOR.clone(),
+            /// when not threading, using a gc per thread
             #[cfg(not(feature = "threading"))]
             gc: GLOBAL_COLLECTOR.with(|v| v.clone()),
         }
@@ -98,24 +100,39 @@ impl GcHeader {
 
     /// This function will block if is a garbage collect is happening
     pub fn do_pausing(&self) {
-        if CcSync::IS_GC_THREAD.with(|v| v.get()) {
-            // if is same thread, then this thread is already stop by gc itself,
-            // no need to block.
-            // and any call to do_pausing is probably from drop() or what so allow it to continue execute.
-            return;
+        // if there is no multi-thread, there is no need to pause,
+        // for running different vm in different thread will make sure them have no depend whatsoever
+        #[cfg(feature = "threading")]
+        {
+            if CcSync::IS_GC_THREAD.with(|v| v.get()) {
+                // if is same thread, then this thread is already stop by gc itself,
+                // no need to block.
+                // and any call to do_pausing is probably from drop() or what so allow it to continue execute.
+                return;
+            }
+
+            // however when gc-ing the object graph must stay the same so check and try to lock until gc is done
+            // timeout is to prevent dead lock(which is worse than panic?)
+            let _lock = self
+                .gc
+                .pause
+                .try_read_for(LOCK_TIMEOUT)
+                .unwrap_or_else(|| deadlock_handler());
         }
-        let _lock = self
-            .gc
-            .pause
-            .try_read()
-            .unwrap_or_else(|| deadlock_handler());
+        // when not threading, one could still run multiple vm on multiple thread(which have a GC per thread)
+        // but when call `gc()`, it automatically pause the world for this thread.
+        // so nothing need to be done, pausing is only useful for threading
     }
     pub fn color(&self) -> Color {
-        *self.color.lock()
+        match self.color.try_lock() {
+            Some(c) => *c,
+            None => {
+                panic!("Header: {:?}", self);
+            }
+        }
     }
     pub fn set_color(&self, new_color: Color) {
-        // dbg!(new_color);
-        *self.color.lock() = new_color;
+        *self.color.try_lock().unwrap() = new_color;
     }
     pub fn buffered(&self) -> bool {
         *self.buffered.lock()

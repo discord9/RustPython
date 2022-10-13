@@ -1,7 +1,11 @@
+use std::any::Any;
 use std::time::Instant;
 use std::{fmt, ops::Deref, ptr::NonNull};
 
-use crate::object::gc::{deadlock_handler, Color, GcObj, GcObjPtr, GcObjRef, GcStatus, GcTrace};
+use crate::object::gc::{
+    deadlock_handler, trace::TraceHelper, Color, GcObj, GcObjPtr, GcObjRef, GcResult, GcStatus,
+    GcTrace, LOCK_TIMEOUT,
+};
 use crate::PyObject;
 
 use rustpython_common::{
@@ -63,39 +67,7 @@ impl<T: ?Sized> From<WrappedPtr<T>> for NonNull<T> {
     }
 }
 
-#[derive(Debug)]
-pub struct GcResult {
-    acyclic_cnt: usize,
-    cyclic_cnt: usize,
-}
-
-impl GcResult {
-    fn new(tuple: (usize, usize)) -> Self {
-        Self {
-            acyclic_cnt: tuple.0,
-            cyclic_cnt: tuple.1,
-        }
-    }
-}
-
-impl From<(usize, usize)> for GcResult {
-    fn from(t: (usize, usize)) -> Self {
-        Self::new(t)
-    }
-}
-
-impl From<GcResult> for (usize, usize) {
-    fn from(g: GcResult) -> Self {
-        (g.acyclic_cnt, g.cyclic_cnt)
-    }
-}
-
-impl From<GcResult> for usize {
-    fn from(g: GcResult) -> Self {
-        g.acyclic_cnt + g.cyclic_cnt
-    }
-}
-
+#[repr(C)]
 pub struct CcSync {
     roots: PyMutex<Vec<WrappedPtr<GcObj>>>,
     /// for stop the world, will be try to check lock every time deref ObjecteRef
@@ -166,6 +138,9 @@ impl CcSync {
     #[inline]
     #[allow(unreachable_code)]
     pub fn should_gc(&self) -> bool {
+        // TODO(discord9): remove later, just for debug
+        // #[cfg(debug_assertions)]
+        // return true;
         // FIXME(discord9): better condition, could be important
         if self.roots_len() > 700 {
             if Self::IS_GC_THREAD.with(|v| v.get()) {
@@ -211,14 +186,16 @@ impl CcSync {
             let rc = obj.header().dec();
             if rc == 0 {
                 self.release(obj)
-            } else {
+            } else if TraceHelper::is_traceable(obj.inner_typeid()) {
                 self.possible_root(obj);
+                GcStatus::ShouldKeep
+            } else {
+                // if is not traceable, which could be actually acyclic or not, keep them anyway
                 GcStatus::ShouldKeep
             }
         } else {
-            // FIXME(discord9): confirm if rc==0 then should drop
-            // This is for Rust's RAII caused ref cycle's drop
-            GcStatus::ShouldDrop
+            // FIXME(discord9): confirm if already rc==0 then should do nothing
+            GcStatus::DoNothing
         }
     }
 
@@ -270,7 +247,21 @@ impl CcSync {
         // order of acquire lock and check IS_GC_THREAD here is important
         // This prevent set multiple IS_GC_THREAD thread local variable to true
         // using write() to gain exclusive access
-        let lock = self.pause.try_write().unwrap_or_else(|| deadlock_handler());
+        let lock = {
+            #[cfg(feature = "threading")]
+            {
+                self.pause
+                    .try_write_for(LOCK_TIMEOUT)
+                    .unwrap_or_else(|| deadlock_handler())
+            }
+
+            // also when no threading, there is actually no need to get a lock,(because every thread have it's own gc)
+            // but for the sake of using same code(and defendsive), we acquire one anyway
+            #[cfg(not(feature = "threading"))]
+            {
+                self.pause.write()
+            }
+        };
         Self::IS_GC_THREAD.with(|v| v.set(true));
         debug!("mark begin.");
         let freed = self.mark_roots();
