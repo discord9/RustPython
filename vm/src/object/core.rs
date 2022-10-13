@@ -13,11 +13,13 @@
 
 #[cfg(not(feature = "gc"))]
 use crate::common::refcount::RefCount;
-use crate::{common::{
+use crate::common::{
     atomic::{OncePtr, PyAtomic, Radium},
     linked_list::{Link, LinkedList, Pointers},
     lock::{PyMutex, PyMutexGuard, PyRwLock},
-}, list_traceable};
+};
+#[cfg(feature = "gc")]
+use crate::list_traceable;
 #[cfg(feature = "gc")]
 use crate::object::gc::{GcHeader, GcObjPtr, GcStatus, GcTrace, TracerFn};
 use crate::object::{
@@ -90,6 +92,7 @@ unsafe fn drop_dealloc_obj<T: PyObjectPayload>(x: *mut PyObject) {
     if format!("{:?}", std::any::TypeId::of::<T>()).contains("4440315479889519190") {
         // error!("Found you!, the type is {}", std::any::type_name::<T>());
     }
+    #[cfg(feature = "gc")]
     if x.as_ref().unwrap().header().buffered() {
         error!("Try to drop&dealloc a buffered object! Drop only for now!");
         drop_only_obj::<T>(x);
@@ -832,10 +835,9 @@ impl PyObjectRef {
 }
 
 impl PyObject {
-
     /// return payload's `TypeId`
     #[inline]
-    pub(crate) fn inner_typeid(&self) -> TypeId{
+    pub(crate) fn inner_typeid(&self) -> TypeId {
         self.0.typeid
     }
     #[inline(always)]
