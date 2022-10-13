@@ -13,22 +13,22 @@ pub struct TraceHelper {}
 macro_rules! list_traceable {
     ($MACRO_NAME: tt) => {
         {
-            use crate::builtins::iter::{PyCallableIterator, PySequenceIterator};
-            use crate::object::Erased;
-            use crate::builtins::{
+            use $crate::builtins::iter::{PyCallableIterator, PySequenceIterator};
+            use $crate::object::Erased;
+            use $crate::builtins::{
                 enumerate::PyReverseSequenceIterator,
                 function::PyCell,
                 list::{PyListIterator, PyListReverseIterator},
                 memory::PyMemoryViewIterator,
                 tuple::PyTupleIterator,
             };
-            use crate::builtins::{
+            use $crate::builtins::{
                 PyBoundMethod, PyDict, PyEnumerate, PyFilter, PyFunction, PyList, PyMappingProxy,
                 PyProperty, PySet, PySlice, PyStaticMethod, PySuper, PyTraceback, PyTuple, PyType,
                 PyWeakProxy, PyZip,
             };
-            use crate::function::{ArgCallable, ArgIterable, ArgMapping, ArgSequence};
-            use crate::protocol::{
+            use $crate::function::{ArgCallable, ArgIterable, ArgMapping, ArgSequence};
+            use $crate::protocol::{
                 PyBuffer, PyIter, PyIterIter, PyIterReturn, PyMapping, PyNumber, PySequence,
             };
             $MACRO_NAME!(
@@ -49,7 +49,7 @@ macro_rules! list_traceable {
                 PyTraceback,
                 PyTuple,
                 // FIXME(discord9): deal with static PyType properly
-                // PyType,
+                PyType,
                 PyWeakProxy,
                 PyZip,
                 // misc

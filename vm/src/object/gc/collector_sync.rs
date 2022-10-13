@@ -1,4 +1,3 @@
-use std::any::Any;
 use std::time::Instant;
 use std::{fmt, ops::Deref, ptr::NonNull};
 
