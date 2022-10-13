@@ -139,8 +139,8 @@ impl CcSync {
     #[allow(unreachable_code)]
     pub fn should_gc(&self) -> bool {
         // TODO(discord9): remove later, just for debug
-        #[cfg(debug_assertions)]
-        return true;
+        // #[cfg(debug_assertions)]
+        // return true;
         // FIXME(discord9): better condition, could be important
         if self.roots_len() > 700 {
             if Self::IS_GC_THREAD.with(|v| v.get()) {
@@ -186,7 +186,7 @@ impl CcSync {
             let rc = obj.header().dec();
             if rc == 0 {
                 self.release(obj)
-            } else if TraceHelper::is_traceable(obj.0.type_id()) {
+            } else if TraceHelper::is_traceable(obj.inner_typeid()) {
                 self.possible_root(obj);
                 GcStatus::ShouldKeep
             } else {

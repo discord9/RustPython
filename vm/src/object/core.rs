@@ -158,7 +158,6 @@ pub(in crate::object) struct PyInner<T> {
 #[cfg(feature = "gc")]
 unsafe impl GcTrace for PyInner<Erased> {
     fn trace(&self, tracer_fn: &mut TracerFn) {
-        return;
         // trace PyInner's other field(that is except payload)
         self.typ.trace(tracer_fn);
         self.dict.trace(tracer_fn);
@@ -904,6 +903,12 @@ impl PyObjectRef {
 }
 
 impl PyObject {
+
+    /// return payload's `TypeId`
+    #[inline]
+    pub(crate) fn inner_typeid(&self) -> TypeId{
+        self.0.typeid
+    }
     #[inline(always)]
     fn weak_ref_list(&self) -> Option<&WeakRefList> {
         Some(&self.0.weak_list)

@@ -351,7 +351,7 @@ impl ExecutingFrame<'_> {
             self.update_lasti(|i| *i += 1);
             let instr = &instrs[idx];
             let result = self.execute_instruction(instr, vm);
-            if true {
+            {
                 // only do gc if after certain instruction(to be decided), so to avoid strange bugs?
                 // it seems ReturnValue is safe enough & frequent enough to do gc() after execute it?
                 // matches!(instr, &bytecode::Instruction::LoadConst { .. }) | &bytecode::Instruction::ReturnValue | &bytecode::Instruction::StoreLocal(..) | LoadConst(..)
