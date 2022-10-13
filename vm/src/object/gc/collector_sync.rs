@@ -65,6 +65,7 @@ impl<T: ?Sized> From<WrappedPtr<T>> for NonNull<T> {
     }
 }
 
+#[repr(C)]
 pub struct CcSync {
     roots: PyMutex<Vec<WrappedPtr<GcObj>>>,
     /// for stop the world, will be try to check lock every time deref ObjecteRef
@@ -135,6 +136,9 @@ impl CcSync {
     #[inline]
     #[allow(unreachable_code)]
     pub fn should_gc(&self) -> bool {
+        // TODO(discord9): remove later, just for debug
+        #[cfg(debug_assertions)]
+        return true;
         // FIXME(discord9): better condition, could be important
         if self.roots_len() > 700 {
             if Self::IS_GC_THREAD.with(|v| v.get()) {
@@ -181,13 +185,16 @@ impl CcSync {
             if rc == 0 {
                 self.release(obj)
             } else {
+                // TODO: make a check of being acyclic data type function
+                if obj.payload_is::<crate::stdlib::io::_io::BufferedReader>(){
+                    return GcStatus::ShouldKeep;
+                }
                 self.possible_root(obj);
                 GcStatus::ShouldKeep
             }
         } else {
-            // FIXME(discord9): confirm if rc==0 then should drop
-            // This is for Rust's RAII caused ref cycle's drop
-            GcStatus::ShouldDrop
+            // FIXME(discord9): confirm if already rc==0 then should do nothing
+            GcStatus::DoNothing
         }
     }
 

@@ -14,6 +14,8 @@ pub enum GcStatus {
     BufferedDrop,
     /// should keep and not drop by caller
     ShouldKeep,
+    /// Do Nothing, perhaps because it is RAII's deeds
+    DoNothing,
 }
 
 pub trait GcObjPtr: GcTrace {

@@ -85,6 +85,9 @@ struct PyObjVTable {
 }
 
 unsafe fn drop_dealloc_obj<T: PyObjectPayload>(x: *mut PyObject) {
+    if format!("{:?}", std::any::TypeId::of::<T>()).contains("4627466729215426581"){
+        error!("Found you!, the type is {}", std::any::type_name::<T>());
+    }
     drop(Box::from_raw(x as *mut PyInner<T>));
 }
 /// drop only(doesn't deallocate)
@@ -148,6 +151,13 @@ pub(in crate::object) struct PyInner<T> {
 #[cfg(feature = "gc")]
 unsafe impl GcTrace for PyInner<Erased> {
     fn trace(&self, tracer_fn: &mut TracerFn) {
+        return;
+        // trace PyInner's other field(that is except payload)
+        self.typ.trace(tracer_fn);
+        self.dict.trace(tracer_fn);
+        // weak_list keeps a *pointer* to a struct for maintaince weak ref, so no ownership, no trace
+        self.slots.trace(tracer_fn);
+
         /// FIXME(discord9): Optional trait bound(Like a ?GcTrace) require specialization
         ///
         /// https://stackoverflow.com/questions/68701910/function-optional-trait-bound-in-rust
@@ -198,7 +208,8 @@ unsafe impl GcTrace for PyInner<Erased> {
             PySuper,
             PyTraceback,
             PyTuple,
-            PyType,
+            // FIXME(discord9): deal with static PyType properly
+            // PyType,
             PyWeakProxy,
             PyZip,
             // misc
@@ -254,6 +265,8 @@ unsafe impl GcTrace for PyObject {
 
 impl PyInner<Erased> {
     fn as_object_ref(&self) -> &PyObject {
+        static_assertions::assert_eq_size!(PyObject, PyInner<Erased>);
+        static_assertions::assert_eq_align!(PyObject, PyInner<Erased>);
         // Safety: PyObject is #[repr(transparent)], so cast is safe, do note because lifetime issue we are not using From<PyInner<Erased>> for PyObject
         unsafe { NonNull::from(self).cast::<PyObject>().as_ref() }
     }
@@ -649,7 +662,6 @@ impl Drop for PyWeak {
         // we do NOT have actual exclusive access!
         // no clue if doing this actually reduces chance of UB
         let me: &Self = self;
-        // deallocate&drop is handle by garbage collector, don't do it here.
         me.drop_inner();
     }
 }
@@ -664,6 +676,13 @@ impl PyRef<PyWeak> {
 #[derive(Debug)]
 struct InstanceDict {
     d: PyRwLock<PyDictRef>,
+}
+
+#[cfg(feature = "gc")]
+unsafe impl GcTrace for InstanceDict {
+    fn trace(&self, tracer_fn: &mut TracerFn) {
+        self.d.trace(tracer_fn)
+    }
 }
 
 impl From<PyDictRef> for InstanceDict {
@@ -1203,13 +1222,23 @@ impl PyObject {
                     tuple::PyTupleIterator,
                 };
                 use crate::builtins::{
-                    PyArithmeticError, PyAssertionError, PyAsyncGen, PyAttributeError,
-                    PyBaseException, PyBaseExceptionRef, PyBaseObject, PyBlockingIOError, PyBool,
-                    PyBoundMethod, PyBrokenPipeError, PyBufferError, PyByteArray, PyBytes,
-                    PyBytesRef, PyBytesWarning, PyChildProcessError, PyClassMethod, PyCode,
-                    PyComplex, PyConnectionAbortedError, PyConnectionError,
-                    PyConnectionRefusedError, PyDict, PyEnumerate, PyFilter, PyFunction, PyList,
-                    PyMappingProxy, PyProperty, PyRange, PySet, PySlice, PyStaticMethod, PyStr,
+                    PositionIterInternal, PyArithmeticError, PyAssertionError, PyAsyncGen,
+                    PyAttributeError, PyBaseException, PyBaseExceptionRef, PyBaseObject,
+                    PyBlockingIOError, PyBool, PyBoundMethod, PyBrokenPipeError, PyBufferError,
+                    PyByteArray, PyBytes, PyBytesRef, PyBytesWarning, PyChildProcessError,
+                    PyClassMethod, PyCode, PyComplex, PyConnectionAbortedError, PyConnectionError,
+                    PyConnectionRefusedError, PyConnectionResetError, PyCoroutine,
+                    PyDeprecationWarning, PyDict, PyDictRef, PyEOFError, PyEllipsis,
+                    PyEncodingWarning, PyEnumerate, PyException, PyFileExistsError,
+                    PyFileNotFoundError, PyFilter, PyFloat, PyFloatingPointError, PyFrozenSet,
+                    PyFunction, PyFutureWarning, PyGenerator, PyGeneratorExit, PyGenericAlias,
+                    PyGetSet, PyImportError, PyImportWarning, PyIndentationError, PyIndexError,
+                    PyInt, PyIntRef, PyInterruptedError, PyIsADirectoryError, PyKeyError,
+                    PyKeyboardInterrupt, PyList, PyListRef, PyLookupError, PyMap, PyMappingProxy,
+                    PyMemoryError, PyMemoryView, PyModule, PyModuleNotFoundError, PyNameError,
+                    PyNamespace, PyNone, PyNotADirectoryError, PyNotImplemented,
+                    PyNotImplementedError, PyOSError, PyOverflowError, PyPendingDeprecationWarning,
+                    PyPermissionError, PyProperty, PyRange, PySet, PySlice, PyStaticMethod, PyStr,
                     PySuper, PyTraceback, PyTuple, PyType, PyWeakProxy, PyZip,
                 };
                 use crate::function::{ArgCallable, ArgIterable, ArgMapping, ArgSequence};
@@ -1243,12 +1272,57 @@ impl PyObject {
                         PyConnectionAbortedError,
                         PyConnectionError,
                         PyConnectionRefusedError,
+                        PyConnectionResetError,
+                        PyCoroutine,
+                        PyDeprecationWarning,
                         PyDict,
+                        PyDictRef,
+                        PyEOFError,
+                        PyEllipsis,
+                        PyEncodingWarning,
                         PyEnumerate,
+                        PyException,
+                        PyFileExistsError,
+                        PyFileNotFoundError,
                         PyFilter,
+                        PyFloat,
+                        PyFloatingPointError,
+                        PyFrozenSet,
                         PyFunction,
+                        PyFutureWarning,
+                        PyGenerator,
+                        PyGeneratorExit,
+                        PyGenericAlias,
+                        PyGetSet,
+                        PyImportError,
+                        PyImportWarning,
+                        PyIndentationError,
+                        PyIndexError,
+                        PyInt,
+                        PyIntRef,
+                        PyInterruptedError,
+                        PyIsADirectoryError,
+                        PyKeyError,
+                        PyKeyboardInterrupt,
                         PyList,
+                        PyListRef,
+                        PyLookupError,
+                        PyMap,
                         PyMappingProxy,
+                        PyMemoryError,
+                        PyMemoryView,
+                        PyModule,
+                        PyModuleNotFoundError,
+                        PyNameError,
+                        PyNamespace,
+                        PyNone,
+                        PyNotADirectoryError,
+                        PyNotImplemented,
+                        PyNotImplementedError,
+                        PyOSError,
+                        PyOverflowError,
+                        PyPendingDeprecationWarning,
+                        PyPermissionError,
                         PyProperty,
                         PyRange,
                         PySet,
@@ -1723,6 +1797,7 @@ pub(crate) fn init_type_hierarchy() -> (PyTypeRef, PyTypeRef, PyTypeRef) {
     // and both `type` and `object are instances of `type`.
     // to produce this circular dependency, we need an unsafe block.
     // (and yes, this will never get dropped. TODO?)
+    // FIXME(discord9): check if this need a leak
     let (type_type, object_type) = {
         type UninitRef<T> = PyRwLock<NonNull<PyInner<T>>>;
 
@@ -1788,8 +1863,8 @@ pub(crate) fn init_type_hierarchy() -> (PyTypeRef, PyTypeRef, PyTypeRef) {
         unsafe {
             #[cfg(feature = "gc")]
             {
-                // FIXME: figure out if this is correct way.
-                (*type_type_ptr.cast::<PyInner<Erased>>()).inc();
+                // FIXME(discord9): figure out if this is correct way.
+                (*type_type_ptr.cast::<PyInner<Erased>>()).header().leak();
             }
             #[cfg(not(feature = "gc"))]
             {
@@ -1802,8 +1877,8 @@ pub(crate) fn init_type_hierarchy() -> (PyTypeRef, PyTypeRef, PyTypeRef) {
             );
             #[cfg(feature = "gc")]
             {
-                // FIXME: figure out if this is correct way.
-                (*type_type_ptr.cast::<PyInner<Erased>>()).inc();
+                // FIXME(discord9): figure out if this is correct way.
+                // (*type_type_ptr.cast::<PyInner<Erased>>()).header().leak();
             }
             #[cfg(not(feature = "gc"))]
             {

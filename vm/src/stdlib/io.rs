@@ -97,7 +97,7 @@ impl TryFromObject for Fildes {
 }
 
 #[pymodule]
-mod _io {
+pub(crate) mod _io {
     use super::*;
 
     use crate::{
@@ -1674,7 +1674,7 @@ mod _io {
     #[pyattr]
     #[pyclass(name = "BufferedReader", base = "_BufferedIOBase")]
     #[derive(Debug, Default, PyPayload)]
-    struct BufferedReader {
+    pub(crate) struct BufferedReader {
         data: PyThreadMutex<BufferedData>,
     }
     impl BufferedMixin for BufferedReader {
