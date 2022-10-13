@@ -85,10 +85,17 @@ struct PyObjVTable {
 }
 
 unsafe fn drop_dealloc_obj<T: PyObjectPayload>(x: *mut PyObject) {
-    if format!("{:?}", std::any::TypeId::of::<T>()).contains("4627466729215426581"){
-        error!("Found you!, the type is {}", std::any::type_name::<T>());
+    // 4440315479889519190: rustpython_vm::stdlib::io::fileio::FileIO,
+    // 4627466729215426581: crate::stdlib::io::_io::BufferedReader
+    if format!("{:?}", std::any::TypeId::of::<T>()).contains("4440315479889519190") {
+        // error!("Found you!, the type is {}", std::any::type_name::<T>());
     }
-    drop(Box::from_raw(x as *mut PyInner<T>));
+    if x.as_ref().unwrap().header().buffered() {
+        error!("Try to drop&dealloc a buffered object! Drop only for now!");
+        drop_only_obj::<T>(x);
+    } else {
+        drop(Box::from_raw(x as *mut PyInner<T>));
+    }
 }
 /// drop only(doesn't deallocate)
 unsafe fn drop_only_obj<T: PyObjectPayload>(x: *mut PyObject) {
@@ -764,7 +771,7 @@ cfg_if::cfg_if! {
 
 #[derive(Debug)]
 #[repr(transparent)]
-pub struct PyObject(PyInner<Erased>);
+pub struct PyObject(pub(in crate::object) PyInner<Erased>);
 
 impl Deref for PyObjectRef {
     type Target = PyObject;
@@ -1199,175 +1206,9 @@ impl PyObject {
         {
             debug_assert!(ptr.as_ref().header().is_drop());
             if ptr.as_ref().header().is_dealloc() {
-                macro_rules! show_typeid {
-                    ($ID: tt: $($TY: ty),*$(,)?) => {
-                        $(
-                            if TypeId::of::<$TY>()==$ID{
-                                String::from(std::stringify!($TY))
-                            }
-                        )else*
-                        else{
-                            format!("Unknown type, id={:?}", $ID)
-                        }
-                    };
-                }
-                error!("Double deallocate!");
                 let tid = ptr.as_ref().0.typeid;
-                use crate::builtins::iter::{PyCallableIterator, PySequenceIterator};
-                use crate::builtins::{
-                    enumerate::PyReverseSequenceIterator,
-                    function::PyCell,
-                    list::{PyListIterator, PyListReverseIterator},
-                    memory::PyMemoryViewIterator,
-                    tuple::PyTupleIterator,
-                };
-                use crate::builtins::{
-                    PositionIterInternal, PyArithmeticError, PyAssertionError, PyAsyncGen,
-                    PyAttributeError, PyBaseException, PyBaseExceptionRef, PyBaseObject,
-                    PyBlockingIOError, PyBool, PyBoundMethod, PyBrokenPipeError, PyBufferError,
-                    PyByteArray, PyBytes, PyBytesRef, PyBytesWarning, PyChildProcessError,
-                    PyClassMethod, PyCode, PyComplex, PyConnectionAbortedError, PyConnectionError,
-                    PyConnectionRefusedError, PyConnectionResetError, PyCoroutine,
-                    PyDeprecationWarning, PyDict, PyDictRef, PyEOFError, PyEllipsis,
-                    PyEncodingWarning, PyEnumerate, PyException, PyFileExistsError,
-                    PyFileNotFoundError, PyFilter, PyFloat, PyFloatingPointError, PyFrozenSet,
-                    PyFunction, PyFutureWarning, PyGenerator, PyGeneratorExit, PyGenericAlias,
-                    PyGetSet, PyImportError, PyImportWarning, PyIndentationError, PyIndexError,
-                    PyInt, PyIntRef, PyInterruptedError, PyIsADirectoryError, PyKeyError,
-                    PyKeyboardInterrupt, PyList, PyListRef, PyLookupError, PyMap, PyMappingProxy,
-                    PyMemoryError, PyMemoryView, PyModule, PyModuleNotFoundError, PyNameError,
-                    PyNamespace, PyNone, PyNotADirectoryError, PyNotImplemented,
-                    PyNotImplementedError, PyOSError, PyOverflowError, PyPendingDeprecationWarning,
-                    PyPermissionError, PyProperty, PyRange, PySet, PySlice, PyStaticMethod, PyStr,
-                    PySuper, PyTraceback, PyTuple, PyType, PyWeakProxy, PyZip,
-                };
-                use crate::function::{ArgCallable, ArgIterable, ArgMapping, ArgSequence};
-                use crate::protocol::{
-                    PyBuffer, PyIter, PyIterIter, PyIterReturn, PyMapping, PyNumber, PySequence,
-                };
-                error!(
-                    "typeid={:?}",
-                    show_typeid!(
-                        tid: // builtin types
-                        PyArithmeticError,
-                        PyAssertionError,
-                        PyAsyncGen,
-                        PyAttributeError,
-                        PyBaseException,
-                        PyBaseExceptionRef,
-                        PyBaseObject,
-                        PyBlockingIOError,
-                        PyBool,
-                        PyBoundMethod,
-                        PyBrokenPipeError,
-                        PyBufferError,
-                        PyByteArray,
-                        PyBytes,
-                        PyBytesRef,
-                        PyBytesWarning,
-                        PyChildProcessError,
-                        PyClassMethod,
-                        PyCode,
-                        PyComplex,
-                        PyConnectionAbortedError,
-                        PyConnectionError,
-                        PyConnectionRefusedError,
-                        PyConnectionResetError,
-                        PyCoroutine,
-                        PyDeprecationWarning,
-                        PyDict,
-                        PyDictRef,
-                        PyEOFError,
-                        PyEllipsis,
-                        PyEncodingWarning,
-                        PyEnumerate,
-                        PyException,
-                        PyFileExistsError,
-                        PyFileNotFoundError,
-                        PyFilter,
-                        PyFloat,
-                        PyFloatingPointError,
-                        PyFrozenSet,
-                        PyFunction,
-                        PyFutureWarning,
-                        PyGenerator,
-                        PyGeneratorExit,
-                        PyGenericAlias,
-                        PyGetSet,
-                        PyImportError,
-                        PyImportWarning,
-                        PyIndentationError,
-                        PyIndexError,
-                        PyInt,
-                        PyIntRef,
-                        PyInterruptedError,
-                        PyIsADirectoryError,
-                        PyKeyError,
-                        PyKeyboardInterrupt,
-                        PyList,
-                        PyListRef,
-                        PyLookupError,
-                        PyMap,
-                        PyMappingProxy,
-                        PyMemoryError,
-                        PyMemoryView,
-                        PyModule,
-                        PyModuleNotFoundError,
-                        PyNameError,
-                        PyNamespace,
-                        PyNone,
-                        PyNotADirectoryError,
-                        PyNotImplemented,
-                        PyNotImplementedError,
-                        PyOSError,
-                        PyOverflowError,
-                        PyPendingDeprecationWarning,
-                        PyPermissionError,
-                        PyProperty,
-                        PyRange,
-                        PySet,
-                        PySlice,
-                        PyStaticMethod,
-                        PyStr,
-                        PySuper,
-                        PyTraceback,
-                        PyTuple,
-                        PyType,
-                        PyWeakProxy,
-                        PyZip,
-                        // misc
-                        PyCell,
-                        // iter in iter.rs
-                        PySequenceIterator,
-                        PyCallableIterator,
-                        // iter on types
-                        // PyList's iter
-                        PyListIterator,
-                        PyListReverseIterator,
-                        // PyTuple's iter
-                        PyTupleIterator,
-                        // PyEnumerate's iter
-                        PyReverseSequenceIterator,
-                        // PyMemory's iter
-                        PyMemoryViewIterator,
-                        // function/Arg protocol
-                        ArgCallable,
-                        ArgIterable,
-                        ArgMapping,
-                        ArgSequence,
-                        // protocol
-                        // struct like
-                        PyBuffer,
-                        PyIter,
-                        // FIXME(discord9): confirm this is ok to do
-                        PyIterIter<Erased>,
-                        PyIterReturn,
-                        PyMapping,
-                        PyNumber,
-                        PySequence
-                    )
-                );
-
+                error!("Double deallocate!, Unknown type, id={:?}", tid);
+                error!("Header: {:?}", ptr.as_ref().header());
                 use backtrace::Backtrace;
                 let bt = Backtrace::new();
                 error!("Double deallocate's stack: \n--------\n{:?}", bt);
