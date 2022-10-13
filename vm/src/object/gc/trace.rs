@@ -7,7 +7,6 @@ use core::ptr::NonNull;
 use std::any::TypeId;
 use std::collections::HashSet;
 
-// TODO: make a function that exec code on traceable data type
 pub struct TraceHelper {}
 
 #[macro_export]
@@ -55,11 +54,11 @@ macro_rules! list_traceable {
                 PyZip,
                 // misc
                 // FIXME(discord9): causing dead lock on very rare occasion
-                // PyCell,
+                PyCell,
                 // iter in iter.rs
                 // FIXME(discord9): PositionIterInternal seems to cause dead lock on trace on very rare occasion
                 // which is called in PySequenceIterator(and many other iters, but they are less frequent so appeal fine?)
-                // PySequenceIterator,
+                PySequenceIterator,
                 PyCallableIterator,
                 // iter on types
                 // PyList's iter
@@ -212,9 +211,8 @@ unsafe impl<T: GcTrace> GcTrace for PyMutex<T> {
     #[inline]
     fn trace(&self, tracer_fn: &mut TracerFn) {
         // FIXME(discord9): check if this may cause a deadlock or not
-        // TODO: acquire raw pointer and iter over them?(That would be both unsafe&unsound if not in gc pausing or done by a)
         #[cfg(feature = "threading")]
-        match self.try_lock() {
+        match self.try_lock_for(LOCK_TIMEOUT) {
             Some(inner) => {
                 // instead of the sound way of getting a lock and trace
                 inner.trace(tracer_fn);
@@ -241,7 +239,6 @@ unsafe impl<T: GcTrace> GcTrace for PyMutex<T> {
             None => {
                 // that is likely a cause of wrong `trace()` impl
                 error!("Could be in dead lock.");
-                // not kill the thread for now
                 deadlock_handler()
             }
         }

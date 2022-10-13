@@ -124,15 +124,10 @@ impl GcHeader {
         // so nothing need to be done, pausing is only useful for threading
     }
     pub fn color(&self) -> Color {
-        match self.color.try_lock() {
-            Some(c) => *c,
-            None => {
-                panic!("Header: {:?}", self);
-            }
-        }
+        *self.color.lock()
     }
     pub fn set_color(&self, new_color: Color) {
-        *self.color.try_lock().unwrap() = new_color;
+        *self.color.lock() = new_color;
     }
     pub fn buffered(&self) -> bool {
         *self.buffered.lock()

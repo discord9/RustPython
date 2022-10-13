@@ -166,7 +166,6 @@ pub(super) struct PySetInner {
 #[cfg(feature = "gc")]
 unsafe impl crate::object::gc::GcTrace for PySetInner {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
-        // FIXME(discord9): check access through a PyRc is ok
         self.content.trace(tracer_fn);
     }
 }

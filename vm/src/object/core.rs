@@ -87,11 +87,6 @@ struct PyObjVTable {
 }
 
 unsafe fn drop_dealloc_obj<T: PyObjectPayload>(x: *mut PyObject) {
-    // 4440315479889519190: rustpython_vm::stdlib::io::fileio::FileIO,
-    // 4627466729215426581: crate::stdlib::io::_io::BufferedReader
-    if format!("{:?}", std::any::TypeId::of::<T>()).contains("4440315479889519190") {
-        // error!("Found you!, the type is {}", std::any::type_name::<T>());
-    }
     #[cfg(feature = "gc")]
     if x.as_ref().unwrap().header().buffered() {
         error!("Try to drop&dealloc a buffered object! Drop only for now!");
