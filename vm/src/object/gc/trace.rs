@@ -56,7 +56,6 @@ macro_rules! list_traceable {
                 PyWeakProxy,
                 PyZip,
                 // misc
-                // FIXME(discord9): causing dead lock on very rare occasion
                 PyCell,
                 // iter in iter.rs
                 // FIXME(discord9): PositionIterInternal seems to cause dead lock on trace on very rare occasion

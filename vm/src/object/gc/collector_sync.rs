@@ -247,9 +247,16 @@ impl CcSync {
         let lock = {
             #[cfg(feature = "threading")]
             {
-                self.pause
-                    .try_write_for(LOCK_TIMEOUT)
-                    .unwrap_or_else(|| deadlock_handler())
+                // if can't access pause lock, return immediately because gc is not that emergency, 
+                // also normal call to `gc.collect()` can usually acquire that lock unless something is wrong
+                match self.pause
+                    .try_write(){
+                        Some(v) => v,
+                        None => {
+                            warn!("Can't acquire lock to stop the world, stop gc now.");
+                            return (0,0).into()
+                        },
+                    }
             }
 
             // also when no threading, there is actually no need to get a lock,(because every thread have it's own gc)
