@@ -178,6 +178,8 @@ unsafe impl GcTrace for PyInner<Erased> {
                 )else*
             };
         }
+        // get a lock to prevent graph changing when tracing?
+        let _lock = self.header().try_pausing();
         list_traceable!(optional_trace);
     }
 }

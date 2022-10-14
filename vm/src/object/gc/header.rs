@@ -4,7 +4,7 @@ use crate::object::gc::{deadlock_handler, CcSync, GLOBAL_COLLECTOR, LOCK_TIMEOUT
 
 #[cfg(not(feature = "threading"))]
 use rustpython_common::atomic::Radium;
-use rustpython_common::{atomic::PyAtomic, lock::PyMutex, rc::PyRc};
+use rustpython_common::{atomic::PyAtomic, lock::{PyMutex, PyRwLockReadGuard}, rc::PyRc};
 
 /// Garbage collect header, containing ref count and other info, using repr(C) to stay consistent with PyInner 's repr
 #[repr(C)]
@@ -96,6 +96,21 @@ impl GcHeader {
         } else {
             false
         }
+    }
+
+    pub fn try_pausing(&self) -> Option<PyRwLockReadGuard<()>>{
+        #[cfg(feature = "threading")]
+        {
+            if CcSync::IS_GC_THREAD.with(|v| v.get()) {
+                // if is same thread, then this thread is already stop by gc itself,
+                // no need to block.
+                // and any call to do_pausing is probably from drop() or what so allow it to continue execute.
+                return None;
+            }
+            self.gc.pause.try_read_recursive_for(LOCK_TIMEOUT)
+        }
+        #[cfg(not(feature = "threading"))]
+        return None;
     }
 
     /// This function will block if is a garbage collect is happening
