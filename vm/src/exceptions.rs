@@ -21,6 +21,16 @@ use std::{
     ops::Deref,
 };
 
+#[cfg(feature = "gc")]
+unsafe impl crate::object::gc::GcTrace for PyBaseException {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        self.traceback.trace(tracer_fn);
+        self.cause.trace(tracer_fn);
+        self.context.trace(tracer_fn);
+        self.args.trace(tracer_fn);
+    }
+}
+
 impl std::fmt::Debug for PyBaseException {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         // TODO: implement more detailed, non-recursive Debug formatter

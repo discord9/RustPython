@@ -9,6 +9,8 @@ use std::collections::HashSet;
 
 pub struct TraceHelper {}
 
+/// apply a macro to a list of traceable type. using macro instead of generic
+/// because otherwise require specialization feature to enable
 #[macro_export]
 macro_rules! list_traceable {
     ($MACRO_NAME: tt) => {
@@ -23,9 +25,9 @@ macro_rules! list_traceable {
                 tuple::PyTupleIterator,
             };
             use $crate::builtins::{
-                PyBoundMethod, PyDict, PyEnumerate, PyFilter, PyFunction, PyList, PyMappingProxy,
-                PyProperty, PySet, PySlice, PyStaticMethod, PySuper, PyTraceback, PyTuple, PyType,
-                PyWeakProxy, PyZip,
+                PyBaseException, PyBoundMethod, PyDict, PyEnumerate, PyFilter, PyFunction, PyList,
+                PyMappingProxy, PyProperty, PySet, PySlice, PyStaticMethod, PySuper, PyTraceback,
+                PyTuple, PyType, PyWeakProxy, PyZip,
             };
             use $crate::function::{ArgCallable, ArgIterable, ArgMapping, ArgSequence};
             use $crate::protocol::{
@@ -34,6 +36,7 @@ macro_rules! list_traceable {
             $MACRO_NAME!(
                 // builtin types
                 // PyRange, PyStr is acyclic, therefore no trace needed for them
+                PyBaseException,
                 PyBoundMethod,
                 PyDict,
                 PyEnumerate,
