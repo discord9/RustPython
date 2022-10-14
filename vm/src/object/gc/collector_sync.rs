@@ -137,9 +137,6 @@ impl CcSync {
     #[inline]
     #[allow(unreachable_code)]
     pub fn should_gc(&self) -> bool {
-        // TODO(discord9): remove later, just for debug
-        // #[cfg(debug_assertions)]
-        // return true;
         // FIXME(discord9): better condition, could be important
         if self.roots_len() > 700 {
             if Self::IS_GC_THREAD.with(|v| v.get()) {
@@ -178,7 +175,7 @@ impl CcSync {
         // prevent RAII Drop to drop below zero
         if obj.header().rc() > 0 {
             obj.header().do_pausing();
-            // acquire exclusive access to obj
+            // acquire exclusive access to obj's header
             #[cfg(feature = "threading")]
             let _lock = obj.header().exclusive.lock();
 
@@ -186,6 +183,7 @@ impl CcSync {
             if rc == 0 {
                 self.release(obj)
             } else if TraceHelper::is_traceable(obj.inner_typeid()) {
+                // only buffer traceable object for that is where we can detect cycles
                 self.possible_root(obj);
                 GcStatus::ShouldKeep
             } else {
