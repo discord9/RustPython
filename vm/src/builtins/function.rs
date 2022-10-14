@@ -41,11 +41,14 @@ unsafe impl crate::object::gc::GcTrace for PyFunction {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         self.code.trace(tracer_fn);
         self.globals.trace(tracer_fn);
+        // FIXME(discord9): seems to cause PyCell's deadlock?
+        /*
         if let Some(closure) = &self.closure {
             for elem in closure.as_ref() {
                 elem.trace(tracer_fn);
             }
         }
+        */
 
         self.defaults_and_kwdefaults.trace(tracer_fn);
 
