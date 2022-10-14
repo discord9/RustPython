@@ -477,6 +477,15 @@ pub struct PyTupleTyped<T: TransmuteFromObject> {
     _marker: PhantomData<Vec<T>>,
 }
 
+#[cfg(feature = "gc")]
+unsafe impl<T> crate::object::gc::GcTrace for PyTupleTyped<T>
+where T: TransmuteFromObject {
+    fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
+        // FIXME(discord9): confirm this is right, for now uncomment this line cause dead lock in scan_black
+        self.tuple.trace(tracer_fn);
+    }
+}
+
 impl<T: TransmuteFromObject> TryFromObject for PyTupleTyped<T> {
     fn try_from_object(vm: &VirtualMachine, obj: PyObjectRef) -> PyResult<Self> {
         let tuple = PyTupleRef::try_from_object(vm, obj)?;
