@@ -98,9 +98,9 @@ impl CcSync {
     }
     /// _suggest_(may or may not) collector to collect garbage. return number of cyclic garbage being collected
     #[inline]
-    pub fn gc(&self) -> GcResult {
+    pub fn fast_try_gc(&self) -> GcResult {
         if self.should_gc() {
-            self.force_gc()
+            self.collect_cycles(false)
         } else {
             (0, 0).into()
         }
@@ -121,11 +121,7 @@ impl CcSync {
 
     #[inline]
     pub fn force_gc(&self) -> GcResult {
-        if self.is_enabled() {
-            self.collect_cycles()
-        } else {
-            GcResult::new((0, 0))
-        }
+        self.collect_cycles(true)
     }
 
     #[inline]
@@ -133,10 +129,12 @@ impl CcSync {
         self.roots.lock().len()
     }
 
-    /// TODO: change to use roots'len or what to determine
     #[inline]
     #[allow(unreachable_code)]
     pub fn should_gc(&self) -> bool {
+        if !self.is_enabled() {
+            return false;
+        }
         // FIXME(discord9): better condition, could be important
         if self.roots_len() > 700 {
             if Self::IS_GC_THREAD.with(|v| v.get()) {
@@ -234,7 +232,7 @@ impl CcSync {
     }
 
     /// The core of garbage collect process, return `(acyclic garbage collected, cyclic garbage collected)`.
-    fn collect_cycles(&self) -> GcResult {
+    fn collect_cycles(&self, force: bool) -> GcResult {
         if Self::IS_GC_THREAD.with(|v| v.get()) {
             return (0, 0).into();
             // already call collect_cycle() once
@@ -247,13 +245,24 @@ impl CcSync {
         let lock = {
             #[cfg(feature = "threading")]
             {
-                // if can't access pause lock, return immediately because gc is not that emergency,
+                // if can't access pause lock for a second, return because gc is not that emergency,
                 // also normal call to `gc.collect()` can usually acquire that lock unless something is wrong
-                match self.pause.try_write() {
-                    Some(v) => v,
-                    None => {
-                        warn!("Can't acquire lock to stop the world, stop gc now.");
-                        return (0, 0).into();
+                if force {
+                    // if is forced to gc, wait a while for write lock
+                    match self.pause.try_write_for(std::time::Duration::from_secs(1)) {
+                        Some(v) => v,
+                        None => {
+                            warn!("Can't acquire lock to stop the world, stop gc now.");
+                            return (0, 0).into();
+                        }
+                    }
+                } else {
+                    match self.pause.try_write() {
+                        Some(v) => v,
+                        None => {
+                            warn!("Fast GC fail to acquire write lock, stop gc now.");
+                            return (0, 0).into();
+                        }
                     }
                 }
             }
@@ -338,7 +347,7 @@ impl CcSync {
             .count();
         let len_white = white.len();
         if !white.is_empty() {
-            warn!("Collect cyclic garbage in white.len()={}", white.len());
+            warn!("Cyclic garbage collected, count={}", white.len());
         }
         // Run drop on each of nodes.
         for i in &white {
@@ -423,6 +432,7 @@ impl CcSync {
             }
             ch.header().inc();
             if ch.header().color() != Color::Black {
+                assert!(ch.header().color() == Color::Gray || ch.header().color() == Color::White);
                 self.scan_black(ch)
             }
         });

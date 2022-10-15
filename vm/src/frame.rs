@@ -358,7 +358,7 @@ impl ExecutingFrame<'_> {
                 #[cfg(feature = "gc")]
                 {
                     #[cfg(feature = "threading")]
-                    GLOBAL_COLLECTOR.gc();
+                    GLOBAL_COLLECTOR.fast_try_gc();
                     #[cfg(not(feature = "threading"))]
                     GLOBAL_COLLECTOR.with(|v| v.gc());
                 }

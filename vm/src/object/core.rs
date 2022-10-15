@@ -156,6 +156,9 @@ pub(in crate::object) struct PyInner<T> {
 #[cfg(feature = "gc")]
 unsafe impl GcTrace for PyInner<Erased> {
     fn trace(&self, tracer_fn: &mut TracerFn) {
+        // get a lock to prevent graph changing when tracing?
+        let _lock = self.header().try_pausing();
+
         // trace PyInner's other field(that is except payload)
         self.typ.trace(tracer_fn);
         self.dict.trace(tracer_fn);
@@ -178,8 +181,6 @@ unsafe impl GcTrace for PyInner<Erased> {
                 )else*
             };
         }
-        // get a lock to prevent graph changing when tracing?
-        let _lock = self.header().try_pausing();
         list_traceable!(optional_trace);
     }
 }

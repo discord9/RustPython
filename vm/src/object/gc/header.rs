@@ -135,7 +135,7 @@ impl GcHeader {
             let _lock = self
                 .gc
                 .pause
-                .try_read_for(LOCK_TIMEOUT)
+                .try_read_recursive_for(LOCK_TIMEOUT)
                 .unwrap_or_else(|| deadlock_handler());
         }
         // when not threading, one could still run multiple vm on multiple thread(which have a GC per thread)
@@ -195,9 +195,9 @@ impl GcHeader {
 /// other color(Green, Red, Orange) in the paper is not in use for now, so remove them in this enum
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Color {
-    /// In use or free
+    /// In use
     Black,
-    /// free, as in white
+    /// free, as in change by collect_white to black
     BlackFree,
     /// Possible member of cycle
     Gray,
