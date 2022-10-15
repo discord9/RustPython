@@ -103,7 +103,7 @@ pub static TRACEABLE_TYPE: once_cell::sync::Lazy<HashSet<TypeId>> =
     once_cell::sync::Lazy::new(|| HashSet::from(list_traceable!(get_type_ids)));
 impl TraceHelper {
     /// return true if TypeId's corrsponding type is traceable.
-    /// 
+    ///
     /// soundness: if extremely rare hash collision happen with TypeId(see [this](https://github.com/rust-lang/rust/issues/10389)),
     /// the worst results is just mistaken a non-traceable type as traceable, which usually doesn't interference with garbage collection
     pub fn is_traceable(tid: TypeId) -> bool {

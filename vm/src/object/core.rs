@@ -172,7 +172,7 @@ unsafe impl GcTrace for PyInner<Erased> {
                 $(
                     if TypeId::of::<$TY>() == self.typeid{
                         // Safety: because typeid said so!
-                        let inner: &PyInner<$TY> = unsafe { std::mem::transmute(self) };
+                        let inner: &PyInner<$TY> = unsafe { &*(self as *const PyInner<Erased> as *const PyInner<$TY>) };
                         inner.payload.trace(tracer_fn);
                     }
                 )else*

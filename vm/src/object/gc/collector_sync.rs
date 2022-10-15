@@ -182,8 +182,8 @@ impl CcSync {
             let rc = obj.header().dec();
             if rc == 0 {
                 self.release(obj)
-            } else if TraceHelper::is_traceable(obj.inner_typeid()) {
-                // only buffer traceable object for that is where we can detect cycles
+            } else if TraceHelper::is_traceable(obj.inner_typeid()) && !obj.header().is_leaked() {
+                // only buffer traceable(and not leaked) object for that is where we can detect cycles
                 self.possible_root(obj);
                 GcStatus::ShouldKeep
             } else {
@@ -247,16 +247,15 @@ impl CcSync {
         let lock = {
             #[cfg(feature = "threading")]
             {
-                // if can't access pause lock, return immediately because gc is not that emergency, 
+                // if can't access pause lock, return immediately because gc is not that emergency,
                 // also normal call to `gc.collect()` can usually acquire that lock unless something is wrong
-                match self.pause
-                    .try_write(){
-                        Some(v) => v,
-                        None => {
-                            warn!("Can't acquire lock to stop the world, stop gc now.");
-                            return (0,0).into()
-                        },
+                match self.pause.try_write() {
+                    Some(v) => v,
+                    None => {
+                        warn!("Can't acquire lock to stop the world, stop gc now.");
+                        return (0, 0).into();
                     }
+                }
             }
 
             // also when no threading, there is actually no need to get a lock,(because every thread have it's own gc)
@@ -350,6 +349,9 @@ impl CcSync {
             // from the original paper caused by having destructors that we need to run.
             let obj = unsafe { i.as_ref() };
             obj.trace(&mut |ch| {
+                if ch.header().is_leaked() {
+                    return;
+                }
                 if ch.header().rc() > 0 {
                     ch.header().inc();
                 }
@@ -377,7 +379,12 @@ impl CcSync {
     fn collect_white(&self, obj: GcObjRef, white: &mut Vec<NonNull<GcObj>>) {
         if obj.header().color() == Color::White && !obj.header().buffered() {
             obj.header().set_color(Color::BlackFree);
-            obj.trace(&mut |ch| self.collect_white(ch, white));
+            obj.trace(&mut |ch| {
+                if ch.header().is_leaked() {
+                    return;
+                }
+                self.collect_white(ch, white)
+            });
             white.push(NonNull::from(obj));
         }
     }
@@ -385,6 +392,9 @@ impl CcSync {
         if obj.header().color() != Color::Gray {
             obj.header().set_color(Color::Gray);
             obj.trace(&mut |ch| {
+                if ch.header().is_leaked() {
+                    return;
+                }
                 ch.header().dec();
                 self.mark_gray(ch);
             });
@@ -397,6 +407,9 @@ impl CcSync {
             } else {
                 obj.header().set_color(Color::White);
                 obj.trace(&mut |ch| {
+                    if ch.header().is_leaked() {
+                        return;
+                    }
                     self.scan(ch);
                 });
             }
@@ -405,6 +418,9 @@ impl CcSync {
     fn scan_black(&self, obj: GcObjRef) {
         obj.header().set_color(Color::Black);
         obj.trace(&mut |ch| {
+            if ch.header().is_leaked() {
+                return;
+            }
             ch.header().inc();
             if ch.header().color() != Color::Black {
                 self.scan_black(ch)

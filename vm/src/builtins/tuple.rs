@@ -479,7 +479,9 @@ pub struct PyTupleTyped<T: TransmuteFromObject> {
 
 #[cfg(feature = "gc")]
 unsafe impl<T> crate::object::gc::GcTrace for PyTupleTyped<T>
-where T: TransmuteFromObject {
+where
+    T: TransmuteFromObject,
+{
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
         // FIXME(discord9): confirm this is right, for now uncomment this line cause dead lock in scan_black
         self.tuple.trace(tracer_fn);

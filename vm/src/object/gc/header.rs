@@ -4,7 +4,11 @@ use crate::object::gc::{deadlock_handler, CcSync, GLOBAL_COLLECTOR, LOCK_TIMEOUT
 
 #[cfg(not(feature = "threading"))]
 use rustpython_common::atomic::Radium;
-use rustpython_common::{atomic::PyAtomic, lock::{PyMutex, PyRwLockReadGuard}, rc::PyRc};
+use rustpython_common::{
+    atomic::PyAtomic,
+    lock::{PyMutex, PyRwLockReadGuard},
+    rc::PyRc,
+};
 
 /// Garbage collect header, containing ref count and other info, using repr(C) to stay consistent with PyInner 's repr
 #[repr(C)]
@@ -98,7 +102,7 @@ impl GcHeader {
         }
     }
 
-    pub fn try_pausing(&self) -> Option<PyRwLockReadGuard<()>>{
+    pub fn try_pausing(&self) -> Option<PyRwLockReadGuard<()>> {
         #[cfg(feature = "threading")]
         {
             if CcSync::IS_GC_THREAD.with(|v| v.get()) {
