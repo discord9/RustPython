@@ -360,7 +360,7 @@ impl ExecutingFrame<'_> {
                     #[cfg(feature = "threading")]
                     GLOBAL_COLLECTOR.fast_try_gc();
                     #[cfg(not(feature = "threading"))]
-                    GLOBAL_COLLECTOR.with(|v| v.gc());
+                    GLOBAL_COLLECTOR.with(|v| v.fast_try_gc());
                 }
             }
             match result {
