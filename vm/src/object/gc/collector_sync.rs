@@ -2,8 +2,7 @@ use std::time::Instant;
 use std::{fmt, ops::Deref, ptr::NonNull};
 
 use crate::object::gc::{
-    deadlock_handler, trace::TraceHelper, Color, GcObj, GcObjPtr, GcObjRef, GcResult, GcStatus,
-    GcTrace, LOCK_TIMEOUT,
+    trace::TraceHelper, Color, GcObj, GcObjPtr, GcObjRef, GcResult, GcStatus, GcTrace,
 };
 use crate::PyObject;
 
@@ -271,7 +270,9 @@ impl CcSync {
             // but for the sake of using same code(and defendsive), we acquire one anyway
             #[cfg(not(feature = "threading"))]
             {
-                self.pause.write()
+                // when not threading, no deadlock should occur?
+                let _force = force;
+                self.pause.try_write().unwrap()
             }
         };
         Self::IS_GC_THREAD.with(|v| v.set(true));

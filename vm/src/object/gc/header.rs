@@ -1,6 +1,8 @@
 use std::sync::atomic::Ordering;
 
-use crate::object::gc::{deadlock_handler, CcSync, GLOBAL_COLLECTOR, LOCK_TIMEOUT};
+#[cfg(feature = "threading")]
+use crate::object::gc::{deadlock_handler, LOCK_TIMEOUT};
+use crate::object::gc::{CcSync, GLOBAL_COLLECTOR};
 
 #[cfg(not(feature = "threading"))]
 use rustpython_common::atomic::Radium;

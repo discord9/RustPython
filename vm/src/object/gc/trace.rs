@@ -1,11 +1,13 @@
 use rustpython_common::lock::{PyMutex, PyRwLock};
 
-use crate::object::gc::{deadlock_handler, header::GcHeader, GcObjRef, LOCK_TIMEOUT};
+use crate::object::gc::{header::GcHeader, GcObjRef};
 use crate::object::PyObjectPayload;
 use crate::{AsObject, PyObject, PyObjectRef, PyRef};
 use core::ptr::NonNull;
 use std::any::TypeId;
 use std::collections::HashSet;
+
+use super::{try_lock_timeout, try_read_timeout};
 
 pub struct TraceHelper {}
 
@@ -13,83 +15,82 @@ pub struct TraceHelper {}
 /// because otherwise require specialization feature to enable
 #[macro_export]
 macro_rules! list_traceable {
-    ($MACRO_NAME: tt) => {
-        {
-            use $crate::builtins::iter::{PyCallableIterator, PySequenceIterator};
-            use $crate::object::Erased;
-            use $crate::builtins::{
-                enumerate::PyReverseSequenceIterator,
-                function::PyCell,
-                list::{PyListIterator, PyListReverseIterator},
-                memory::PyMemoryViewIterator,
-                tuple::PyTupleIterator,
-            };
-            use $crate::builtins::{
-                PyBaseException, PyBoundMethod, PyDict, PyEnumerate, PyFilter, PyFunction, PyList,
-                PyMappingProxy, PyProperty, PySet, PySlice, PyStaticMethod, PySuper, PyTraceback,
-                PyTuple, PyType, PyWeakProxy, PyZip,
-            };
-            use $crate::function::{ArgCallable, ArgIterable, ArgMapping, ArgSequence};
-            use $crate::protocol::{
-                PyBuffer, PyIter, PyIterIter, PyIterReturn, PyMapping, PyNumber, PySequence,
-            };
-            $MACRO_NAME!(
-                // builtin types
-                // PyRange, PyStr is acyclic, therefore no trace needed for them
-                PyBaseException,
-                PyBoundMethod,
-                PyDict,
-                PyEnumerate,
-                PyFilter,
-                PyFunction,
-                PyList,
-                PyMappingProxy,
-                PyProperty,
-                PySet,
-                PySlice,
-                PyStaticMethod,
-                PySuper,
-                PyTraceback,
-                PyTuple,
-                // FIXME(discord9): deal with static PyType properly
-                PyType,
-                PyWeakProxy,
-                PyZip,
-                // misc
-                PyCell,
-                // iter in iter.rs
-                // FIXME(discord9): PositionIterInternal seems to cause dead lock on trace on very rare occasion
-                // which is called in PySequenceIterator(and many other iters, but they are less frequent so appeal fine?)
-                PySequenceIterator,
-                PyCallableIterator,
-                // iter on types
-                // PyList's iter
-                PyListIterator,
-                PyListReverseIterator,
-                // PyTuple's iter
-                PyTupleIterator,
-                // PyEnumerate's iter
-                PyReverseSequenceIterator,
-                // PyMemory's iter
-                PyMemoryViewIterator,
-                // function/Arg protocol
-                ArgCallable,
-                ArgIterable,
-                ArgMapping,
-                ArgSequence,
-                // protocol
-                // struct like
-                PyBuffer,
-                PyIter,
-                // FIXME(discord9): confirm this is ok to do
-                PyIterIter<Erased>,
-                PyIterReturn,
-                PyMapping,
-                PyNumber,
-                PySequence
-            )
-        }
-    };
+    ($MACRO_NAME: tt) => {{
+        use $crate::builtins::iter::PyCallableIterator;
+        use $crate::builtins::iter::PySequenceIterator;
+        use $crate::builtins::{
+            enumerate::PyReverseSequenceIterator,
+            function::PyCell,
+            list::{PyListIterator, PyListReverseIterator},
+            memory::PyMemoryViewIterator,
+            tuple::PyTupleIterator,
+        };
+        use $crate::builtins::{
+            PyBaseException, PyBoundMethod, PyDict, PyEnumerate, PyFilter, PyFunction, PyList,
+            PyMappingProxy, PyProperty, PySet, PySlice, PyStaticMethod, PySuper, PyTraceback,
+            PyTuple, PyType, PyWeakProxy, PyZip,
+        };
+        use $crate::function::{ArgCallable, ArgIterable, ArgMapping, ArgSequence};
+        use $crate::object::Erased;
+        use $crate::protocol::{
+            PyBuffer, PyIter, PyIterIter, PyIterReturn, PyMapping, PyNumber, PySequence,
+        };
+        $MACRO_NAME!(
+            // builtin types
+            // PyRange, PyStr is acyclic, therefore no trace needed for them
+            PyBaseException,
+            PyBoundMethod,
+            PyDict,
+            PyEnumerate,
+            PyFilter,
+            PyFunction,
+            PyList,
+            PyMappingProxy,
+            PyProperty,
+            PySet,
+            PySlice,
+            PyStaticMethod,
+            PySuper,
+            PyTraceback,
+            PyTuple,
+            // FIXME(discord9): deal with static PyType properly
+            PyType,
+            PyWeakProxy,
+            PyZip,
+            // misc
+            PyCell,
+            // iter in iter.rs
+            // FIXME(discord9): PySequenceIterator Dead lock in mark_gray,
+            // meaning something is wrong with its ref count...
+            PySequenceIterator,
+            PyCallableIterator,
+            // iter on types
+            // PyList's iter
+            PyListIterator,
+            PyListReverseIterator,
+            // PyTuple's iter
+            PyTupleIterator,
+            // PyEnumerate's iter
+            PyReverseSequenceIterator,
+            // PyMemory's iter
+            PyMemoryViewIterator,
+            // function/Arg protocol
+            ArgCallable,
+            ArgIterable,
+            ArgMapping,
+            ArgSequence,
+            // protocol
+            // struct like
+            PyBuffer,
+            PyIter,
+            // FIXME(discord9): confirm this is ok to do
+            PyIterIter<Erased>,
+            PyIterReturn,
+            PyMapping,
+            PyNumber,
+            PySequence
+        )
+    }};
 }
 
 macro_rules! get_type_ids {
@@ -216,56 +217,14 @@ where
 unsafe impl<T: GcTrace> GcTrace for PyMutex<T> {
     #[inline]
     fn trace(&self, tracer_fn: &mut TracerFn) {
-        // FIXME(discord9): check if this may cause a deadlock or not
-        #[cfg(feature = "threading")]
-        match self.try_lock_for(LOCK_TIMEOUT) {
-            Some(inner) => {
-                // instead of the sound way of getting a lock and trace
-                inner.trace(tracer_fn);
-            }
-            None => {
-                // that is likely a cause of wrong `trace()` impl
-                error!("Could be in dead lock.");
-                // can't find better way to trace with that
-                // not kill the thread for now(So to test our unsound way of tracing)
-                use backtrace::Backtrace;
-                let bt = Backtrace::new();
-                error!(
-                    "Dead lock on {}: \n--------\n{:?}",
-                    std::any::type_name::<T>(),
-                    bt
-                );
-                // deadlock_handler()
-            }
-        }
-
-        #[cfg(not(feature = "threading"))]
-        match self.try_lock() {
-            Some(v) => v.trace(tracer_fn),
-            None => {
-                // that is likely a cause of wrong `trace()` impl
-                error!("Could be in dead lock.");
-                deadlock_handler()
-            }
-        }
+        try_lock_timeout(self, |inner| inner.trace(tracer_fn));
     }
 }
 
 unsafe impl<T: GcTrace> GcTrace for PyRwLock<T> {
     #[inline]
     fn trace(&self, tracer_fn: &mut TracerFn) {
-        // FIXME(discord9): check if this may cause a deadlock or not, maybe try `recursive`?
-        #[cfg(feature = "threading")]
-        match self.try_read_for(LOCK_TIMEOUT) {
-            Some(v) => v.trace(tracer_fn),
-            None => deadlock_handler(),
-        }
-
-        #[cfg(not(feature = "threading"))]
-        match self.try_read() {
-            Some(v) => v.trace(tracer_fn),
-            None => deadlock_handler(),
-        }
+        try_read_timeout(self, |inner| inner.trace(tracer_fn));
     }
 }
 
