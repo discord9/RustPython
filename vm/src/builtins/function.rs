@@ -625,10 +625,16 @@ impl PyPayload for PyBoundMethod {
 }
 
 #[pyclass(module = false, name = "cell")]
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(crate) struct PyCell {
     token: Option<u64>,
     contents: PyMutex<Option<PyObjectRef>>,
+}
+
+impl Default for PyCell {
+    fn default() -> Self {
+        Self { token: Some(rand::random::<u64>()), contents: Default::default() }
+    }
 }
 
 #[derive(Debug)]

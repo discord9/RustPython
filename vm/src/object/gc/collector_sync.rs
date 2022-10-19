@@ -434,6 +434,7 @@ impl CcSync {
             }
             ch.header().inc();
             if ch.header().color() != Color::Black {
+                // so a object could be colored white(and still holding mutex lock) then color Black!
                 assert!(ch.header().color() == Color::Gray || ch.header().color() == Color::White);
                 self.scan_black(ch)
             }
