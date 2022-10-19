@@ -42,7 +42,7 @@ unsafe impl crate::object::gc::GcTrace for PyFunction {
         self.code.trace(tracer_fn);
         self.globals.trace(tracer_fn);
         // FIXME(discord9): seems to cause PyCell's deadlock? seems can't trace on closure, but why?
-        // self.closure.trace(tracer_fn);
+        self.closure.trace(tracer_fn);
 
         self.defaults_and_kwdefaults.trace(tracer_fn);
 
@@ -627,12 +627,44 @@ impl PyPayload for PyBoundMethod {
 #[pyclass(module = false, name = "cell")]
 #[derive(Debug, Default)]
 pub(crate) struct PyCell {
+    token: Option<u64>,
     contents: PyMutex<Option<PyObjectRef>>,
 }
+
+#[derive(Debug)]
+struct DebugMutex{
+    sets: std::collections::HashMap<u64, backtrace::Backtrace>
+}
+
+impl DebugMutex{
+    fn record(&mut self, token: u64){
+        if self.sets.contains_key(&token){
+            let val = self.sets.get(&token).unwrap();
+            error!("Already locked by PyCell {}: {:?}", token, val);
+            error!("Current backtrace: {:?}", backtrace::Backtrace::new());
+            panic!();
+        }
+        self.sets.insert(token, backtrace::Backtrace::new());
+    }
+    fn erase(&mut self, token: u64){
+        if self.sets.contains_key(&token){
+            self.sets.remove(&token).unwrap();
+        }else{
+            error!("Can't found lock!");
+        }
+    }
+}
+static DEBUG_MUTEX: once_cell::sync::Lazy<PyMutex<DebugMutex>> = once_cell::sync::Lazy::new(||{
+    let init = DebugMutex { sets: std::collections::HashMap::new() };
+    PyMutex::new(init)
+});
 #[cfg(feature = "gc")]
 unsafe impl crate::object::gc::GcTrace for PyCell {
     fn trace(&self, tracer_fn: &mut crate::object::gc::TracerFn) {
-        self.contents.trace(tracer_fn)
+        // TODO: add debug in here.
+        DEBUG_MUTEX.lock().record(self.token.unwrap());
+        self.contents.trace(tracer_fn);
+        DEBUG_MUTEX.lock().erase(self.token.unwrap());
     }
 }
 pub(crate) type PyCellRef = PyRef<PyCell>;
@@ -656,7 +688,9 @@ impl Constructor for PyCell {
 #[pyclass(with(Constructor))]
 impl PyCell {
     pub fn new(contents: Option<PyObjectRef>) -> Self {
+        warn!("Called new on PyCell");
         Self {
+            token: Some(rand::random::<u64>()),
             contents: PyMutex::new(contents),
         }
     }

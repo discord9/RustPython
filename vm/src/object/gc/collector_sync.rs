@@ -131,6 +131,7 @@ impl CcSync {
     #[inline]
     #[allow(unreachable_code)]
     pub fn should_gc(&self) -> bool {
+        return true;
         if !self.is_enabled() {
             return false;
         }

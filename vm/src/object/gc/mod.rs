@@ -154,6 +154,8 @@ where
                     bt
                 );
             }
+            // stop to prevent heap corruption
+            panic!();
         }
     }
 
