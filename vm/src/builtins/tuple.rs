@@ -1,7 +1,6 @@
 use once_cell::sync::Lazy;
-
 use super::{PositionIterInternal, PyGenericAlias, PyType, PyTypeRef};
-use crate::common::{hash::PyHash, lock::PyMutex};
+use crate::common::{hash::PyHash, lock::{PyRwLock, PyMutex}};
 use crate::{
     atomic_func,
     class::PyClassImpl,
@@ -25,6 +24,13 @@ use std::{fmt, marker::PhantomData};
 #[pyclass(module = false, name = "tuple")]
 pub struct PyTuple {
     elements: Box<[PyObjectRef]>,
+}
+
+#[cfg(feature = "gc")]
+unsafe impl crate::object::Trace for PyTuple {
+    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
+        self.elements.trace(tracer_fn)
+    }
 }
 
 impl fmt::Debug for PyTuple {
@@ -396,7 +402,7 @@ impl Comparable for PyTuple {
 impl Iterable for PyTuple {
     fn iter(zelf: PyRef<Self>, vm: &VirtualMachine) -> PyResult {
         Ok(PyTupleIterator {
-            internal: PyMutex::new(PositionIterInternal::new(zelf, 0)),
+            internal: PyRwLock::new(PositionIterInternal::new(zelf, 0)),
         }
         .into_pyobject(vm))
     }
@@ -405,7 +411,14 @@ impl Iterable for PyTuple {
 #[pyclass(module = false, name = "tuple_iterator")]
 #[derive(Debug)]
 pub(crate) struct PyTupleIterator {
-    internal: PyMutex<PositionIterInternal<PyTupleRef>>,
+    internal: PyRwLock<PositionIterInternal<PyTupleRef>>,
+}
+
+#[cfg(feature = "gc")]
+unsafe impl crate::object::Trace for PyTupleIterator {
+    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
+        self.internal.trace(tracer_fn)
+    }
 }
 
 impl PyPayload for PyTupleIterator {
@@ -418,20 +431,20 @@ impl PyPayload for PyTupleIterator {
 impl PyTupleIterator {
     #[pymethod(magic)]
     fn length_hint(&self) -> usize {
-        self.internal.lock().length_hint(|obj| obj.len())
+        self.internal.read().length_hint(|obj| obj.len())
     }
 
     #[pymethod(magic)]
     fn setstate(&self, state: PyObjectRef, vm: &VirtualMachine) -> PyResult<()> {
         self.internal
-            .lock()
+            .write()
             .set_state(state, |obj, pos| pos.min(obj.len()), vm)
     }
 
     #[pymethod(magic)]
     fn reduce(&self, vm: &VirtualMachine) -> PyTupleRef {
         self.internal
-            .lock()
+            .read()
             .builtins_iter_reduce(|x| x.clone().into(), vm)
     }
 }
@@ -440,7 +453,7 @@ impl Unconstructible for PyTupleIterator {}
 impl IterNextIterable for PyTupleIterator {}
 impl IterNext for PyTupleIterator {
     fn next(zelf: &crate::Py<Self>, _vm: &VirtualMachine) -> PyResult<PyIterReturn> {
-        zelf.internal.lock().next(|tuple, pos| {
+        zelf.internal.write().next(|tuple, pos| {
             Ok(PyIterReturn::from_result(
                 tuple.get(pos).cloned().ok_or(None),
             ))
@@ -458,6 +471,16 @@ pub struct PyTupleTyped<T: TransmuteFromObject> {
     //                   elements must be logically valid when transmuted to T
     tuple: PyTupleRef,
     _marker: PhantomData<Vec<T>>,
+}
+
+#[cfg(feature = "gc")]
+unsafe impl<T> crate::object::Trace for PyTupleTyped<T>
+where
+    T: TransmuteFromObject + crate::object::Trace,
+{
+    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
+        self.tuple.trace(tracer_fn);
+    }
 }
 
 impl<T: TransmuteFromObject> TryFromObject for PyTupleTyped<T> {
