@@ -1,6 +1,8 @@
+use rustpython_common::lock::PyMutex;
+
 use super::{PositionIterInternal, PyGenericAlias, PyTupleRef, PyType, PyTypeRef};
 use crate::common::lock::{
-    PyMappedRwLockReadGuard, PyMutex, PyRwLock, PyRwLockReadGuard, PyRwLockWriteGuard,
+    PyMappedRwLockReadGuard, PyRwLock, PyRwLockReadGuard, PyRwLockWriteGuard,
 };
 use crate::{
     class::PyClassImpl,
@@ -27,6 +29,7 @@ use std::{fmt, ops::DerefMut};
 /// The argument must be an iterable if specified.
 #[pyclass(module = false, name = "list")]
 #[derive(Default)]
+#[pytrace]
 pub struct PyList {
     elements: PyRwLock<Vec<PyObjectRef>>,
 }
@@ -522,6 +525,7 @@ fn do_sort(
 
 #[pyclass(module = false, name = "list_iterator")]
 #[derive(Debug)]
+#[pytrace]
 pub struct PyListIterator {
     internal: PyMutex<PositionIterInternal<PyListRef>>,
 }
@@ -567,6 +571,7 @@ impl IterNext for PyListIterator {
 
 #[pyclass(module = false, name = "list_reverseiterator")]
 #[derive(Debug)]
+#[pytrace]
 pub struct PyListReverseIterator {
     internal: PyMutex<PositionIterInternal<PyListRef>>,
 }

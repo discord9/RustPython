@@ -47,6 +47,21 @@ pub struct PyType {
     pub heaptype_ext: Option<Pin<Box<HeapTypeExt>>>,
 }
 
+#[cfg(feature = "gc")]
+unsafe impl crate::object::Trace for PyType {
+    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
+        self.base.trace(tracer_fn);
+        self.bases.trace(tracer_fn);
+        self.mro.trace(tracer_fn);
+        self.subclasses.trace(tracer_fn);
+        self.attributes
+            .read_recursive()
+            .iter()
+            .map(|(_, v)| v.trace(tracer_fn))
+            .count();
+    }
+}
+
 #[derive(Default)]
 pub struct HeapTypeExt {
     pub number_methods: PyNumberMethods,

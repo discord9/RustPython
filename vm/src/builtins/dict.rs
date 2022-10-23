@@ -41,6 +41,7 @@ pub type DictContentType = dictdatatype::Dict;
 ///    in the keyword argument list.  For example:  dict(one=1, two=2)
 #[pyclass(module = false, name = "dict")]
 #[derive(Default)]
+#[pytrace]
 pub struct PyDict {
     entries: DictContentType,
 }

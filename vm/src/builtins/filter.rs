@@ -12,6 +12,7 @@ use crate::{
 /// is true. If function is None, return the items that are true.
 #[pyclass(module = false, name = "filter")]
 #[derive(Debug)]
+#[pytrace]
 pub struct PyFilter {
     predicate: PyObjectRef,
     iterator: PyIter,

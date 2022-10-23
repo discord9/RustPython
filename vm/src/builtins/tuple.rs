@@ -1,3 +1,5 @@
+use rustpython_common::lock::PyMutex;
+
 use super::{PositionIterInternal, PyGenericAlias, PyType, PyTypeRef};
 use crate::common::{hash::PyHash, lock::PyMutex};
 use crate::{
@@ -24,6 +26,7 @@ use std::{fmt, marker::PhantomData};
 ///
 /// If the argument is a tuple, the return value is the same object.
 #[pyclass(module = false, name = "tuple")]
+#[pytrace]
 pub struct PyTuple {
     elements: Box<[PyObjectRef]>,
 }
@@ -403,6 +406,7 @@ impl Iterable for PyTuple {
 
 #[pyclass(module = false, name = "tuple_iterator")]
 #[derive(Debug)]
+#[pytrace]
 pub(crate) struct PyTupleIterator {
     internal: PyMutex<PositionIterInternal<PyTupleRef>>,
 }
@@ -457,6 +461,16 @@ pub struct PyTupleTyped<T: TransmuteFromObject> {
     //                   elements must be logically valid when transmuted to T
     tuple: PyTupleRef,
     _marker: PhantomData<Vec<T>>,
+}
+
+#[cfg(feature = "gc")]
+unsafe impl<T> crate::object::Trace for PyTupleTyped<T>
+where
+    T: TransmuteFromObject + crate::object::Trace,
+{
+    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
+        self.tuple.trace(tracer_fn);
+    }
 }
 
 impl<T: TransmuteFromObject> TryFromObject for PyTupleTyped<T> {

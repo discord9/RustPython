@@ -12,6 +12,13 @@ pub struct PyTraceback {
     pub lineno: usize,
 }
 
+#[cfg(feature = "gc")]
+unsafe impl crate::object::Trace for PyTraceback {
+    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
+        self.next.trace(tracer_fn);
+    }
+}
+
 pub type PyTracebackRef = PyRef<PyTraceback>;
 
 impl PyPayload for PyTraceback {

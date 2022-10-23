@@ -14,6 +14,7 @@ use crate::{
 /// each of the iterables. Stops when the shortest iterable is exhausted.
 #[pyclass(module = false, name = "map")]
 #[derive(Debug)]
+#[pytrace]
 pub struct PyMap {
     mapper: PyObjectRef,
     iterators: Vec<PyIter>,

@@ -67,6 +67,7 @@ fn iter_search(
 /// These are exactly the valid indices for a list of 4 elements.
 /// When step is given, it specifies the increment (or decrement).
 #[pyclass(module = false, name = "range")]
+#[pytrace]
 #[derive(Debug, Clone)]
 pub struct PyRange {
     pub start: PyIntRef,

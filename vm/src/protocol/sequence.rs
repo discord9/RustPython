@@ -113,6 +113,13 @@ pub struct PySequence<'a> {
     pub methods: &'static PySequenceMethods,
 }
 
+#[cfg(feature = "gc")]
+unsafe impl<'a> crate::object::Trace for PySequence<'a> {
+    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
+        self.obj.trace(tracer_fn)
+    }
+}
+
 impl<'a> PySequence<'a> {
     #[inline]
     pub fn new(obj: &'a PyObject, vm: &VirtualMachine) -> Option<Self> {
