@@ -11,6 +11,7 @@ use crate::PyObject;
 type GcObj = PyObject;
 type GcObjRef<'a> = &'a GcObj;
 
+#[derive(PartialEq, Eq)]
 pub enum GcStatus {
     /// should be drop by caller
     ShouldDrop,

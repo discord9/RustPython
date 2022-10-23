@@ -22,8 +22,8 @@ pub struct GcHeader {
     gc: PyRc<Collector>,
 }
 
-impl GcHeader {
-    pub fn new() -> Self {
+impl Default for GcHeader {
+    fn default() -> Self {
         Self {
             ref_cnt: 1.into(),
             color: PyMutex::new(Color::Black),
@@ -38,6 +38,16 @@ impl GcHeader {
             #[cfg(not(feature = "threading"))]
             gc: GLOBAL_COLLECTOR.with(|v| v.clone()),
         }
+    }
+}
+
+impl GcHeader {
+    pub fn new() -> Self {
+        Default::default()
+    }
+
+    pub fn get(&self) -> usize {
+        self.ref_cnt.load(Ordering::Relaxed)
     }
 
     pub fn exclusive(&self) -> PyMutexGuard<()> {

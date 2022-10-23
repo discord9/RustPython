@@ -3,7 +3,7 @@ use std::{any::TypeId, collections::HashSet};
 use once_cell::sync::Lazy;
 use rustpython_common::lock::PyRwLock;
 
-use crate::{object::PyObjectPayload, AsObject, PyObject, PyObjectRef, PyRef};
+use crate::{object::PyObjectPayload, AsObject, PyObjectRef, PyRef};
 
 use super::GcObjRef;
 
@@ -29,12 +29,6 @@ pub unsafe trait Trace {
 unsafe impl Trace for PyObjectRef {
     fn trace(&self, tracer_fn: &mut TracerFn) {
         tracer_fn(self)
-    }
-}
-
-unsafe impl Trace for PyObject {
-    fn trace(&self, tracer_fn: &mut TracerFn) {
-        // TODO(discord9): move to core.rs
     }
 }
 

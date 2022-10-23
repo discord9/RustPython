@@ -3,14 +3,13 @@ use rustpython_common::{
     rc::PyRc,
 };
 use std::{
-    any::TypeId,
     cell::Cell,
     ptr::NonNull,
     time::{Duration, Instant},
 };
 
 use crate::{
-    object::gc::{Color, GcHeader, GcResult, Trace},
+    object::gc::{Color, GcResult, Trace},
     PyObject,
 };
 
@@ -91,27 +90,18 @@ impl Default for Collector {
     }
 }
 
-// TODO: move to core.rs
-impl PyObject {
-    pub fn header(&self) -> &GcHeader {
-        todo!()
-    }
-
-    pub fn inner_typeid(&self) -> TypeId {
-        todo!()
-    }
-}
-
 // core of gc algorithm
 impl Collector {
+    /*
     unsafe fn drop_dealloc(obj: NonNull<PyObject>) {
-        todo!()
+        PyObject::drop_slow(obj)
     }
+     */
     unsafe fn drop_only(obj: NonNull<PyObject>) {
-        todo!()
+        PyObject::drop_only(obj)
     }
     unsafe fn dealloc_only(obj: NonNull<PyObject>) {
-        todo!()
+        PyObject::dealloc_only(obj)
     }
     fn collect_cycles(&self, force: bool) -> GcResult {
         if Self::IS_GC_THREAD.with(|v| v.get()) {
