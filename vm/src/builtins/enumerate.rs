@@ -1,7 +1,7 @@
 use super::{
     IterStatus, PositionIterInternal, PyGenericAlias, PyIntRef, PyTupleRef, PyType, PyTypeRef,
 };
-use crate::common::lock::{PyMutex, PyRwLock};
+use crate::common::lock::PyRwLock;
 use crate::{
     class::PyClassImpl,
     convert::ToPyObject,
