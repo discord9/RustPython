@@ -335,7 +335,7 @@ where
     T: crate::object::Trace,
 {
     fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
-        self.0.iter().map(|(k, v)| v.trace(tracer_fn)).count();
+        self.0.iter().map(|(_, v)| v.trace(tracer_fn)).count();
     }
 }
 

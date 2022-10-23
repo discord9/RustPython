@@ -29,7 +29,7 @@ unsafe impl<T: crate::object::Trace> crate::object::Trace for IterStatus<T> {
     fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
         match self {
             IterStatus::Active(ref r) => r.trace(tracer_fn),
-            IterStatus::Exhausted => todo!(),
+            IterStatus::Exhausted => (),
         }
     }
 }
