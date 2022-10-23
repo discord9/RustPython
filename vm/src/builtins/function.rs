@@ -633,8 +633,16 @@ impl PyPayload for PyBoundMethod {
 #[pyclass(module = false, name = "cell")]
 #[derive(Debug, Default)]
 pub(crate) struct PyCell {
-    contents: PyMutex<Option<PyObjectRef>>,
+    contents: PyRwLock<Option<PyObjectRef>>,
 }
+
+#[cfg(feature = "gc")]
+unsafe impl crate::object::Trace for PyCell {
+    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
+        self.contents.trace(tracer_fn)
+    }
+}
+
 pub(crate) type PyCellRef = PyRef<PyCell>;
 
 impl PyPayload for PyCell {
@@ -657,15 +665,15 @@ impl Constructor for PyCell {
 impl PyCell {
     pub fn new(contents: Option<PyObjectRef>) -> Self {
         Self {
-            contents: PyMutex::new(contents),
+            contents: PyRwLock::new(contents),
         }
     }
 
     pub fn get(&self) -> Option<PyObjectRef> {
-        self.contents.lock().clone()
+        self.contents.read().clone()
     }
     pub fn set(&self, x: Option<PyObjectRef>) {
-        *self.contents.lock() = x;
+        *self.contents.write() = x;
     }
 
     #[pygetset]
