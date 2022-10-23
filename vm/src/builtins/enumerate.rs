@@ -90,7 +90,14 @@ impl IterNext for PyEnumerate {
 #[pyclass(module = false, name = "reversed")]
 #[derive(Debug)]
 pub struct PyReverseSequenceIterator {
-    internal: PyMutex<PositionIterInternal<PyObjectRef>>,
+    internal: PyRwLock<PositionIterInternal<PyObjectRef>>,
+}
+
+#[cfg(feature = "gc")]
+unsafe impl crate::object::Trace for PyReverseSequenceIterator {
+    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
+        self.internal.trace(tracer_fn);
+    }
 }
 
 impl PyPayload for PyReverseSequenceIterator {
@@ -104,13 +111,13 @@ impl PyReverseSequenceIterator {
     pub fn new(obj: PyObjectRef, len: usize) -> Self {
         let position = len.saturating_sub(1);
         Self {
-            internal: PyMutex::new(PositionIterInternal::new(obj, position)),
+            internal: PyRwLock::new(PositionIterInternal::new(obj, position)),
         }
     }
 
     #[pymethod(magic)]
     fn length_hint(&self, vm: &VirtualMachine) -> PyResult<usize> {
-        let internal = self.internal.lock();
+        let internal = self.internal.read();
         if let IterStatus::Active(obj) = &internal.status {
             if internal.position <= obj.length(vm)? {
                 return Ok(internal.position + 1);
@@ -121,13 +128,13 @@ impl PyReverseSequenceIterator {
 
     #[pymethod(magic)]
     fn setstate(&self, state: PyObjectRef, vm: &VirtualMachine) -> PyResult<()> {
-        self.internal.lock().set_state(state, |_, pos| pos, vm)
+        self.internal.write().set_state(state, |_, pos| pos, vm)
     }
 
     #[pymethod(magic)]
     fn reduce(&self, vm: &VirtualMachine) -> PyTupleRef {
         self.internal
-            .lock()
+            .read()
             .builtins_reversed_reduce(|x| x.clone(), vm)
     }
 }
@@ -136,7 +143,7 @@ impl IterNextIterable for PyReverseSequenceIterator {}
 impl IterNext for PyReverseSequenceIterator {
     fn next(zelf: &crate::Py<Self>, vm: &VirtualMachine) -> PyResult<PyIterReturn> {
         zelf.internal
-            .lock()
+            .write()
             .rev_next(|obj, pos| PyIterReturn::from_getitem_result(obj.get_item(&pos, vm), vm))
     }
 }
