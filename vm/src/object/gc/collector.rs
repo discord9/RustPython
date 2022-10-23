@@ -93,11 +93,11 @@ impl Default for Collector {
 
 // TODO: move to core.rs
 impl PyObject {
-    fn header(&self) -> &GcHeader {
+    pub fn header(&self) -> &GcHeader {
         todo!()
     }
 
-    fn inner_typeid(&self) -> TypeId {
+    pub fn inner_typeid(&self) -> TypeId {
         todo!()
     }
 }

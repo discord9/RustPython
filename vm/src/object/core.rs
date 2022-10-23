@@ -84,11 +84,39 @@ struct Erased;
 
 struct PyObjVTable {
     drop_dealloc: unsafe fn(*mut PyObject),
+    drop_only: unsafe fn(*mut PyObject),
+    dealloc_only: unsafe fn(*mut PyObject),
     debug: unsafe fn(&PyObject, &mut fmt::Formatter) -> fmt::Result,
 }
+
 unsafe fn drop_dealloc_obj<T: PyObjectPayload>(x: *mut PyObject) {
+    #[cfg(feature = "gc")]
+    if x.as_ref().unwrap().header().buffered() {
+        error!("Try to drop&dealloc a buffered object! Drop only for now!");
+        drop_only_obj::<T>(x);
+    } else {
+        drop(Box::from_raw(x as *mut PyInner<T>));
+    }
+    #[cfg(not(feature = "gc"))]
     drop(Box::from_raw(x as *mut PyInner<T>));
 }
+
+/// drop only(doesn't deallocate)
+unsafe fn drop_only_obj<T: PyObjectPayload>(x: *mut PyObject) {
+    x.cast::<PyInner<T>>().drop_in_place()
+}
+
+/// deallocate memory with type info(cast as PyInner<T>) in heap only, DOES NOT run destructor
+/// # Safety
+/// - should only be called after its' destructor is done(i.e. called `drop_value`(which called drop_in_place))
+/// - panic on a null pointer
+unsafe fn dealloc_only<T: PyObjectPayload>(x: *mut PyObject) {
+    std::alloc::dealloc(
+        x.cast(),
+        std::alloc::Layout::for_value(x.cast::<PyInner<T>>().as_ref().unwrap()),
+    );
+}
+
 unsafe fn debug_obj<T: PyObjectPayload>(x: &PyObject, f: &mut fmt::Formatter) -> fmt::Result {
     let x = &*(x as *const PyObject as *const PyInner<T>);
     fmt::Debug::fmt(x, f)
@@ -103,6 +131,8 @@ impl PyObjVTable {
         impl<T: PyObjectPayload> VtableHelper for Helper<T> {
             const VTABLE: PyObjVTable = PyObjVTable {
                 drop_dealloc: drop_dealloc_obj::<T>,
+                drop_only: drop_only_obj::<T>,
+                dealloc_only: dealloc_only::<T>,
                 debug: debug_obj::<T>,
             };
         }
