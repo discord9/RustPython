@@ -350,6 +350,7 @@ impl ExecutingFrame<'_> {
         let instrs = &self.code.instructions;
         let mut arg_state = bytecode::OpArgState::default();
         loop {
+            crate::object::try_gc();
             let idx = self.lasti() as usize;
             self.update_lasti(|i| *i += 1);
             let bytecode::CodeUnit { op, arg } = instrs[idx];

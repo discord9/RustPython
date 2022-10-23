@@ -3,9 +3,11 @@ use std::{any::TypeId, collections::HashSet};
 use once_cell::sync::Lazy;
 use rustpython_common::lock::PyRwLock;
 
-use crate::{object::PyObjectPayload, AsObject, PyObject, PyObjectRef, PyRef};
+use crate::{object::PyObjectPayload, AsObject, PyObjectRef, PyRef};
 
-pub type TracerFn<'a> = dyn FnMut(&PyObject) + 'a;
+use super::GcObjRef;
+
+pub type TracerFn<'a> = dyn FnMut(GcObjRef) + 'a;
 
 /// # Safety
 /// impl `trace()` with caution! Following those guideline so trace doesn't cause memory error!:
@@ -27,6 +29,12 @@ pub unsafe trait Trace {
 unsafe impl Trace for PyObjectRef {
     fn trace(&self, tracer_fn: &mut TracerFn) {
         tracer_fn(self)
+    }
+}
+
+unsafe impl<T: PyObjectPayload> Trace for PyRef<T> {
+    fn trace(&self, tracer_fn: &mut TracerFn) {
+        tracer_fn(self.as_object())
     }
 }
 
