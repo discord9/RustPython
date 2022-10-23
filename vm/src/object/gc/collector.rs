@@ -1,5 +1,5 @@
 use rustpython_common::{
-    lock::{PyMutex, PyRwLock, PyRwLockReadGuard},
+    lock::{PyMutex, PyRwLock, PyRwLockReadGuard, PyRwLockWriteGuard},
     rc::PyRc,
 };
 use std::{
@@ -10,11 +10,11 @@ use std::{
 };
 
 use crate::{
-    object::gc::{Color, GcHeader, GcResult},
+    object::gc::{Color, GcHeader, GcResult, Trace},
     PyObject,
 };
 
-use super::{GcStatus, TraceHelper};
+use super::{GcObj, GcObjRef, GcStatus, TraceHelper};
 
 pub static LOCK_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -104,6 +104,222 @@ impl PyObject {
 
 // core of gc algorithm
 impl Collector {
+    unsafe fn drop_dealloc(obj: NonNull<PyObject>) {
+        todo!()
+    }
+    unsafe fn drop_only(obj: NonNull<PyObject>) {
+        todo!()
+    }
+    unsafe fn dealloc_only(obj: NonNull<PyObject>) {
+        todo!()
+    }
+    fn collect_cycles(&self, force: bool) -> GcResult {
+        if Self::IS_GC_THREAD.with(|v| v.get()) {
+            return (0, 0).into();
+            // already call collect_cycle() once
+        }
+
+        // acquire stop-the-world lock
+        let lock = {
+            #[cfg(feature = "threading")]
+            {
+                // if can't access pause lock for a second, return because gc is not that emergency,
+                // also normal call to `gc.collect()` can usually acquire that lock unless something is wrong
+                if force {
+                    // if is forced to gc, wait a while for write lock
+                    match self.pause.try_write_for(std::time::Duration::from_secs(1)) {
+                        Some(v) => v,
+                        None => {
+                            warn!("Can't acquire lock to stop the world, stop gc now.");
+                            return (0, 0).into();
+                        }
+                    }
+                } else {
+                    match self.pause.try_write() {
+                        Some(v) => v,
+                        None => {
+                            warn!("Fast GC fail to acquire write lock, stop gc now.");
+                            return (0, 0).into();
+                        }
+                    }
+                }
+            }
+            // also when no threading, there is actually no need to get a lock,(because every thread have it's own gc)
+            // but for the sake of using same code(and defendsive), we acquire one anyway
+            #[cfg(not(feature = "threading"))]
+            {
+                // when not threading, no deadlock should occur?
+                let _force = force;
+                self.pause.try_write().unwrap()
+            }
+        };
+        // order of acquire lock and check IS_GC_THREAD here is important
+        // This prevent set multiple IS_GC_THREAD thread local variable to true
+        // using write() to gain exclusive access
+        Self::IS_GC_THREAD.with(|v| v.set(true));
+        let freed = self.mark_roots();
+        self.scan_roots();
+        let ret_cycle = self.collect_roots(lock);
+        (freed, ret_cycle).into()
+    }
+
+    fn mark_roots(&self) -> usize {
+        let mut freed = 0;
+        let old_roots: Vec<_> = { self.roots.lock().drain(..).collect() };
+        let mut new_roots = old_roots
+            .into_iter()
+            .filter(|ptr| {
+                let obj = unsafe { ptr.as_ref() };
+                if obj.header().color() == Color::Purple {
+                    self.mark_gray(obj);
+                    true
+                } else {
+                    obj.header().set_buffered(false);
+                    if obj.header().color() == Color::Black && obj.header().rc() == 0 {
+                        freed += 1;
+                        unsafe {
+                            // only dealloc here, because already drop(only) in Object's impl Drop
+                            // PyObject::dealloc_only(ptr.cast::<PyObject>());
+                            Self::dealloc_only(**ptr);
+                            // obj is dangling after this line?
+                        }
+                    }
+                    false
+                }
+            })
+            .collect();
+        (*self.roots.lock()).append(&mut new_roots);
+        freed
+    }
+
+    fn mark_gray(&self, obj: GcObjRef) {
+        if obj.header().color() != Color::Gray {
+            obj.header().set_color(Color::Gray);
+            obj.trace(&mut |ch| {
+                if ch.header().is_leaked() {
+                    return;
+                }
+                ch.header().dec();
+                self.mark_gray(ch);
+            });
+        }
+    }
+
+    fn scan_roots(&self) {
+        self.roots
+            .lock()
+            .iter()
+            .map(|ptr| {
+                let obj = unsafe { ptr.as_ref() };
+                self.scan(obj);
+            })
+            .count();
+    }
+
+    fn scan(&self, obj: GcObjRef) {
+        if obj.header().color() == Color::Gray {
+            if obj.header().rc() > 0 {
+                self.scan_black(obj)
+            } else {
+                obj.header().set_color(Color::White);
+                obj.trace(&mut |ch| {
+                    if ch.header().is_leaked() {
+                        return;
+                    }
+                    self.scan(ch);
+                });
+            }
+        }
+    }
+
+    fn scan_black(&self, obj: GcObjRef) {
+        obj.header().set_color(Color::Black);
+        obj.trace(&mut |ch| {
+            if ch.header().is_leaked() {
+                return;
+            }
+            ch.header().inc();
+            if ch.header().color() != Color::Black {
+                assert!(ch.header().color() == Color::Gray || ch.header().color() == Color::White);
+                self.scan_black(ch)
+            }
+        });
+    }
+
+    fn collect_roots(&self, lock: PyRwLockWriteGuard<()>) -> usize {
+        // Collecting the nodes into this Vec is difference from the original
+        // Bacon-Rajan paper. We need this because we have destructors(RAII) and
+        // running them during traversal will cause cycles to be broken which
+        // ruins the rest of our traversal.
+        let mut white = Vec::new();
+        let roots: Vec<_> = { self.roots.lock().drain(..).collect() };
+        // release gc pause lock in here, for after this line no white garbage will be access by mutator
+        roots
+            .into_iter()
+            .map(|ptr| {
+                let obj = unsafe { ptr.as_ref() };
+                obj.header().set_buffered(false);
+                self.collect_white(obj, &mut white);
+            })
+            .count();
+        let len_white = white.len();
+        if !white.is_empty() {
+            warn!("Cyclic garbage collected, count={}", white.len());
+        }
+        // Run drop on each of nodes.
+        for i in &white {
+            // Calling drop() will decrement the reference count on any of our live children.
+            // However, during trial deletion the reference count was already decremented
+            // so we'll end up decrementing twice. To avoid that, we increment the count
+            // just before calling drop() so that it balances out. This is another difference
+            // from the original paper caused by having destructors that we need to run.
+            let obj = unsafe { i.as_ref() };
+            obj.trace(&mut |ch| {
+                if ch.header().is_leaked() {
+                    return;
+                }
+                if ch.header().rc() > 0 {
+                    ch.header().inc();
+                }
+            });
+            unsafe {
+                Self::drop_only(*i);
+                // PyObject::drop_only(i.cast::<PyObject>());
+            }
+        }
+
+        // drop first, deallocate later so to avoid heap corruption
+        // cause by circular ref and therefore
+        // access pointer of already dropped value's memory region
+        for i in &white {
+            unsafe {
+                Self::dealloc_only(*i);
+                // PyObject::dealloc_only(i.cast::<PyObject>());
+            }
+        }
+
+        // mark the end of GC here so another gc can begin(if end early could lead to stack overflow)
+        Self::IS_GC_THREAD.with(|v| v.set(false));
+        drop(lock);
+
+        len_white
+    }
+    fn collect_white(&self, obj: GcObjRef, white: &mut Vec<NonNull<GcObj>>) {
+        if obj.header().color() == Color::White && !obj.header().buffered() {
+            obj.header().set_color(Color::BlackFree);
+            obj.trace(&mut |ch| {
+                if ch.header().is_leaked() {
+                    return;
+                }
+                self.collect_white(ch, white)
+            });
+            white.push(NonNull::from(obj));
+        }
+    }
+}
+
+// inc/dec
+impl Collector {
     pub fn increment(&self, obj: &PyObject) {
         if obj.header().is_leaked() {
             return;
@@ -184,10 +400,6 @@ impl Collector {
                 roots.push(NonNull::from(obj).into());
             }
         }
-    }
-
-    fn collect_cycles(&self, forced: bool) -> GcResult {
-        todo!()
     }
 }
 

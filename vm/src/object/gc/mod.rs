@@ -6,6 +6,11 @@ pub use collector::{Collector, GLOBAL_COLLECTOR};
 pub use header::{Color, GcHeader, GcResult};
 pub use trace::{Trace, TraceHelper, TracerFn};
 
+use crate::PyObject;
+
+type GcObj = PyObject;
+type GcObjRef<'a> = &'a GcObj;
+
 pub enum GcStatus {
     /// should be drop by caller
     ShouldDrop,
