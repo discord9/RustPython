@@ -1,4 +1,6 @@
-use crate::{PyObject, PyObjectRef, PyRef, object::PyObjectPayload, AsObject};
+use rustpython_common::lock::PyRwLock;
+
+use crate::{object::PyObjectPayload, AsObject, PyObject, PyObjectRef, PyRef};
 
 pub type TracerFn = dyn FnMut(&PyObject);
 
@@ -16,7 +18,7 @@ pub unsafe trait Trace {
     /// but if some field is called repeatly, panic and deadlock can happen.
     ///
     /// - _**DO NOT**_ clone a `PyObjectRef` or `Pyef<T>` in `trace()`
-    fn trace(&self, traceer_fn: &mut TracerFn);
+    fn trace(&self, tracer_fn: &mut TracerFn);
 }
 
 unsafe impl Trace for PyObjectRef {
@@ -69,9 +71,39 @@ where
     }
 }
 
+// DO NOT impl Trace on PyMutex
+// because gc's tracing might recursively trace to itself, which cause dead lock on Mutex
+
 unsafe impl<T: Trace> Trace for PyRwLock<T> {
     #[inline]
     fn trace(&self, tracer_fn: &mut TracerFn) {
-        try_read_timeout(self, |inner| inner.trace(tracer_fn));
+        match self.try_read_recursive() {
+            Some(inner) => inner.trace(tracer_fn),
+            // this means something else is holding the lock,
+            // but since gc stopped the world, during gc the lock is always held
+            // so it is safe to ignore those in gc
+            None => (),
+        }
     }
 }
+
+macro_rules! trace_tuple {
+    ($(($NAME: ident, $NUM: tt)),*) => {
+        unsafe impl<$($NAME: Trace),*> Trace for ($($NAME),*) {
+            #[inline]
+            fn trace(&self, tracer_fn: &mut TracerFn) {
+                $(
+                    self.$NUM.trace(tracer_fn);
+                )*
+            }
+        }
+
+    };
+}
+
+trace_tuple!((A, 0), (B, 1));
+trace_tuple!((A, 0), (B, 1), (C, 2));
+trace_tuple!((A, 0), (B, 1), (C, 2), (D, 3));
+trace_tuple!((A, 0), (B, 1), (C, 2), (D, 3), (E, 4));
+trace_tuple!((A, 0), (B, 1), (C, 2), (D, 3), (E, 4), (F, 5));
+trace_tuple!((A, 0), (B, 1), (C, 2), (D, 3), (E, 4), (F, 5), (G, 6));
