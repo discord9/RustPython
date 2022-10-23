@@ -18,6 +18,14 @@ pub struct PySuper {
     obj: Option<(PyObjectRef, PyTypeRef)>,
 }
 
+#[cfg(feature = "gc")]
+unsafe impl crate::object::Trace for PySuper {
+    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
+        self.typ.trace(tracer_fn);
+        self.obj.trace(tracer_fn);
+    }
+}
+
 impl PyPayload for PySuper {
     fn class(vm: &VirtualMachine) -> &'static Py<PyType> {
         vm.ctx.types.super_type
@@ -30,6 +38,14 @@ pub struct PySuperNewArgs {
     py_type: OptionalArg<PyTypeRef>,
     #[pyarg(positional, optional)]
     py_obj: OptionalArg<PyObjectRef>,
+}
+
+#[cfg(feature = "gc")]
+unsafe impl crate::object::Trace for PySuperNewArgs {
+    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
+        self.py_type.trace(tracer_fn);
+        self.py_obj.trace(tracer_fn);
+    }
 }
 
 impl Constructor for PySuper {
