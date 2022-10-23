@@ -30,12 +30,19 @@ use crate::{
 use crossbeam_utils::atomic::AtomicCell;
 use itertools::Itertools;
 use once_cell::sync::Lazy;
-use rustpython_common::lock::PyMutex;
+use rustpython_common::lock::PyRwLock;
 use std::{cmp::Ordering, fmt::Debug, mem::ManuallyDrop, ops::Range};
 
 #[derive(FromArgs)]
 pub struct PyMemoryViewNewArgs {
     object: PyObjectRef,
+}
+
+#[cfg(feature = "gc")]
+unsafe impl crate::object::Trace for PyMemoryViewNewArgs {
+    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
+        self.object.trace(tracer_fn);
+    }
 }
 
 #[pyclass(module = false, name = "memoryview")]
@@ -1108,7 +1115,7 @@ fn is_equiv_structure(a: &BufferDescriptor, b: &BufferDescriptor) -> bool {
 impl Iterable for PyMemoryView {
     fn iter(zelf: PyRef<Self>, vm: &VirtualMachine) -> PyResult {
         Ok(PyMemoryViewIterator {
-            internal: PyMutex::new(PositionIterInternal::new(zelf, 0)),
+            internal: PyRwLock::new(PositionIterInternal::new(zelf, 0)),
         }
         .into_pyobject(vm))
     }
@@ -1117,7 +1124,14 @@ impl Iterable for PyMemoryView {
 #[pyclass(module = false, name = "memory_iterator")]
 #[derive(Debug)]
 pub struct PyMemoryViewIterator {
-    internal: PyMutex<PositionIterInternal<PyRef<PyMemoryView>>>,
+    internal: PyRwLock<PositionIterInternal<PyRef<PyMemoryView>>>,
+}
+
+#[cfg(feature = "gc")]
+unsafe impl crate::object::Trace for PyMemoryViewIterator {
+    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
+        self.internal.trace(tracer_fn);
+    }
 }
 
 impl PyPayload for PyMemoryViewIterator {
@@ -1131,7 +1145,7 @@ impl PyMemoryViewIterator {
     #[pymethod(magic)]
     fn reduce(&self, vm: &VirtualMachine) -> PyTupleRef {
         self.internal
-            .lock()
+            .read()
             .builtins_iter_reduce(|x| x.clone().into(), vm)
     }
 }
@@ -1140,7 +1154,7 @@ impl Unconstructible for PyMemoryViewIterator {}
 impl IterNextIterable for PyMemoryViewIterator {}
 impl IterNext for PyMemoryViewIterator {
     fn next(zelf: &crate::Py<Self>, vm: &VirtualMachine) -> PyResult<PyIterReturn> {
-        zelf.internal.lock().next(|mv, pos| {
+        zelf.internal.write().next(|mv, pos| {
             let len = mv.len(vm)?;
             Ok(if pos >= len {
                 PyIterReturn::StopIteration(None)

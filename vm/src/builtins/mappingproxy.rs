@@ -33,7 +33,7 @@ enum MappingProxyInner {
 #[cfg(feature = "gc")]
 unsafe impl crate::object::Trace for MappingProxyInner {
     fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
-        match self{
+        match self {
             MappingProxyInner::Class(ref r) => r.trace(tracer_fn),
             MappingProxyInner::Mapping(ref arg) => arg.trace(tracer_fn),
         }

@@ -1,6 +1,8 @@
-use once_cell::sync::Lazy;
 use super::{PositionIterInternal, PyGenericAlias, PyType, PyTypeRef};
-use crate::common::{hash::PyHash, lock::{PyRwLock, PyMutex}};
+use crate::common::{
+    hash::PyHash,
+    lock::{PyMutex, PyRwLock},
+};
 use crate::{
     atomic_func,
     class::PyClassImpl,
@@ -19,6 +21,7 @@ use crate::{
     vm::VirtualMachine,
     AsObject, Context, Py, PyObject, PyObjectRef, PyPayload, PyRef, PyResult, TryFromObject,
 };
+use once_cell::sync::Lazy;
 use std::{fmt, marker::PhantomData};
 
 #[pyclass(module = false, name = "tuple")]
