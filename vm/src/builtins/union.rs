@@ -21,6 +21,14 @@ pub struct PyUnion {
     parameters: PyTupleRef,
 }
 
+#[cfg(feature = "gc")]
+unsafe impl crate::object::Trace for PyUnion {
+    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
+        self.args.trace(tracer_fn);
+        self.parameters.trace(tracer_fn);
+    }
+}
+
 impl fmt::Debug for PyUnion {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.write_str("UnionObject")
