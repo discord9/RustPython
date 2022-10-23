@@ -11,6 +11,7 @@ use crate::{
 
 #[pyclass(module = false, name = "mappingproxy")]
 #[derive(Debug)]
+#[pytrace]
 pub struct PyMappingProxy {
     mapping: MappingProxyInner,
 }
@@ -19,6 +20,16 @@ pub struct PyMappingProxy {
 enum MappingProxyInner {
     Class(PyTypeRef),
     Mapping(ArgMapping),
+}
+
+#[cfg(feature = "gc")]
+unsafe impl crate::object::Trace for MappingProxyInner {
+    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
+        match self {
+            MappingProxyInner::Class(ref r) => r.trace(tracer_fn),
+            MappingProxyInner::Mapping(ref arg) => arg.trace(tracer_fn),
+        }
+    }
 }
 
 impl PyPayload for PyMappingProxy {

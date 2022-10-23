@@ -36,6 +36,15 @@ pub struct PyFunction {
     jitted_code: OnceCell<CompiledCode>,
 }
 
+#[cfg(feature = "gc")]
+unsafe impl crate::object::Trace for PyFunction {
+    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
+        self.globals.trace(tracer_fn);
+        self.closure.trace(tracer_fn);
+        self.defaults_and_kwdefaults.trace(tracer_fn);
+    }
+}
+
 impl PyFunction {
     pub(crate) fn new(
         code: PyRef<PyCode>,
@@ -453,6 +462,7 @@ impl Callable for PyFunction {
 
 #[pyclass(module = false, name = "method")]
 #[derive(Debug)]
+#[pytrace]
 pub struct PyBoundMethod {
     object: PyObjectRef,
     function: PyObjectRef,
@@ -613,9 +623,11 @@ impl PyPayload for PyBoundMethod {
 
 #[pyclass(module = false, name = "cell")]
 #[derive(Debug, Default)]
+#[pytrace]
 pub(crate) struct PyCell {
     contents: PyMutex<Option<PyObjectRef>>,
 }
+
 pub(crate) type PyCellRef = PyRef<PyCell>;
 
 impl PyPayload for PyCell {

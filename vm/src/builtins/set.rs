@@ -27,6 +27,7 @@ pub type SetContentType = dictdatatype::Dict<()>;
 
 #[pyclass(module = false, name = "set")]
 #[derive(Default)]
+#[pytrace]
 pub struct PySet {
     pub(super) inner: PySetInner,
 }
@@ -146,6 +147,14 @@ impl PyPayload for PyFrozenSet {
 #[derive(Default, Clone)]
 pub(super) struct PySetInner {
     content: PyRc<SetContentType>,
+}
+
+#[cfg(feature = "gc")]
+unsafe impl crate::object::Trace for PySetInner {
+    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
+        // FIXME(discord9): Rc means shared ref, so should it be traced?
+        self.content.trace(tracer_fn)
+    }
 }
 
 impl PySetInner {

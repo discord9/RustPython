@@ -19,7 +19,8 @@ members = [
 ]
 
 [features]
-default = ["threading", "stdlib", "zlib", "importlib", "encodings", "rustpython-parser/lalrpop"]
+default = ["threading", "stdlib", "zlib", "importlib", "encodings", "rustpython-parser/lalrpop", "gc"]
+gc = ["rustpython-vm/gc", "rustpython-stdlib/gc"]
 importlib = ["rustpython-vm/importlib"]
 encodings = ["rustpython-vm/encodings"]
 stdlib = ["rustpython-stdlib", "rustpython-pylib"]

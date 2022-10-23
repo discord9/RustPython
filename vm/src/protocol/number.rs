@@ -221,6 +221,13 @@ pub struct PyNumber<'a> {
     methods: &'a PyNumberMethods,
 }
 
+#[cfg(feature = "gc")]
+unsafe impl<'a> crate::object::Trace for PyNumber<'a> {
+    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
+        self.obj.trace(tracer_fn)
+    }
+}
+
 impl<'a> From<&'a PyObject> for PyNumber<'a> {
     fn from(obj: &'a PyObject) -> Self {
         static GLOBAL_NOT_IMPLEMENTED: PyNumberMethods = PyNumberMethods::NOT_IMPLEMENTED;

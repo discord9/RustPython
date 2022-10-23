@@ -69,7 +69,8 @@ class ProfileSimulator(HookWatcher):
 
     def trace_return(self, frame):
         self.add_event('return', frame)
-        self.stack.pop()
+        if len(self.stack)!=0:
+            self.stack.pop()
 
     def trace_exception(self, frame):
         self.testcase.fail(

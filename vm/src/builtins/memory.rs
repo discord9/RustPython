@@ -32,6 +32,7 @@ use itertools::Itertools;
 use rustpython_common::lock::PyMutex;
 use std::{cmp::Ordering, fmt::Debug, mem::ManuallyDrop, ops::Range};
 
+#[pytrace]
 #[derive(FromArgs)]
 pub struct PyMemoryViewNewArgs {
     object: PyObjectRef,
@@ -1115,6 +1116,7 @@ impl Iterable for PyMemoryView {
 
 #[pyclass(module = false, name = "memory_iterator")]
 #[derive(Debug)]
+#[pytrace]
 pub struct PyMemoryViewIterator {
     internal: PyMutex<PositionIterInternal<PyRef<PyMemoryView>>>,
 }

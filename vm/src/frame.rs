@@ -350,7 +350,16 @@ impl ExecutingFrame<'_> {
         flame_guard!(format!("Frame::run({})", self.code.obj_name));
         // Execute until return or exception:
         let instrs = &self.code.instructions;
+        let mut gc_cnt = 0;
         loop {
+            gc_cnt += 1;
+            if gc_cnt > 1000 {
+                #[cfg(feature = "gc")]
+                {
+                    crate::object::try_gc();
+                }
+                gc_cnt = 0;
+            }
             let idx = self.lasti() as usize;
             self.update_lasti(|i| *i += 1);
             let instr = &instrs[idx];
