@@ -11,7 +11,7 @@ use crate::{
     Context, Py, PyObject, PyObjectRef, PyPayload, PyResult, VirtualMachine,
 };
 use rustpython_common::{
-    lock::{PyMutex, PyRwLock, PyRwLockUpgradableReadGuard},
+    lock::{PyRwLock, PyRwLockUpgradableReadGuard},
     static_cell,
 };
 
@@ -24,10 +24,27 @@ pub enum IterStatus<T> {
     Exhausted,
 }
 
+#[cfg(feature = "gc")]
+unsafe impl<T: crate::object::Trace> crate::object::Trace for IterStatus<T> {
+    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
+        match self {
+            IterStatus::Active(ref r) => r.trace(tracer_fn),
+            IterStatus::Exhausted => todo!(),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct PositionIterInternal<T> {
     pub status: IterStatus<T>,
     pub position: usize,
+}
+
+#[cfg(feature = "gc")]
+unsafe impl<T: crate::object::Trace> crate::object::Trace for PositionIterInternal<T> {
+    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
+        self.status.trace(tracer_fn)
+    }
 }
 
 impl<T> PositionIterInternal<T> {
@@ -163,7 +180,14 @@ pub fn builtins_reversed(vm: &VirtualMachine) -> &PyObject {
 pub struct PySequenceIterator {
     // cached sequence methods
     seq_methods: &'static PySequenceMethods,
-    internal: PyMutex<PositionIterInternal<PyObjectRef>>,
+    internal: PyRwLock<PositionIterInternal<PyObjectRef>>,
+}
+
+#[cfg(feature = "gc")]
+unsafe impl crate::object::Trace for PySequenceIterator {
+    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
+        self.internal.trace(tracer_fn)
+    }
 }
 
 impl PyPayload for PySequenceIterator {
@@ -178,13 +202,13 @@ impl PySequenceIterator {
         let seq = PySequence::try_protocol(&obj, vm)?;
         Ok(Self {
             seq_methods: seq.methods,
-            internal: PyMutex::new(PositionIterInternal::new(obj, 0)),
+            internal: PyRwLock::new(PositionIterInternal::new(obj, 0)),
         })
     }
 
     #[pymethod(magic)]
     fn length_hint(&self, vm: &VirtualMachine) -> PyObjectRef {
-        let internal = self.internal.lock();
+        let internal = self.internal.read();
         if let IterStatus::Active(obj) = &internal.status {
             let seq = PySequence {
                 obj,
@@ -200,19 +224,19 @@ impl PySequenceIterator {
 
     #[pymethod(magic)]
     fn reduce(&self, vm: &VirtualMachine) -> PyTupleRef {
-        self.internal.lock().builtins_iter_reduce(|x| x.clone(), vm)
+        self.internal.read().builtins_iter_reduce(|x| x.clone(), vm)
     }
 
     #[pymethod(magic)]
     fn setstate(&self, state: PyObjectRef, vm: &VirtualMachine) -> PyResult<()> {
-        self.internal.lock().set_state(state, |_, pos| pos, vm)
+        self.internal.write().set_state(state, |_, pos| pos, vm)
     }
 }
 
 impl IterNextIterable for PySequenceIterator {}
 impl IterNext for PySequenceIterator {
     fn next(zelf: &crate::Py<Self>, vm: &VirtualMachine) -> PyResult<PyIterReturn> {
-        zelf.internal.lock().next(|obj, pos| {
+        zelf.internal.write().next(|obj, pos| {
             let seq = PySequence {
                 obj,
                 methods: zelf.seq_methods,
@@ -227,6 +251,14 @@ impl IterNext for PySequenceIterator {
 pub struct PyCallableIterator {
     sentinel: PyObjectRef,
     status: PyRwLock<IterStatus<ArgCallable>>,
+}
+
+#[cfg(feature = "gc")]
+unsafe impl crate::object::Trace for PyCallableIterator {
+    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
+        self.sentinel.trace(tracer_fn);
+        self.status.trace(tracer_fn);
+    }
 }
 
 impl PyPayload for PyCallableIterator {
