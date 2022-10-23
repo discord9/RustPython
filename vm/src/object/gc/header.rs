@@ -159,11 +159,16 @@ impl GcHeader {
     /// only inc if non-zero(and return true if success)
     #[inline]
     pub fn safe_inc(&self) -> bool {
-        self.ref_cnt
+        let ret = self
+            .ref_cnt
             .fetch_update(Ordering::AcqRel, Ordering::Acquire, |prev| {
                 (prev != 0).then_some(prev + 1)
             })
-            .is_ok()
+            .is_ok();
+        if ret {
+            self.set_color(Color::Black)
+        }
+        ret
     }
     /// simple RC -= 1
     pub fn dec(&self) -> usize {
