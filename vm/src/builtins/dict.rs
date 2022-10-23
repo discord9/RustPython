@@ -38,6 +38,13 @@ pub struct PyDict {
 }
 pub type PyDictRef = PyRef<PyDict>;
 
+#[cfg(feature = "gc")]
+unsafe impl crate::object::Trace for PyDict {
+    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
+        self.entries.trace(tracer_fn);
+    }
+}
+
 impl fmt::Debug for PyDict {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         // TODO: implement more detailed, non-recursive Debug formatter
