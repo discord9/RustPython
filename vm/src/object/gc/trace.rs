@@ -27,6 +27,12 @@ unsafe impl Trace for PyObjectRef {
     }
 }
 
+unsafe impl Trace for PyObject {
+    fn trace(&self, tracer_fn: &mut TracerFn) {
+        // TODO(discord9): move to core.rs
+    }
+}
+
 unsafe impl Trace for () {
     fn trace(&self, _tracer_fn: &mut TracerFn) {}
 }
