@@ -15,6 +15,7 @@ use crate::{
 
 #[pyclass(module = false, name = "weakproxy")]
 #[derive(Debug)]
+#[pytrace]
 pub struct PyWeakProxy {
     weak: PyRef<PyWeak>,
 }
