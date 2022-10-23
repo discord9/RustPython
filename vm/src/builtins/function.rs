@@ -20,6 +20,7 @@ use crate::{
     AsObject, Context, Py, PyObject, PyObjectRef, PyPayload, PyRef, PyResult, VirtualMachine,
 };
 use itertools::Itertools;
+use rustpython_common::lock::PyRwLock;
 #[cfg(feature = "jit")]
 use rustpython_jit::CompiledCode;
 
@@ -29,11 +30,20 @@ pub struct PyFunction {
     code: PyRef<PyCode>,
     globals: PyDictRef,
     closure: Option<PyTupleTyped<PyCellRef>>,
-    defaults_and_kwdefaults: PyMutex<(Option<PyTupleRef>, Option<PyDictRef>)>,
+    defaults_and_kwdefaults: PyRwLock<(Option<PyTupleRef>, Option<PyDictRef>)>,
     name: PyMutex<PyStrRef>,
     qualname: PyMutex<PyStrRef>,
     #[cfg(feature = "jit")]
     jitted_code: OnceCell<CompiledCode>,
+}
+
+#[cfg(feature = "gc")]
+unsafe impl crate::object::Trace for PyFunction {
+    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
+        self.globals.trace(tracer_fn);
+        self.closure.trace(tracer_fn);
+        self.defaults_and_kwdefaults.trace(tracer_fn);
+    }
 }
 
 impl PyFunction {
@@ -50,7 +60,7 @@ impl PyFunction {
             code,
             globals,
             closure,
-            defaults_and_kwdefaults: PyMutex::new((defaults, kw_only_defaults)),
+            defaults_and_kwdefaults: PyRwLock::new((defaults, kw_only_defaults)),
             name,
             qualname,
             #[cfg(feature = "jit")]
@@ -160,7 +170,7 @@ impl PyFunction {
         macro_rules! get_defaults {
             () => {{
                 defaults_and_kwdefaults
-                    .get_or_insert_with(|| self.defaults_and_kwdefaults.lock().clone())
+                    .get_or_insert_with(|| self.defaults_and_kwdefaults.read().clone())
             }};
         }
 
@@ -340,20 +350,20 @@ impl PyFunction {
 
     #[pygetset(magic)]
     fn defaults(&self) -> Option<PyTupleRef> {
-        self.defaults_and_kwdefaults.lock().0.clone()
+        self.defaults_and_kwdefaults.read().0.clone()
     }
     #[pygetset(magic, setter)]
     fn set_defaults(&self, defaults: Option<PyTupleRef>) {
-        self.defaults_and_kwdefaults.lock().0 = defaults
+        self.defaults_and_kwdefaults.write().0 = defaults
     }
 
     #[pygetset(magic)]
     fn kwdefaults(&self) -> Option<PyDictRef> {
-        self.defaults_and_kwdefaults.lock().1.clone()
+        self.defaults_and_kwdefaults.read().1.clone()
     }
     #[pygetset(magic, setter)]
     fn set_kwdefaults(&self, kwdefaults: Option<PyDictRef>) {
-        self.defaults_and_kwdefaults.lock().1 = kwdefaults
+        self.defaults_and_kwdefaults.write().1 = kwdefaults
     }
 
     // {"__closure__",   T_OBJECT,     OFF(func_closure), READONLY},
@@ -457,6 +467,14 @@ impl Callable for PyFunction {
 pub struct PyBoundMethod {
     object: PyObjectRef,
     function: PyObjectRef,
+}
+
+#[cfg(feature = "gc")]
+unsafe impl crate::object::Trace for PyBoundMethod {
+    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
+        self.object.trace(tracer_fn);
+        self.function.trace(tracer_fn);
+    }
 }
 
 impl Callable for PyBoundMethod {
