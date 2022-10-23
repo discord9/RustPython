@@ -351,6 +351,7 @@ impl ExecutingFrame<'_> {
         // Execute until return or exception:
         let instrs = &self.code.instructions;
         loop {
+            crate::object::try_gc();
             let idx = self.lasti() as usize;
             self.update_lasti(|i| *i += 1);
             let instr = &instrs[idx];

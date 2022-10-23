@@ -43,6 +43,24 @@ pub fn collect() -> GcResult {
     }
 }
 
+pub fn try_gc() -> GcResult {
+    #[cfg(feature = "gc")]
+    {
+        #[cfg(feature = "threading")]
+        {
+            GLOBAL_COLLECTOR.fast_try_gc()
+        }
+        #[cfg(not(feature = "threading"))]
+        {
+            GLOBAL_COLLECTOR.with(|v| v.fast_try_gc())
+        }
+    }
+    #[cfg(not(feature = "gc"))]
+    {
+        Default::default()
+    }
+}
+
 pub fn isenabled() -> bool {
     #[cfg(feature = "gc")]
     {
