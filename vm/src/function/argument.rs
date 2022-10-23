@@ -68,7 +68,7 @@ pub struct FuncArgs {
 unsafe impl crate::object::Trace for FuncArgs {
     fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
         self.args.trace(tracer_fn);
-        self.kwargs.iter().map(|(k, v)| v.trace(tracer_fn)).count();
+        self.kwargs.iter().map(|(_, v)| v.trace(tracer_fn)).count();
     }
 }
 

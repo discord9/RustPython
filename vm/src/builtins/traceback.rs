@@ -1,4 +1,4 @@
-use rustpython_common::lock::{PyMutex, PyRwLock};
+use rustpython_common::lock::PyRwLock;
 
 use super::PyType;
 use crate::{class::PyClassImpl, frame::FrameRef, Context, Py, PyPayload, PyRef, VirtualMachine};
