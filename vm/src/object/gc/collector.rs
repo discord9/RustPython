@@ -424,6 +424,10 @@ impl Collector {
         if !self.is_enabled() {
             return false;
         }
+        // if can't acquire lock, some other thread is already in gc
+        if self.pause.try_write().is_none() {
+            return false;
+        }
         // FIXME(discord9): better condition, could be important
         if self.roots_len() > 700 {
             if Self::IS_GC_THREAD.with(|v| v.get()) {

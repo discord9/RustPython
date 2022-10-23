@@ -1516,6 +1516,7 @@ pub(crate) fn init_type_hierarchy() -> (PyTypeRef, PyTypeRef, PyTypeRef) {
             type_type_ptr as *mut MaybeUninit<PyInner<PyType>> as *mut PyInner<PyType>;
 
         unsafe {
+            // FIXME(discord9): confirm a leak is needed
             #[cfg(feature = "gc")]
             (*type_type_ptr.cast::<PyObject>()).increment();
             #[cfg(not(feature = "gc"))]
