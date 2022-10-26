@@ -1096,6 +1096,39 @@ impl<'a, T: PyObjectPayload> From<&'a Py<T>> for &'a PyObject {
     }
 }
 
+#[cfg(all(not(feature = "gc"), not(debug_assertions)))]
+impl Drop for PyObjectRef {
+    #[inline]
+    fn drop(&mut self) {
+        if self.0.ref_count.dec() {
+            unsafe { PyObject::drop_slow(self.ptr) }
+        }
+    }
+}
+
+#[cfg(all(not(feature = "gc"), debug_assertions))]
+impl Drop for PyObjectRef {
+    #[inline]
+    fn drop(&mut self) {
+        if *self.0.is_drop.lock() {
+            error!(
+                "Double drop on PyObjectRef with typeid={:?}(Type={:?})",
+                self.0.typeid,
+                ID2TYPE
+                    .lock()
+                    .expect("can't read ID2TYPE")
+                    .get(&self.0.typeid),
+            );
+            return;
+        }
+        if self.0.ref_count.dec() {
+            *self.0.is_drop.lock() = true;
+            unsafe { PyObject::drop_slow(self.ptr) }
+        }
+    }
+}
+
+#[cfg(feature = "gc")]
 impl Drop for PyObjectRef {
     #[inline]
     fn drop(&mut self) {
@@ -1111,28 +1144,23 @@ impl Drop for PyObjectRef {
             );
             return;
         }
-        #[cfg(feature = "gc")]
-        {
-            let stat = self.decrement();
-            match stat {
-                GcStatus::ShouldDrop => unsafe {
+        let stat = self.decrement();
+        match stat {
+            GcStatus::ShouldDrop => unsafe {
+                #[cfg(debug_assertions)]
+                {
                     *self.0.is_drop.lock() = true;
-                    PyObject::drop_slow(self.ptr);
-                },
-                GcStatus::ShouldDropOnly | GcStatus::BufferedDrop => unsafe {
+                }
+                PyObject::drop_slow(self.ptr);
+            },
+            GcStatus::ShouldDropOnly | GcStatus::BufferedDrop => unsafe {
+                #[cfg(debug_assertions)]
+                {
                     *self.0.is_drop.lock() = true;
-                    PyObject::drop_only(self.ptr);
-                },
-                GcStatus::ShouldKeep | GcStatus::DoNothing => (),
-            }
-        }
-        #[cfg(not(feature = "gc"))]
-        if self.0.ref_count.dec() {
-            #[cfg(debug_assertions)]
-            {
-                *self.0.is_drop.lock() = true;
-            }
-            unsafe { PyObject::drop_slow(self.ptr) }
+                }
+                PyObject::drop_only(self.ptr);
+            },
+            GcStatus::ShouldKeep | GcStatus::DoNothing => (),
         }
     }
 }
@@ -1239,6 +1267,42 @@ impl<T: PyObjectPayload> fmt::Debug for PyRef<T> {
     }
 }
 
+#[cfg(all(not(feature = "gc"), not(debug_assertions)))]
+impl<T: PyObjectPayload> Drop for PyRef<T> {
+    #[inline]
+    fn drop(&mut self) {
+        if self.0.ref_count.dec() {
+            unsafe { PyObject::drop_slow(self.ptr.cast::<PyObject>()) }
+        }
+    }
+}
+
+#[cfg(all(not(feature = "gc"), debug_assertions))]
+impl<T: PyObjectPayload> Drop for PyRef<T> {
+    #[inline]
+    fn drop(&mut self) {
+        if *self.0.is_drop.lock() {
+            error!(
+                "Double drop on PyRef<{}>",
+                std::any::type_name::<T>().to_string()
+            );
+            return;
+        }
+        let tid = TypeId::of::<T>();
+        ID2TYPE
+            .lock()
+            .expect("can't insert into ID2TYPE")
+            .entry(tid)
+            .or_insert_with(|| std::any::type_name::<T>().to_string());
+
+        if self.0.ref_count.dec() {
+            *self.0.is_drop.lock() = true;
+            unsafe { PyObject::drop_slow(self.ptr.cast::<PyObject>()) }
+        }
+    }
+}
+
+#[cfg(feature = "gc")]
 impl<T: PyObjectPayload> Drop for PyRef<T> {
     #[inline]
     fn drop(&mut self) {
@@ -1258,28 +1322,24 @@ impl<T: PyObjectPayload> Drop for PyRef<T> {
                 .entry(tid)
                 .or_insert_with(|| std::any::type_name::<T>().to_string());
         }
-        #[cfg(feature = "gc")]
-        {
-            let stat = self.as_object().decrement();
-            match stat {
-                GcStatus::ShouldDrop => unsafe {
+
+        let stat = self.as_object().decrement();
+        match stat {
+            GcStatus::ShouldDrop => unsafe {
+                #[cfg(debug_assertions)]
+                {
                     *self.0.is_drop.lock() = true;
-                    PyObject::drop_slow(self.ptr.cast::<PyObject>());
-                },
-                GcStatus::ShouldDropOnly | GcStatus::BufferedDrop => unsafe {
+                }
+                PyObject::drop_slow(self.ptr.cast::<PyObject>());
+            },
+            GcStatus::ShouldDropOnly | GcStatus::BufferedDrop => unsafe {
+                #[cfg(debug_assertions)]
+                {
                     *self.0.is_drop.lock() = true;
-                    PyObject::drop_only(self.ptr.cast::<PyObject>());
-                },
-                GcStatus::ShouldKeep | GcStatus::DoNothing => (),
-            }
-        }
-        #[cfg(not(feature = "gc"))]
-        if self.0.ref_count.dec() {
-            #[cfg(debug_assertions)]
-            {
-                *self.0.is_drop.lock() = true;
-            }
-            unsafe { PyObject::drop_slow(self.ptr.cast::<PyObject>()) }
+                }
+                PyObject::drop_only(self.ptr.cast::<PyObject>());
+            },
+            GcStatus::ShouldKeep | GcStatus::DoNothing => (),
         }
     }
 }
