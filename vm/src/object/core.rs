@@ -14,7 +14,7 @@
 use super::{
     ext::{AsObject, PyResult},
     payload::PyObjectPayload,
-    PyAtomicRef,
+    PyAtomicRef, Trace, TracerFn,
 };
 use crate::{
     builtins::{PyDictRef, PyType, PyTypeRef},
@@ -24,6 +24,7 @@ use crate::{
         lock::{PyMutex, PyMutexGuard, PyRwLock},
         refcount::RefCount,
     },
+    list_traceable,
     vm::VirtualMachine,
 };
 use itertools::Itertools;
@@ -407,6 +408,12 @@ struct InstanceDict {
     d: PyRwLock<PyDictRef>,
 }
 
+unsafe impl Trace for InstanceDict {
+    fn trace(&self, tracer_fn: &mut TracerFn) {
+        self.d.trace(tracer_fn)
+    }
+}
+
 impl From<PyDictRef> for InstanceDict {
     #[inline(always)]
     fn from(d: PyDictRef) -> Self {
@@ -456,6 +463,48 @@ impl<T: PyObjectPayload> PyInner<T> {
                 .collect_vec()
                 .into_boxed_slice(),
         })
+    }
+}
+
+unsafe impl Trace for PyInner<Erased> {
+    fn trace(&self, tracer_fn: &mut TracerFn) {
+        // trace PyInner's other field(that is except payload)
+        // AtomicRef shoulbn't be trace, because for now it seems doesn't count as owning a Ref
+        // self.typ.trace(tracer_fn);
+        self.dict.trace(tracer_fn);
+        // weak_list keeps a *pointer* to a struct for maintaince weak ref, so no ownership, no trace
+        self.slots.trace(tracer_fn);
+
+        /// FIXME(discord9): Optional trait bound(Like a ?GcTrace) require specialization
+        ///
+        /// https://stackoverflow.com/questions/68701910/function-optional-trait-bound-in-rust
+        ///
+        /// fall back to use TypeId for now
+        macro_rules! optional_trace {
+            ($($TY: ty),*$(,)?) => {
+                $(
+                    if TypeId::of::<$TY>() == self.typeid{
+                        // Safety: because typeid said so!
+                        let inner: &PyInner<$TY> = unsafe { &*(self as *const PyInner<Erased> as *const PyInner<$TY>) };
+                        inner.payload.trace(tracer_fn);
+                    }
+                )else*
+            };
+        }
+        list_traceable!(optional_trace);
+    }
+}
+
+unsafe impl Trace for PyObject {
+    fn trace(&self, tracer_fn: &mut TracerFn) {
+        // TODO(discord9): move to core.rs
+        self.0.trace(tracer_fn)
+    }
+}
+
+unsafe impl<T: PyObjectPayload> Trace for PyRef<T> {
+    fn trace(&self, tracer_fn: &mut TracerFn) {
+        self.as_object().trace(tracer_fn)
     }
 }
 
