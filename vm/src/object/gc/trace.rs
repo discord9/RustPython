@@ -5,7 +5,7 @@ use rustpython_common::lock::PyRwLock;
 
 use crate::{object::PyObjectPayload, AsObject, PyObject, PyObjectRef, PyRef};
 
-pub type TracerFn = dyn FnMut(&PyObject);
+pub type TracerFn<'a> = dyn FnMut(&PyObject) + 'a;
 
 /// # Safety
 /// impl `trace()` with caution! Following those guideline so trace doesn't cause memory error!:
