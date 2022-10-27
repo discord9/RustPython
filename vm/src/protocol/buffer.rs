@@ -33,6 +33,7 @@ impl Debug for BufferMethods {
     }
 }
 
+/// for manually increment ref count when doing memcpy
 pub trait ManuallyClone {
     /// call `clone()` for every PyObjectRef/PyRef this struct owned,
     /// and **discard** them

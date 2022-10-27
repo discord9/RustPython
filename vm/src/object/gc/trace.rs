@@ -3,7 +3,7 @@ use std::{any::TypeId, collections::HashSet};
 use once_cell::sync::Lazy;
 use rustpython_common::lock::PyRwLock;
 
-use crate::{object::PyObjectPayload, AsObject, PyObject, PyObjectRef, PyRef};
+use crate::{PyObject, PyObjectRef};
 
 pub type TracerFn<'a> = dyn FnMut(&PyObject) + 'a;
 

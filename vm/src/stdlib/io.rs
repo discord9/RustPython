@@ -116,7 +116,8 @@ mod _io {
             OptionalOption, PySetterValue,
         },
         protocol::{
-            BufferDescriptor, BufferMethods, BufferResizeGuard, PyBuffer, PyIterReturn, VecBuffer,
+            BufferDescriptor, BufferMethods, BufferResizeGuard, ManuallyClone, PyBuffer,
+            PyIterReturn, VecBuffer,
         },
         recursion::ReprGuard,
         types::{Constructor, DefaultConstructor, Destructor, Initializer, IterNext, Iterable},
@@ -672,6 +673,8 @@ mod _io {
             let data = data.borrow_buf();
             match buf.get_mut(..data.len()) {
                 Some(slice) => {
+                    // FIXME(discord9): confirm if this is needed
+                    b.manually_clone();
                     slice.copy_from_slice(&data);
                     Ok(data.len())
                 }
@@ -962,6 +965,8 @@ mod _io {
                 let buf = obj.borrow_buf();
                 buf_len = buf.len();
                 if buf.len() <= avail {
+                    // FIXME(discord9): confirm if this is needed
+                    obj.manually_clone();
                     self.buffer[self.pos as usize..][..buf.len()].copy_from_slice(&buf);
                     if !self.valid_write() || self.write_pos > self.pos {
                         self.write_pos = self.pos
@@ -986,6 +991,8 @@ mod _io {
             let mut remaining = buf_len;
             let mut written = 0;
             let buffer: PyBuffer = obj.into();
+            // FIXME(discord9): confirm if this is needed
+            buffer.manually_clone();
             while remaining > self.buffer.len() {
                 let res = self.raw_write(Some(buffer.clone()), written..buf_len, vm)?;
                 match res {
@@ -1278,6 +1285,8 @@ mod _io {
             let buf_len;
             {
                 let mut b = buf.as_contiguous_mut().unwrap();
+                // FIXME(discord9): confirm if this is needed
+                buf.manually_clone();
                 buf_len = b.len();
                 if n > 0 {
                     if n as usize >= b.len() {
