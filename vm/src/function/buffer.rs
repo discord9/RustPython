@@ -1,7 +1,7 @@
 use crate::{
     builtins::{PyStr, PyStrRef},
     common::borrow::{BorrowedValue, BorrowedValueMut},
-    protocol::PyBuffer,
+    protocol::{ManuallyClone, PyBuffer},
     PyObject, PyObjectRef, PyResult, TryFromBorrowedObject, TryFromObject, VirtualMachine,
 };
 
@@ -10,6 +10,12 @@ use crate::{
 /// any bytes-like object. Like the `y*` format code for `PyArg_Parse` in CPython.
 #[derive(Debug)]
 pub struct ArgBytesLike(PyBuffer);
+
+impl ManuallyClone for ArgBytesLike {
+    fn manually_clone(&self) {
+        self.0.manually_clone()
+    }
+}
 
 impl PyObject {
     pub fn try_bytes_like<R>(
@@ -79,6 +85,12 @@ impl TryFromBorrowedObject for ArgBytesLike {
 /// A memory buffer, read-write access. Like the `w*` format code for `PyArg_Parse` in CPython.
 #[derive(Debug)]
 pub struct ArgMemoryBuffer(PyBuffer);
+
+impl ManuallyClone for ArgMemoryBuffer {
+    fn manually_clone(&self) {
+        self.0.manually_clone()
+    }
+}
 
 impl ArgMemoryBuffer {
     pub fn borrow_buf_mut(&self) -> BorrowedValueMut<'_, [u8]> {

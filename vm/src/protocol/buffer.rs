@@ -6,13 +6,14 @@ use crate::{
         borrow::{BorrowedValue, BorrowedValueMut},
         lock::{MapImmutable, PyMutex, PyMutexGuard},
     },
-    object::PyObjectPayload,
+    object::{PyObjectPayload, Trace},
     sliceable::SequenceIndexOp,
     types::{Constructor, Unconstructible},
-    Py, PyObject, PyObjectRef, PyPayload, PyRef, PyResult, TryFromBorrowedObject, VirtualMachine,
+    AsObject, Py, PyObject, PyObjectRef, PyPayload, PyRef, PyResult, TryFromBorrowedObject,
+    VirtualMachine,
 };
 use itertools::Itertools;
-use std::{borrow::Cow, fmt::Debug, ops::Range};
+use std::{borrow::Cow, fmt::Debug, mem::ManuallyDrop, ops::Range};
 
 pub struct BufferMethods {
     pub obj_bytes: fn(&PyBuffer) -> BorrowedValue<[u8]>,
@@ -32,11 +33,29 @@ impl Debug for BufferMethods {
     }
 }
 
+pub trait ManuallyClone {
+    /// call `clone()` for every PyObjectRef/PyRef this struct owned,
+    /// and **discard** them
+    ///
+    /// can be used when you need a memcpy/u8::copy_from_slice
+    /// but still need keep the ref count right
+    fn manually_clone(&self);
+}
+
 #[derive(Debug, Clone)]
 pub struct PyBuffer {
     pub obj: PyObjectRef,
     pub desc: BufferDescriptor,
     methods: &'static BufferMethods,
+}
+
+impl ManuallyClone for PyBuffer {
+    fn manually_clone(&self) {
+        self.obj.as_object().trace(&mut |ch| {
+            let r = ch.to_owned();
+            let _ = ManuallyDrop::new(r);
+        });
+    }
 }
 
 #[cfg(feature = "gc")]
