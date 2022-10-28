@@ -39,7 +39,13 @@ pub trait ManuallyClone {
     /// and **discard** them
     ///
     /// can be used when you need a memcpy/u8::copy_from_slice
-    /// but still need keep the ref count right
+    /// but still need keep the ref count right, then one can do:
+    /// ```ignore
+    /// fn example(src: PyBytesLikeType, dst: AnotherPyBytesLikeType){
+    ///     src.manually_clone();
+    ///     dst.copy_from_slice(b.as_bytes())
+    /// }
+    /// ```
     fn manually_clone(&self);
 }
 
@@ -52,6 +58,7 @@ pub struct PyBuffer {
 
 impl ManuallyClone for PyBuffer {
     fn manually_clone(&self) {
+        error!("Manually Clone {:?}", self.obj);
         self.obj.as_object().trace(&mut |ch| {
             let r = ch.to_owned();
             let _ = ManuallyDrop::new(r);

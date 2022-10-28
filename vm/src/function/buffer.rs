@@ -1,3 +1,5 @@
+use std::mem::ManuallyDrop;
+
 use crate::{
     builtins::{PyStr, PyStrRef},
     common::borrow::{BorrowedValue, BorrowedValueMut},
@@ -138,6 +140,17 @@ pub enum ArgStrOrBytesLike {
     Str(PyStrRef),
 }
 
+impl ManuallyClone for ArgStrOrBytesLike {
+    fn manually_clone(&self) {
+        match self {
+            ArgStrOrBytesLike::Buf(buf) => buf.manually_clone(),
+            ArgStrOrBytesLike::Str(s) => {
+                let _ = ManuallyDrop::new(s.clone());
+            }
+        }
+    }
+}
+
 impl TryFromObject for ArgStrOrBytesLike {
     fn try_from_object(vm: &VirtualMachine, obj: PyObjectRef) -> PyResult<Self> {
         obj.downcast()
@@ -159,6 +172,17 @@ impl ArgStrOrBytesLike {
 pub enum ArgAsciiBuffer {
     String(PyStrRef),
     Buffer(ArgBytesLike),
+}
+
+impl ManuallyClone for ArgAsciiBuffer {
+    fn manually_clone(&self) {
+        match self {
+            ArgAsciiBuffer::String(s) => {
+                let _ = ManuallyDrop::new(s.clone());
+            }
+            ArgAsciiBuffer::Buffer(buf) => buf.manually_clone(),
+        }
+    }
 }
 
 impl TryFromObject for ArgAsciiBuffer {

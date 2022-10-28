@@ -52,6 +52,7 @@ mod fcntl {
     #[cfg(any(target_os = "dragonfly", target_os = "netbsd", target_vendor = "apple"))]
     #[pyattr]
     use libc::F_GETPATH;
+    use rustpython_vm::protocol::ManuallyClone;
 
     #[pyfunction]
     fn fcntl(
@@ -67,6 +68,7 @@ mod fcntl {
                 {
                     let s = arg.borrow_bytes();
                     arg_len = s.len();
+                    arg.manually_clone();
                     buf.get_mut(..arg_len)
                         .ok_or_else(|| vm.new_value_error("fcntl string arg too long".to_owned()))?
                         .copy_from_slice(&s)
@@ -119,10 +121,21 @@ mod fcntl {
                             }
                             return Ok(vm.ctx.new_int(ret).into());
                         }
+                        rw_arg.manually_clone();
                         // treat like an immutable buffer
-                        fill_buf(&arg_buf)?
+                        let ret = fill_buf(&arg_buf);
+                        if ret.is_ok() {
+                            rw_arg.manually_clone()
+                        }
+                        ret?
                     }
-                    Either::B(ro_buf) => fill_buf(&ro_buf.borrow_bytes())?,
+                    Either::B(ro_buf) => {
+                        let ret = fill_buf(&ro_buf.borrow_bytes());
+                        if ret.is_ok() {
+                            ro_buf.manually_clone();
+                        }
+                        ret?
+                    }
                 };
                 let ret = unsafe { libc::ioctl(fd, request as _, buf.as_mut_ptr()) };
                 if ret < 0 {
