@@ -995,15 +995,15 @@ impl PyObject {
 
     /// Can only be called when ref_count has dropped to zero. `ptr` must be valid
     #[inline(never)]
-    pub(in crate::object) unsafe fn drop_slow(ptr: NonNull<PyObject>) {
+    pub(in crate::object) unsafe fn drop_slow(ptr: NonNull<PyObject>) -> bool {
         if let Err(()) = ptr.as_ref().drop_slow_inner() {
             // abort drop for whatever reason
-            return;
+            return false;
         }
 
         #[cfg(feature = "gc")]
         if !ptr.as_ref().header().check_set_drop_dealloc() {
-            return;
+            return false;
         }
         #[cfg(debug_assertions)]
         {
@@ -1011,29 +1011,31 @@ impl PyObject {
         }
         let drop_dealloc = ptr.as_ref().0.vtable.drop_dealloc;
         // call drop only when there are no references in scope - stacked borrows stuff
-        drop_dealloc(ptr.as_ptr())
+        drop_dealloc(ptr.as_ptr());
+        true
     }
 
-    pub(in crate::object) unsafe fn drop_only(ptr: NonNull<PyObject>) {
+    pub(in crate::object) unsafe fn drop_only(ptr: NonNull<PyObject>) -> bool {
         if let Err(()) = ptr.as_ref().drop_slow_inner() {
             // abort drop for whatever reason
-            return;
+            return false;
         }
 
         if !ptr.as_ref().header().check_set_drop_only() {
-            return;
+            return false;
         }
         // not set is_drop because still havn't dealloc
         let drop_only = ptr.as_ref().0.vtable.drop_only;
 
-        drop_only(ptr.as_ptr())
+        drop_only(ptr.as_ptr());
+        true
     }
 
-    pub(in crate::object) unsafe fn dealloc_only(ptr: NonNull<PyObject>) {
+    pub(in crate::object) unsafe fn dealloc_only(ptr: NonNull<PyObject>) -> bool {
         #[cfg(feature = "gc")]
         {
             if !ptr.as_ref().header().check_set_dealloc_only() {
-                return;
+                return false;
             }
         }
 
@@ -1043,7 +1045,8 @@ impl PyObject {
         }
         let dealloc_only = ptr.as_ref().0.vtable.dealloc_only;
 
-        dealloc_only(ptr.as_ptr())
+        dealloc_only(ptr.as_ptr());
+        true
     }
 
     /// # Safety
