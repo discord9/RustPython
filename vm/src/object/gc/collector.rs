@@ -97,10 +97,10 @@ impl Collector {
         PyObject::drop_slow(obj)
     }
      */
-    unsafe fn drop_only(obj: NonNull<PyObject>) {
+    unsafe fn drop_only(obj: NonNull<PyObject>) -> bool {
         PyObject::drop_only(obj)
     }
-    unsafe fn dealloc_only(obj: NonNull<PyObject>) {
+    unsafe fn dealloc_only(obj: NonNull<PyObject>) -> bool {
         PyObject::dealloc_only(obj)
     }
     fn collect_cycles(&self, force: bool) -> GcResult {
@@ -279,22 +279,31 @@ impl Collector {
 
         // drop all for once in seperate loop to avoid certain cycle ref double drop bug
         // TODO: check and add detailed explain(could be something with __del__ func do)
-        for i in &white {
-            unsafe {
-                Self::drop_only(*i);
-                // PyObject::drop_only(i.cast::<PyObject>());
-            }
-        }
+        let can_dealloc: Vec<_> = white
+            .iter()
+            .map(|i| {
+                unsafe {
+                    Self::drop_only(*i)
+                    // PyObject::drop_only(i.cast::<PyObject>());
+                }
+            })
+            .collect();
 
         // drop first, deallocate later so to avoid heap corruption
         // cause by circular ref and therefore
         // access pointer of already dropped value's memory region
-        for i in &white {
-            unsafe {
-                Self::dealloc_only(*i);
-                // PyObject::dealloc_only(i.cast::<PyObject>());
-            }
-        }
+        white
+            .iter()
+            .zip(can_dealloc)
+            .map(|(i, can_dealloc)| {
+                if can_dealloc {
+                    unsafe {
+                        Self::dealloc_only(*i);
+                    }
+                    // PyObject::drop_only(i.cast::<PyObject>());
+                }
+            })
+            .count();
 
         // mark the end of GC here so another gc can begin(if end early could lead to stack overflow)
         Self::IS_GC_THREAD.with(|v| v.set(false));
