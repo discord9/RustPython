@@ -103,6 +103,7 @@ unsafe fn drop_dealloc_obj<T: PyObjectPayload>(x: *mut PyObject) {
 }
 
 /// drop only(doesn't deallocate)
+/// TODO: not drop `header` to prevent UB
 unsafe fn drop_only_obj<T: PyObjectPayload>(x: *mut PyObject) {
     x.cast::<PyInner<T>>().drop_in_place()
 }
@@ -111,6 +112,7 @@ unsafe fn drop_only_obj<T: PyObjectPayload>(x: *mut PyObject) {
 /// # Safety
 /// - should only be called after its' destructor is done(i.e. called `drop_value`(which called drop_in_place))
 /// - panic on a null pointer
+/// TODO: move drop `header` here to prevent UB
 unsafe fn dealloc_only_obj<T: PyObjectPayload>(x: *mut PyObject) {
     std::alloc::dealloc(
         x.cast(),
@@ -1156,7 +1158,6 @@ impl Drop for PyObjectRef {
                     .get(&self.0.typeid),
                 self.0.header
             );
-            panic!();
             return;
         }
         let stat = self.decrement();
