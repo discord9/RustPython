@@ -392,9 +392,9 @@ impl Collector {
         if obj.header().color() != Color::Purple {
             obj.header().set_color(Color::Purple);
             // prevent add to buffer for multiple times
+            let mut roots = self.roots.lock();
             let header = obj.header();
             if !header.buffered() {
-                let mut roots = self.roots.lock();
                 header.set_buffered(true);
                 roots.push(NonNull::from(obj).into());
             }
