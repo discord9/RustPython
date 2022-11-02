@@ -16,7 +16,7 @@ pub enum GcStatus {
     /// should be drop by caller
     ShouldDrop,
     /// because object is part of a garbage cycle, we don't want double dealloc
-    ShouldDropOnly,
+    GarbageCycle,
     /// already buffered, will be dealloc by collector, caller should call `drop_only` to run destructor only but not dealloc memory region
     BufferedDrop,
     /// should keep and not drop by caller
@@ -31,7 +31,7 @@ impl GcStatus {
         let stat = self;
         *stat == GcStatus::ShouldDrop
             || *stat == GcStatus::BufferedDrop
-            || *stat == GcStatus::ShouldDropOnly
+            || *stat == GcStatus::GarbageCycle
     }
 }
 

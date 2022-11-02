@@ -313,7 +313,8 @@ impl Collector {
     }
     fn collect_white(&self, obj: GcObjRef, white: &mut Vec<NonNull<GcObj>>) {
         if obj.header().color() == Color::White && !obj.header().buffered() {
-            obj.header().set_color(Color::BlackFree);
+            obj.header().set_color(Color::Black);
+            obj.header().set_in_cycle(true);
             obj.trace(&mut |ch| {
                 if ch.header().is_leaked() {
                     return;
@@ -334,7 +335,6 @@ impl Collector {
         // acquire exclusive access to obj's header
         #[cfg(feature = "threading")]
         let _lock = obj.header().exclusive();
-        debug_assert_ne!(obj.header().color(), Color::BlackFree);
         obj.header().do_pausing();
         obj.header().inc();
         obj.header().set_color(Color::Black);
@@ -386,14 +386,10 @@ impl Collector {
         // TODO(discord9): just drop in here, not by the caller, which is cleaner
         // before it is free in here,
         // but now change to passing message to allow it to drop outside
-        if !obj.header().buffered() {
-            if obj.header().is_cycle() {
-                GcStatus::ShouldDropOnly
-            } else {
-                GcStatus::ShouldDrop
-            }
-        } else {
-            GcStatus::BufferedDrop
+        match (obj.header().buffered(), obj.header().is_in_cycle()) {
+            (true, _) => GcStatus::BufferedDrop,
+            (_, true) => GcStatus::GarbageCycle,
+            (false, false) => GcStatus::ShouldDrop,
         }
     }
 

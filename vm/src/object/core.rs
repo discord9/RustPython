@@ -1147,6 +1147,7 @@ impl Drop for PyObjectRef {
 impl Drop for PyObjectRef {
     #[inline]
     fn drop(&mut self) {
+        let _no_gc = self.0.header.try_pausing();
         #[cfg(debug_assertions)]
         if *self.0.is_drop.lock() {
             error!(
@@ -1165,7 +1166,7 @@ impl Drop for PyObjectRef {
             GcStatus::ShouldDrop => unsafe {
                 PyObject::drop_slow(self.ptr);
             },
-            GcStatus::ShouldDropOnly | GcStatus::BufferedDrop => unsafe {
+            GcStatus::GarbageCycle | GcStatus::BufferedDrop => unsafe {
                 PyObject::drop_only(self.ptr);
             },
             GcStatus::ShouldKeep | GcStatus::DoNothing => (),
@@ -1313,6 +1314,7 @@ impl<T: PyObjectPayload> Drop for PyRef<T> {
 impl<T: PyObjectPayload> Drop for PyRef<T> {
     #[inline]
     fn drop(&mut self) {
+        let _no_gc = self.0.header.try_pausing();
         #[cfg(debug_assertions)]
         if *self.0.is_drop.lock() {
             error!(
@@ -1333,7 +1335,7 @@ impl<T: PyObjectPayload> Drop for PyRef<T> {
             GcStatus::ShouldDrop => unsafe {
                 PyObject::drop_slow(self.ptr.cast::<PyObject>());
             },
-            GcStatus::ShouldDropOnly | GcStatus::BufferedDrop => unsafe {
+            GcStatus::GarbageCycle | GcStatus::BufferedDrop => unsafe {
                 PyObject::drop_only(self.ptr.cast::<PyObject>());
             },
             GcStatus::ShouldKeep | GcStatus::DoNothing => (),
