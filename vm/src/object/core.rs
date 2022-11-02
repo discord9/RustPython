@@ -672,6 +672,7 @@ impl Deref for PyObjectRef {
         #[cfg(feature = "gc")]
         {
             let obj = unsafe { self.ptr.as_ref() };
+            debug_assert!(!obj.header().is_dealloc());
             obj.header().do_pausing();
             obj
         }
@@ -1246,6 +1247,7 @@ impl<T: PyObjectPayload> Deref for Py<T> {
 
     #[inline(always)]
     fn deref(&self) -> &Self::Target {
+        debug_assert!(!self.0.header.is_dealloc());
         &self.0.payload
     }
 }
@@ -1472,6 +1474,7 @@ where
         #[cfg(feature = "gc")]
         {
             let obj = unsafe { self.ptr.as_ref() };
+            debug_assert!(!obj.as_object().header().is_dealloc());
             obj.as_object().header().do_pausing();
             obj
         }
