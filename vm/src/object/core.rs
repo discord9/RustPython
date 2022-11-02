@@ -102,9 +102,30 @@ unsafe fn drop_dealloc_obj<T: PyObjectPayload>(x: *mut PyObject) {
     drop(Box::from_raw(x as *mut PyInner<T>));
 }
 
+macro_rules! partially_drop {
+    ($OBJ: ident. $($FIELD: tt),*) => {
+        $(
+            NonNull::from(&$OBJ.$FIELD).as_ptr().drop_in_place();
+        )*
+    };
+}
+
 /// drop only(doesn't deallocate)
 /// TODO: not drop `header` to prevent UB
 unsafe fn drop_only_obj<T: PyObjectPayload>(x: *mut PyObject) {
+    let obj = x.cast::<PyInner<T>>().as_ref().expect("Non-Null Pointer");
+    #[cfg(feature = "gc")]
+    partially_drop!(
+        obj.is_drop,
+        typeid,
+        vtable,
+        typ,
+        dict,
+        weak_list,
+        slots,
+        payload
+    );
+    #[cfg(not(feature = "gc"))]
     x.cast::<PyInner<T>>().drop_in_place()
 }
 
@@ -114,6 +135,9 @@ unsafe fn drop_only_obj<T: PyObjectPayload>(x: *mut PyObject) {
 /// - panic on a null pointer
 /// TODO: move drop `header` here to prevent UB
 unsafe fn dealloc_only_obj<T: PyObjectPayload>(x: *mut PyObject) {
+    let obj = x.cast::<PyInner<T>>().as_ref().expect("Non-Null Pointer");
+    #[cfg(feature = "gc")]
+    partially_drop!(obj.header);
     std::alloc::dealloc(
         x.cast(),
         std::alloc::Layout::for_value(x.cast::<PyInner<T>>().as_ref().unwrap()),
