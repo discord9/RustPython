@@ -14,6 +14,8 @@ use rustpython_common::{
 pub struct GcHeader {
     ref_cnt: PyAtomic<usize>,
     color: PyMutex<Color>,
+    /// prevent RAII to drop&dealloc when in cycle where should be drop&NOT dealloc
+    in_cycle: PyMutex<bool>,
     buffered: PyMutex<bool>,
     is_drop: PyMutex<bool>,
     /// check for soundness
@@ -27,6 +29,7 @@ impl Default for GcHeader {
         Self {
             ref_cnt: 1.into(),
             color: PyMutex::new(Color::Black),
+            in_cycle: PyMutex::new(false),
             buffered: PyMutex::new(false),
             is_drop: PyMutex::new(false),
             is_dealloc: PyMutex::new(false),
@@ -58,6 +61,14 @@ impl GcHeader {
         self.gc.clone()
     }
 
+    pub fn is_in_cycle(&self) -> bool {
+        *self.in_cycle.lock()
+    }
+
+    pub fn set_in_cycle(&self, b: bool) {
+        *self.in_cycle.lock() = b;
+    }
+
     pub fn is_drop(&self) -> bool {
         *self.is_drop.lock()
     }
@@ -67,15 +78,24 @@ impl GcHeader {
     }
 
     pub fn is_dealloc(&self) -> bool {
-        *self.is_dealloc.lock()
+        #[cfg(feature = "threading")]
+        {
+            *self
+                .is_dealloc
+                .try_lock_for(std::time::Duration::from_secs(1))
+                .expect("Dead lock happen when should not, probably already deallocated")
+        }
+        #[cfg(not(feature = "threading"))]
+        {
+            *self
+                .is_dealloc
+                .try_lock()
+                .expect("Dead lock happen when should not, probably already deallocated")
+        }
     }
 
     pub fn set_dealloc(&self) {
         *self.is_dealloc.lock() = true
-    }
-
-    pub fn is_cycle(&self) -> bool {
-        self.color() == Color::BlackFree && self.rc() == 0
     }
 
     pub(crate) fn check_set_drop_dealloc(&self) -> bool {
@@ -203,8 +223,6 @@ impl GcHeader {
 pub enum Color {
     /// In use
     Black,
-    /// free, as in change by collect_white to black
-    BlackFree,
     /// Possible member of cycle
     Gray,
     /// Member of garbage cycle
