@@ -166,6 +166,7 @@ impl Collector {
                 } else {
                     obj.header().set_buffered(false);
                     if obj.header().color() == Color::Black && obj.header().rc() == 0 {
+                        debug_assert!(obj.header().is_drop() && !obj.header().is_dealloc());
                         freed += 1;
                         unsafe {
                             // only dealloc here, because already drop(only) in Object's impl Drop
