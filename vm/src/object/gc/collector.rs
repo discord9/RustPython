@@ -300,7 +300,6 @@ impl Collector {
                     unsafe {
                         Self::dealloc_only(*i);
                     }
-                    // PyObject::drop_only(i.cast::<PyObject>());
                 }
             })
             .count();
