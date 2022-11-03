@@ -16,8 +16,9 @@ pub enum GcStatus {
     /// should be drop by caller
     ShouldDrop,
     /// because object is part of a garbage cycle, we don't want double dealloc
+    /// or use after drop, so run `__del__` only. Drop(destructor)&dealloc is handle by gc
     GarbageCycle,
-    /// already buffered, will be dealloc by collector, caller should call `drop_only` to run destructor only but not dealloc memory region
+    /// already buffered, will be dealloc by collector, caller should call [`PyObject::del_Drop`] to run destructor only but not dealloc memory region
     BufferedDrop,
     /// should keep and not drop by caller
     ShouldKeep,

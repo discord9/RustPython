@@ -97,12 +97,6 @@ impl Collector {
         PyObject::drop_slow(obj)
     }
      */
-    unsafe fn drop_only(obj: NonNull<PyObject>) -> bool {
-        PyObject::drop_only(obj)
-    }
-    unsafe fn dealloc_only(obj: NonNull<PyObject>) -> bool {
-        PyObject::dealloc_only(obj)
-    }
     fn collect_cycles(&self, force: bool) -> GcResult {
         if Self::IS_GC_THREAD.with(|v| v.get()) {
             return (0, 0).into();
@@ -171,7 +165,7 @@ impl Collector {
                         unsafe {
                             // only dealloc here, because already drop(only) in Object's impl Drop
                             // PyObject::dealloc_only(ptr.cast::<PyObject>());
-                            Self::dealloc_only(**ptr);
+                            PyObject::dealloc_only(**ptr);
                             // obj is dangling after this line?
                         }
                     }
@@ -278,14 +272,22 @@ impl Collector {
             });
         }
 
-        // drop all for once in seperate loop to avoid certain cycle ref double drop bug
-        // TODO: check and add detailed explain(could be something with __del__ func do)
-        let can_dealloc: Vec<_> = white
+        // first only run __del__ to prevent accesss dropped object hence UB
+        let can_drops: Vec<_> = white
             .iter()
-            .map(|i| {
-                unsafe {
-                    Self::drop_only(*i)
-                    // PyObject::drop_only(i.cast::<PyObject>());
+            .map(|i| unsafe { PyObject::del_only(*i) })
+            .collect();
+
+        // drop all for once at seperate loop to avoid certain cycle ref double drop bug
+        // TODO: check and add detailed explain(could be something with __del__ func do)
+        let can_deallocs: Vec<_> = white
+            .iter()
+            .zip(can_drops)
+            .map(|(i, can_drop)| {
+                if can_drop {
+                    unsafe { PyObject::drop_only(*i) }
+                } else {
+                    false
                 }
             })
             .collect();
@@ -295,11 +297,11 @@ impl Collector {
         // access pointer of already dropped value's memory region
         white
             .iter()
-            .zip(can_dealloc)
+            .zip(can_deallocs)
             .map(|(i, can_dealloc)| {
                 if can_dealloc {
                     unsafe {
-                        Self::dealloc_only(*i);
+                        PyObject::dealloc_only(*i);
                     }
                 }
             })
@@ -435,6 +437,8 @@ impl Collector {
     #[inline]
     #[allow(unreachable_code)]
     pub fn should_gc(&self) -> bool {
+        // TODO: use "Optimal Heap Limits for Reducing Browser Memory Use"(http://arxiv.org/abs/2204.10455)
+        // to optimize gc condition
         if !self.is_enabled() {
             return false;
         }
