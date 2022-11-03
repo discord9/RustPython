@@ -13,6 +13,7 @@ use rustpython_common::{
 #[derive(Debug)]
 pub struct GcHeader {
     ref_cnt: PyAtomic<usize>,
+    /// TODO(discord9): compact color(2bit)+in_cycle(1)+buffered(1)+is_drop(1)+is_dealloc(1)+is_leak(1)=7bit into one byte
     color: PyMutex<Color>,
     /// prevent RAII to drop&dealloc when in cycle where should be drop&NOT dealloc
     in_cycle: PyMutex<bool>,
@@ -20,6 +21,7 @@ pub struct GcHeader {
     is_drop: PyMutex<bool>,
     /// check for soundness
     is_dealloc: PyMutex<bool>,
+    is_leak: PyMutex<bool>,
     exclusive: PyMutex<()>,
     gc: PyRc<Collector>,
 }
@@ -33,6 +35,7 @@ impl Default for GcHeader {
             buffered: PyMutex::new(false),
             is_drop: PyMutex::new(false),
             is_dealloc: PyMutex::new(false),
+            is_leak: PyMutex::new(false),
             exclusive: PyMutex::new(()),
             /// when threading, using a global GC
             #[cfg(feature = "threading")]
@@ -207,14 +210,18 @@ impl GcHeader {
             // warn!("Try to leak a already leaked object!");
             return;
         }
+        *self.is_leak.lock() = true;
+        /*
         const BIT_MARKER: usize = (std::isize::MAX as usize) + 1;
         debug_assert_eq!(BIT_MARKER.count_ones(), 1);
         debug_assert_eq!(BIT_MARKER.leading_zeros(), 0);
         self.ref_cnt.fetch_add(BIT_MARKER, Ordering::Relaxed);
+        */
     }
 
     pub fn is_leaked(&self) -> bool {
-        (self.ref_cnt.load(Ordering::Acquire) as isize) < 0
+        // (self.ref_cnt.load(Ordering::Acquire) as isize) < 0
+        *self.is_leak.lock()
     }
 }
 

@@ -111,7 +111,7 @@ macro_rules! partially_drop {
 }
 
 /// drop only(doesn't deallocate)
-/// TODO: not drop `header` to prevent UB
+/// NOTE: `header` is not drop to prevent UB
 unsafe fn drop_only_obj<T: PyObjectPayload>(x: *mut PyObject) {
     let obj = x.cast::<PyInner<T>>().as_ref().expect("Non-Null Pointer");
     #[cfg(feature = "gc")]
@@ -1020,7 +1020,15 @@ impl PyObject {
         Ok(())
     }
 
-    /// Can only be called when ref_count has dropped to zero. `ptr` must be valid
+    /// only run `__del__`(or `slot_del` depends on the actual object), doesn't drop or dealloc
+    pub(in crate::object) unsafe fn del_only(ptr: NonNull<Self>) -> bool {
+        if let Err(()) = ptr.as_ref().drop_slow_inner() {
+            return false;
+        }
+        true
+    }
+
+    /// Can only be called when ref_count has dropped to zero. `ptr` must be valid, it run __del__ then drop&dealloc
     #[inline(never)]
     pub(in crate::object) unsafe fn drop_slow(ptr: NonNull<PyObject>) -> bool {
         if let Err(()) = ptr.as_ref().drop_slow_inner() {
@@ -1042,20 +1050,25 @@ impl PyObject {
         true
     }
 
+    /// only run rust RAII destructor, no __del__ neither dealloc
     pub(in crate::object) unsafe fn drop_only(ptr: NonNull<PyObject>) -> bool {
+        if !ptr.as_ref().header().check_set_drop_only() {
+            return false;
+        }
+        // not set PyInner's is_drop because still havn't dealloc
+        let drop_only = ptr.as_ref().0.vtable.drop_only;
+
+        drop_only(ptr.as_ptr());
+        true
+    }
+    /// run object's __del__ and then rust's destructor but doesn't dealloc
+    pub(in crate::object) unsafe fn del_drop(ptr: NonNull<PyObject>) -> bool {
         if let Err(()) = ptr.as_ref().drop_slow_inner() {
             // abort drop for whatever reason
             return false;
         }
 
-        if !ptr.as_ref().header().check_set_drop_only() {
-            return false;
-        }
-        // not set is_drop because still havn't dealloc
-        let drop_only = ptr.as_ref().0.vtable.drop_only;
-
-        drop_only(ptr.as_ptr());
-        true
+        Self::drop_only(ptr)
     }
 
     pub(in crate::object) unsafe fn dealloc_only(ptr: NonNull<PyObject>) -> bool {
@@ -1187,12 +1200,16 @@ impl Drop for PyObjectRef {
             return;
         }
         let stat = self.decrement();
+        let ptr = self.ptr;
         match stat {
             GcStatus::ShouldDrop => unsafe {
-                PyObject::drop_slow(self.ptr);
+                PyObject::drop_slow(ptr);
             },
-            GcStatus::GarbageCycle | GcStatus::BufferedDrop => unsafe {
-                PyObject::drop_only(self.ptr);
+            GcStatus::BufferedDrop => unsafe {
+                PyObject::del_drop(ptr);
+            },
+            GcStatus::GarbageCycle => unsafe {
+                PyObject::del_only(ptr);
             },
             GcStatus::ShouldKeep | GcStatus::DoNothing => (),
         }
@@ -1357,12 +1374,16 @@ impl<T: PyObjectPayload> Drop for PyRef<T> {
             .or_insert_with(|| std::any::type_name::<T>().to_string());
 
         let stat = self.as_object().decrement();
+        let ptr = self.ptr.cast::<PyObject>();
         match stat {
             GcStatus::ShouldDrop => unsafe {
-                PyObject::drop_slow(self.ptr.cast::<PyObject>());
+                PyObject::drop_slow(ptr);
             },
-            GcStatus::GarbageCycle | GcStatus::BufferedDrop => unsafe {
-                PyObject::drop_only(self.ptr.cast::<PyObject>());
+            GcStatus::BufferedDrop => unsafe {
+                PyObject::del_drop(ptr);
+            },
+            GcStatus::GarbageCycle => unsafe {
+                PyObject::del_only(ptr);
             },
             GcStatus::ShouldKeep | GcStatus::DoNothing => (),
         }
