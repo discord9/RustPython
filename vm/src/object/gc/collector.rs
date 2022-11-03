@@ -355,7 +355,8 @@ impl Collector {
         let _lock = obj.header().exclusive();
         // prevent RAII Drop to drop below zero
         if obj.header().rc() > 0 {
-            obj.header().do_pausing();
+            let _lock = obj.header().try_pausing();
+            debug_assert!(!obj.header().is_drop());
             let rc = obj.header().dec();
             if rc == 0 {
                 self.release(obj)
