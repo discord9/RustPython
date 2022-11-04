@@ -23,15 +23,9 @@ use crate::{
 use std::{fmt, marker::PhantomData};
 
 #[pyclass(module = false, name = "tuple")]
+#[pytrace]
 pub struct PyTuple {
     elements: Box<[PyObjectRef]>,
-}
-
-#[cfg(feature = "gc")]
-unsafe impl crate::object::Trace for PyTuple {
-    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
-        self.elements.trace(tracer_fn)
-    }
 }
 
 impl fmt::Debug for PyTuple {
@@ -411,15 +405,9 @@ impl Iterable for PyTuple {
 
 #[pyclass(module = false, name = "tuple_iterator")]
 #[derive(Debug)]
+#[pytrace]
 pub(crate) struct PyTupleIterator {
     internal: PyRwLock<PositionIterInternal<PyTupleRef>>,
-}
-
-#[cfg(feature = "gc")]
-unsafe impl crate::object::Trace for PyTupleIterator {
-    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
-        self.internal.trace(tracer_fn)
-    }
 }
 
 impl PyPayload for PyTupleIterator {

@@ -10,17 +10,10 @@ use crate::{
 
 #[pyclass(module = false, name = "map")]
 #[derive(Debug)]
+#[pytrace]
 pub struct PyMap {
     mapper: PyObjectRef,
     iterators: Vec<PyIter>,
-}
-
-#[cfg(feature = "gc")]
-unsafe impl crate::object::Trace for PyMap {
-    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
-        self.mapper.trace(tracer_fn);
-        self.iterators.trace(tracer_fn);
-    }
 }
 
 impl PyPayload for PyMap {

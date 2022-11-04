@@ -11,16 +11,11 @@ use rustpython_common::atomic::{self, PyAtomic, Radium};
 
 #[pyclass(module = false, name = "zip")]
 #[derive(Debug)]
+#[pytrace]
 pub struct PyZip {
     iterators: Vec<PyIter>,
+    #[notrace]
     strict: PyAtomic<bool>,
-}
-
-#[cfg(feature = "gc")]
-unsafe impl crate::object::Trace for PyZip {
-    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
-        self.iterators.trace(tracer_fn);
-    }
 }
 
 impl PyPayload for PyZip {

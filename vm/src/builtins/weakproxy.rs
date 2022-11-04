@@ -10,15 +10,9 @@ use crate::{
 
 #[pyclass(module = false, name = "weakproxy")]
 #[derive(Debug)]
+#[pytrace]
 pub struct PyWeakProxy {
     weak: PyRef<PyWeak>,
-}
-
-#[cfg(feature = "gc")]
-unsafe impl crate::object::Trace for PyWeakProxy {
-    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
-        self.weak.trace(tracer_fn)
-    }
 }
 
 impl PyPayload for PyWeakProxy {

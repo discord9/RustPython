@@ -15,16 +15,11 @@ use num_traits::Zero;
 
 #[pyclass(module = false, name = "enumerate")]
 #[derive(Debug)]
+#[pytrace]
 pub struct PyEnumerate {
+    #[notrace]
     counter: PyRwLock<BigInt>,
     iterator: PyIter,
-}
-
-#[cfg(feature = "gc")]
-unsafe impl crate::object::Trace for PyEnumerate {
-    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
-        self.iterator.trace(tracer_fn);
-    }
 }
 
 impl PyPayload for PyEnumerate {
@@ -89,15 +84,9 @@ impl IterNext for PyEnumerate {
 
 #[pyclass(module = false, name = "reversed")]
 #[derive(Debug)]
+#[pytrace]
 pub struct PyReverseSequenceIterator {
     internal: PyRwLock<PositionIterInternal<PyObjectRef>>,
-}
-
-#[cfg(feature = "gc")]
-unsafe impl crate::object::Trace for PyReverseSequenceIterator {
-    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
-        self.internal.trace(tracer_fn);
-    }
 }
 
 impl PyPayload for PyReverseSequenceIterator {
