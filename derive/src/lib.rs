@@ -18,6 +18,7 @@ mod pyclass;
 mod pymodule;
 mod pypayload;
 mod pystructseq;
+mod pytrace;
 
 use error::{extract_spans, Diagnostic};
 use proc_macro2::TokenStream;
@@ -118,4 +119,17 @@ pub fn py_freeze(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
 pub fn pypayload(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
     result_to_tokens(pypayload::impl_pypayload(input))
+}
+
+/// use on struct with named fields like `struct A{x:i32, y:i32}` to impl `Trace` for datatype
+///
+/// use `#[notrace]` on fields you wish not to trace
+#[proc_macro_attribute]
+pub fn pytrace(
+    attr: proc_macro::TokenStream,
+    item: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
+    let attr = parse_macro_input!(attr as AttributeArgs);
+    let item = parse_macro_input!(item as DeriveInput);
+    result_to_tokens(pytrace::impl_pytrace(attr, item))
 }
