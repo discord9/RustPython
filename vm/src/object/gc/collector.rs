@@ -454,7 +454,7 @@ impl Collector {
                 return false;
             }
             let mut last_gc_time = self.last_gc_time.lock();
-            if last_gc_time.elapsed().as_millis() >= 100 {
+            if last_gc_time.elapsed().as_secs() >= 1 {
                 *last_gc_time = Instant::now();
                 true
             } else {
