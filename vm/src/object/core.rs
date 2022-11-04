@@ -103,8 +103,9 @@ unsafe fn drop_dealloc_obj<T: PyObjectPayload>(x: *mut PyObject) {
 }
 
 macro_rules! partially_drop {
-    ($OBJ: ident. $($FIELD: tt),*) => {
+    ($OBJ: ident. $($(#[$attr:meta])? $FIELD: ident),*) => {
         $(
+            $(#[$attr])?
             NonNull::from(&$OBJ.$FIELD).as_ptr().drop_in_place();
         )*
     };
@@ -116,7 +117,9 @@ unsafe fn drop_only_obj<T: PyObjectPayload>(x: *mut PyObject) {
     let obj = x.cast::<PyInner<T>>().as_ref().expect("Non-Null Pointer");
     #[cfg(feature = "gc")]
     partially_drop!(
-        obj.is_drop,
+        obj.
+        #[cfg(debug_assertions)]
+        is_drop,
         typeid,
         vtable,
         typ,
@@ -1359,20 +1362,21 @@ impl<T: PyObjectPayload> Drop for PyRef<T> {
     fn drop(&mut self) {
         let _no_gc = self.0.header.try_pausing();
         #[cfg(debug_assertions)]
-        if *self.0.is_drop.lock() {
-            error!(
-                "Double drop on PyRef<{}>",
-                std::any::type_name::<T>().to_string()
-            );
-            return;
+        {
+            if *self.0.is_drop.lock() {
+                error!(
+                    "Double drop on PyRef<{}>",
+                    std::any::type_name::<T>().to_string()
+                );
+                return;
+            }
+            let tid = TypeId::of::<T>();
+            ID2TYPE
+                .lock()
+                .expect("can't insert into ID2TYPE")
+                .entry(tid)
+                .or_insert_with(|| std::any::type_name::<T>().to_string());
         }
-        let tid = TypeId::of::<T>();
-        ID2TYPE
-            .lock()
-            .expect("can't insert into ID2TYPE")
-            .entry(tid)
-            .or_insert_with(|| std::any::type_name::<T>().to_string());
-
         let stat = self.as_object().decrement();
         let ptr = self.ptr.cast::<PyObject>();
         match stat {

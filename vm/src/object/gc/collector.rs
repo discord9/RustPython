@@ -2,11 +2,10 @@ use rustpython_common::{
     lock::{PyMutex, PyRwLock, PyRwLockReadGuard, PyRwLockWriteGuard},
     rc::PyRc,
 };
-use std::{
-    cell::Cell,
-    ptr::NonNull,
-    time::{Duration, Instant},
-};
+use std::{cell::Cell, ptr::NonNull, time::Instant};
+
+#[cfg(feature = "threading")]
+use std::time::Duration;
 
 use crate::{
     object::gc::{Color, GcResult, Trace},
@@ -15,6 +14,7 @@ use crate::{
 
 use super::{GcObj, GcObjRef, GcStatus, TraceHelper};
 
+#[cfg(feature = "threading")]
 pub static LOCK_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// The global cycle collector, which collect cycle references for PyInner<T>

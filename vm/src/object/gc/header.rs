@@ -1,6 +1,8 @@
 use std::sync::atomic::Ordering;
 
 use crate::object::gc::{Collector, GLOBAL_COLLECTOR};
+#[cfg(not(feature = "threading"))]
+use rustpython_common::atomic::Radium;
 use rustpython_common::lock::PyMutexGuard;
 use rustpython_common::{
     atomic::PyAtomic,
