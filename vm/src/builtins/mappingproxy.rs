@@ -13,15 +13,9 @@ use crate::{
 
 #[pyclass(module = false, name = "mappingproxy")]
 #[derive(Debug)]
+#[pytrace]
 pub struct PyMappingProxy {
     mapping: MappingProxyInner,
-}
-
-#[cfg(feature = "gc")]
-unsafe impl crate::object::Trace for PyMappingProxy {
-    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
-        self.mapping.trace(tracer_fn);
-    }
 }
 
 #[derive(Debug)]

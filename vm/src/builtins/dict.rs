@@ -34,17 +34,11 @@ pub type DictContentType = dictdatatype::Dict;
 
 #[pyclass(module = false, name = "dict", unhashable = true)]
 #[derive(Default)]
+#[pytrace]
 pub struct PyDict {
     entries: DictContentType,
 }
 pub type PyDictRef = PyRef<PyDict>;
-
-#[cfg(feature = "gc")]
-unsafe impl crate::object::Trace for PyDict {
-    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
-        self.entries.trace(tracer_fn);
-    }
-}
 
 impl fmt::Debug for PyDict {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

@@ -10,15 +10,9 @@ use crate::{
 use std::{borrow::Borrow, marker::PhantomData, ops::Deref};
 
 #[derive(Clone, Debug)]
+#[pytrace]
 pub struct ArgCallable {
     obj: PyObjectRef,
-}
-
-#[cfg(feature = "gc")]
-unsafe impl crate::object::Trace for ArgCallable {
-    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
-        self.obj.trace(tracer_fn)
-    }
 }
 
 impl ArgCallable {
@@ -115,16 +109,11 @@ where
 }
 
 #[derive(Debug, Clone)]
+#[pytrace]
 pub struct ArgMapping {
     obj: PyObjectRef,
+    #[notrace]
     methods: &'static PyMappingMethods,
-}
-
-#[cfg(feature = "gc")]
-unsafe impl crate::object::Trace for ArgMapping {
-    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
-        self.obj.trace(tracer_fn)
-    }
 }
 
 impl ArgMapping {

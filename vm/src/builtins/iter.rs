@@ -177,17 +177,12 @@ pub fn builtins_reversed(vm: &VirtualMachine) -> &PyObject {
 
 #[pyclass(module = false, name = "iterator")]
 #[derive(Debug)]
+#[pytrace]
 pub struct PySequenceIterator {
     // cached sequence methods
+    #[notrace]
     seq_methods: &'static PySequenceMethods,
     internal: PyRwLock<PositionIterInternal<PyObjectRef>>,
-}
-
-#[cfg(feature = "gc")]
-unsafe impl crate::object::Trace for PySequenceIterator {
-    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
-        self.internal.trace(tracer_fn)
-    }
 }
 
 impl PyPayload for PySequenceIterator {
@@ -248,17 +243,10 @@ impl IterNext for PySequenceIterator {
 
 #[pyclass(module = false, name = "callable_iterator")]
 #[derive(Debug)]
+#[pytrace]
 pub struct PyCallableIterator {
     sentinel: PyObjectRef,
     status: PyRwLock<IterStatus<ArgCallable>>,
-}
-
-#[cfg(feature = "gc")]
-unsafe impl crate::object::Trace for PyCallableIterator {
-    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
-        self.sentinel.trace(tracer_fn);
-        self.status.trace(tracer_fn);
-    }
 }
 
 impl PyPayload for PyCallableIterator {

@@ -13,19 +13,11 @@ use num_traits::{One, Signed, Zero};
 
 #[pyclass(module = false, name = "slice", unhashable = true)]
 #[derive(Debug)]
+#[pytrace]
 pub struct PySlice {
     pub start: Option<PyObjectRef>,
     pub stop: PyObjectRef,
     pub step: Option<PyObjectRef>,
-}
-
-#[cfg(feature = "gc")]
-unsafe impl crate::object::Trace for PySlice {
-    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
-        self.start.trace(tracer_fn);
-        self.stop.trace(tracer_fn);
-        self.step.trace(tracer_fn);
-    }
 }
 
 impl PyPayload for PySlice {

@@ -469,17 +469,10 @@ impl Callable for PyFunction {
 
 #[pyclass(module = false, name = "method")]
 #[derive(Debug)]
+#[pytrace]
 pub struct PyBoundMethod {
     object: PyObjectRef,
     function: PyObjectRef,
-}
-
-#[cfg(feature = "gc")]
-unsafe impl crate::object::Trace for PyBoundMethod {
-    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
-        self.object.trace(tracer_fn);
-        self.function.trace(tracer_fn);
-    }
 }
 
 impl Callable for PyBoundMethod {
@@ -637,15 +630,9 @@ impl PyPayload for PyBoundMethod {
 
 #[pyclass(module = false, name = "cell")]
 #[derive(Debug, Default)]
+#[pytrace]
 pub(crate) struct PyCell {
     contents: PyRwLock<Option<PyObjectRef>>,
-}
-
-#[cfg(feature = "gc")]
-unsafe impl crate::object::Trace for PyCell {
-    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
-        self.contents.trace(tracer_fn)
-    }
 }
 
 pub(crate) type PyCellRef = PyRef<PyCell>;

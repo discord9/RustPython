@@ -13,21 +13,12 @@ use crate::{
 
 #[pyclass(module = false, name = "property")]
 #[derive(Debug)]
+#[pytrace]
 pub struct PyProperty {
     getter: PyRwLock<Option<PyObjectRef>>,
     setter: PyRwLock<Option<PyObjectRef>>,
     deleter: PyRwLock<Option<PyObjectRef>>,
     doc: PyRwLock<Option<PyObjectRef>>,
-}
-
-#[cfg(feature = "gc")]
-unsafe impl crate::object::Trace for PyProperty {
-    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
-        self.getter.trace(tracer_fn);
-        self.setter.trace(tracer_fn);
-        self.deleter.trace(tracer_fn);
-        self.doc.trace(tracer_fn);
-    }
 }
 
 impl PyPayload for PyProperty {

@@ -24,15 +24,9 @@ use std::{fmt, ops::DerefMut};
 
 #[pyclass(module = false, name = "list", unhashable = true)]
 #[derive(Default)]
+#[pytrace]
 pub struct PyList {
     elements: PyRwLock<Vec<PyObjectRef>>,
-}
-
-#[cfg(feature = "gc")]
-unsafe impl crate::object::Trace for PyList {
-    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
-        self.elements.trace(tracer_fn);
-    }
 }
 
 impl fmt::Debug for PyList {
@@ -520,15 +514,9 @@ fn do_sort(
 
 #[pyclass(module = false, name = "list_iterator")]
 #[derive(Debug)]
+#[pytrace]
 pub struct PyListIterator {
     internal: PyRwLock<PositionIterInternal<PyListRef>>,
-}
-
-#[cfg(feature = "gc")]
-unsafe impl crate::object::Trace for PyListIterator {
-    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
-        self.internal.trace(tracer_fn);
-    }
 }
 
 impl PyPayload for PyListIterator {
@@ -572,15 +560,9 @@ impl IterNext for PyListIterator {
 
 #[pyclass(module = false, name = "list_reverseiterator")]
 #[derive(Debug)]
+#[pytrace]
 pub struct PyListReverseIterator {
     internal: PyRwLock<PositionIterInternal<PyListRef>>,
-}
-
-#[cfg(feature = "gc")]
-unsafe impl crate::object::Trace for PyListReverseIterator {
-    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
-        self.internal.trace(tracer_fn);
-    }
 }
 
 impl PyPayload for PyListReverseIterator {
