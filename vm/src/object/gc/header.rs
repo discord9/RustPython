@@ -10,20 +10,100 @@ use rustpython_common::{
     rc::PyRc,
 };
 
+#[derive(Debug)]
+struct State {
+    inner: u8,
+}
+
+impl Default for State {
+    fn default() -> Self {
+        let mut new = Self {
+            inner: Default::default(),
+        };
+        new.set_color(Color::Black);
+        new.set_in_cycle(false);
+        new.set_buffered(false);
+        new.set_drop(false);
+        new.set_dealloc(false);
+        new.set_leak(false);
+        new
+    }
+}
+
+macro_rules! getset {
+    ($GETTER: ident, $SETTER: ident, $MASK: path, $OFFSET: path) => {
+        fn $GETTER(&self) -> bool {
+            ((self.inner & $MASK) >> $OFFSET) != 0
+        }
+        fn $SETTER(&mut self, b: bool) {
+            self.inner = (self.inner & !$MASK) | ((b as u8) << $OFFSET)
+        }
+    };
+}
+
+#[allow(unused)]
+impl State {
+    const COLOR_MASK: u8 = 0b0000_0011;
+    const CYCLE_MASK: u8 = 0b0000_0100;
+    const CYCLE_OFFSET: u8 = 2;
+    const BUF_MASK: u8 = 0b0000_1000;
+    const BUF_OFFSET: u8 = 3;
+    const DROP_MASK: u8 = 0b0001_0000;
+    const DROP_OFFSET: u8 = 4;
+    const DEALLOC_MASK: u8 = 0b0010_0000;
+    const DEALLOC_OFFSET: u8 = 5;
+    const LEAK_MASK: u8 = 0b0100_0000;
+    const LEAK_OFFSET: u8 = 6;
+    fn color(&self) -> Color {
+        let color = self.inner & Self::COLOR_MASK;
+        match color {
+            0 => Color::Black,
+            1 => Color::Gray,
+            2 => Color::White,
+            3 => Color::Purple,
+            _ => unreachable!(),
+        }
+    }
+    fn set_color(&mut self, color: Color) {
+        let color = match color {
+            Color::Black => 0,
+            Color::Gray => 1,
+            Color::White => 2,
+            Color::Purple => 3,
+        };
+        self.inner = (self.inner & !Self::COLOR_MASK) | color;
+    }
+    getset! {in_cycle, set_in_cycle, Self::CYCLE_MASK, Self::CYCLE_OFFSET}
+    getset! {buffered, set_buffered, Self::BUF_MASK, Self::BUF_OFFSET}
+    getset! {is_drop, set_drop, Self::DROP_MASK, Self::DROP_OFFSET}
+    getset! {is_dealloc, set_dealloc, Self::DEALLOC_MASK, Self::DEALLOC_OFFSET}
+    getset! {is_leak, set_leak, Self::LEAK_MASK, Self::LEAK_OFFSET}
+}
+
+#[test]
+fn test_state() {
+    let mut state = State::default();
+    assert!(!state.is_dealloc());
+    state.set_drop(true);
+    assert!(state.inner == 16);
+    assert!(!state.is_dealloc() && state.is_drop());
+    // color
+    state.set_color(Color::Gray);
+    assert_eq!(state.color(), Color::Gray);
+    state.set_color(Color::White);
+    assert_eq!(state.color(), Color::White);
+    state.set_color(Color::Black);
+    assert_eq!(state.color(), Color::Black);
+    state.set_color(Color::Purple);
+    assert_eq!(state.color(), Color::Purple);
+}
+
 /// Garbage collect header, containing ref count and other info, using repr(C) to stay consistent with PyInner 's repr
 #[repr(C)]
 #[derive(Debug)]
 pub struct GcHeader {
     ref_cnt: PyAtomic<usize>,
-    /// TODO(discord9): compact color(2bit)+in_cycle(1)+buffered(1)+is_drop(1)+is_dealloc(1)+is_leak(1)=7bit into one byte
-    color: PyMutex<Color>,
-    /// prevent RAII to drop&dealloc when in cycle where should be drop&NOT dealloc
-    in_cycle: PyMutex<bool>,
-    buffered: PyMutex<bool>,
-    is_drop: PyMutex<bool>,
-    /// check for soundness
-    is_dealloc: PyMutex<bool>,
-    is_leak: PyMutex<bool>,
+    state: PyMutex<State>,
     exclusive: PyMutex<()>,
     gc: PyRc<Collector>,
 }
@@ -32,12 +112,7 @@ impl Default for GcHeader {
     fn default() -> Self {
         Self {
             ref_cnt: 1.into(),
-            color: PyMutex::new(Color::Black),
-            in_cycle: PyMutex::new(false),
-            buffered: PyMutex::new(false),
-            is_drop: PyMutex::new(false),
-            is_dealloc: PyMutex::new(false),
-            is_leak: PyMutex::new(false),
+            state: Default::default(),
             exclusive: PyMutex::new(()),
             /// when threading, using a global GC
             #[cfg(feature = "threading")]
@@ -67,40 +142,40 @@ impl GcHeader {
     }
 
     pub fn is_in_cycle(&self) -> bool {
-        *self.in_cycle.lock()
+        self.state.lock().in_cycle()
     }
 
     pub fn set_in_cycle(&self, b: bool) {
-        *self.in_cycle.lock() = b;
+        self.state.lock().set_in_cycle(b)
     }
 
     pub fn is_drop(&self) -> bool {
-        *self.is_drop.lock()
+        self.state.lock().is_drop()
     }
 
     pub fn set_drop(&self) {
-        *self.is_drop.lock() = true
+        self.state.lock().set_drop(true)
     }
 
     pub fn is_dealloc(&self) -> bool {
         #[cfg(feature = "threading")]
         {
-            *self
-                .is_dealloc
+            self.state
                 .try_lock_for(std::time::Duration::from_secs(1))
                 .expect("Dead lock happen when should not, probably already deallocated")
+                .is_dealloc()
         }
         #[cfg(not(feature = "threading"))]
         {
-            *self
-                .is_dealloc
+            self.state
                 .try_lock()
                 .expect("Dead lock happen when should not, probably already deallocated")
+                .is_dealloc()
         }
     }
 
     pub fn set_dealloc(&self) {
-        *self.is_dealloc.lock() = true
+        self.state.lock().set_dealloc(true)
     }
 
     pub(crate) fn check_set_drop_dealloc(&self) -> bool {
@@ -135,13 +210,13 @@ impl GcHeader {
 
     /// return true if can dealloc(that is already drop)
     pub(crate) fn check_set_dealloc_only(&self) -> bool {
-        let is_drop = self.is_drop.lock();
+        let is_drop = self.state.lock().is_drop();
         let is_dealloc = self.is_dealloc();
-        if !*is_drop {
+        if !is_drop {
             warn!("Try to dealloc a object that haven't drop.");
             return false;
         }
-        if *is_drop && !is_dealloc {
+        if is_drop && !is_dealloc {
             self.set_dealloc();
             true
         } else {
@@ -166,16 +241,16 @@ impl GcHeader {
         self.gc.do_pausing();
     }
     pub fn color(&self) -> Color {
-        *self.color.lock()
+        self.state.lock().color()
     }
     pub fn set_color(&self, new_color: Color) {
-        *self.color.lock() = new_color;
+        self.state.lock().set_color(new_color)
     }
     pub fn buffered(&self) -> bool {
-        *self.buffered.lock()
+        self.state.lock().buffered()
     }
     pub fn set_buffered(&self, buffered: bool) {
-        *self.buffered.lock() = buffered;
+        self.state.lock().set_buffered(buffered)
     }
     /// simple RC += 1
     pub fn inc(&self) -> usize {
@@ -212,7 +287,7 @@ impl GcHeader {
             // warn!("Try to leak a already leaked object!");
             return;
         }
-        *self.is_leak.lock() = true;
+        self.state.lock().set_leak(true);
         /*
         const BIT_MARKER: usize = (std::isize::MAX as usize) + 1;
         debug_assert_eq!(BIT_MARKER.count_ones(), 1);
@@ -223,12 +298,13 @@ impl GcHeader {
 
     pub fn is_leaked(&self) -> bool {
         // (self.ref_cnt.load(Ordering::Acquire) as isize) < 0
-        *self.is_leak.lock()
+        self.state.lock().is_leak()
     }
 }
 
 /// other color(Green, Red, Orange) in the paper is not in use for now, so remove them in this enum
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[repr(C)]
 pub enum Color {
     /// In use
     Black,
