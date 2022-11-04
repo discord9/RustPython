@@ -22,7 +22,7 @@ pub(crate) fn impl_pytrace(attr: AttributeArgs, mut item: DeriveInput) -> Result
                         let name = f
                             .ident
                             .as_ref()
-                            .expect("Field should have a name in nono-tuple struct");
+                            .expect("Field should have a name in non-tuple struct");
                         let mut do_trace = true;
                         f.attrs.retain(|attr| {
                             // remove #[notrace] and not trace this specifed field
@@ -59,7 +59,7 @@ pub(crate) fn impl_pytrace(attr: AttributeArgs, mut item: DeriveInput) -> Result
         #item
         #[cfg(feature = "gc")]
         unsafe impl ::rustpython_vm::object::Trace for #ty {
-            fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
+            fn trace(&self, tracer_fn: &mut ::rustpython_vm::object::TracerFn) {
                 #trace_code
             }
         }

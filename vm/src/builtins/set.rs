@@ -27,15 +27,9 @@ pub type SetContentType = dictdatatype::Dict<()>;
 
 #[pyclass(module = false, name = "set")]
 #[derive(Default)]
+#[pytrace]
 pub struct PySet {
     pub(super) inner: PySetInner,
-}
-
-#[cfg(feature = "gc")]
-unsafe impl crate::object::Trace for PySet {
-    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
-        self.inner.trace(tracer_fn);
-    }
 }
 
 impl PySet {

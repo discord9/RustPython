@@ -11,15 +11,9 @@ use crate::{
 
 #[pyclass(module = false, name = "staticmethod")]
 #[derive(Debug)]
+#[pytrace]
 pub struct PyStaticMethod {
     pub callable: PyRwLock<PyObjectRef>,
-}
-
-#[cfg(feature = "gc")]
-unsafe impl crate::object::Trace for PyStaticMethod {
-    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
-        self.callable.trace(tracer_fn)
-    }
 }
 
 impl PyPayload for PyStaticMethod {

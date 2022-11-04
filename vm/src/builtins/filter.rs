@@ -8,17 +8,10 @@ use crate::{
 
 #[pyclass(module = false, name = "filter")]
 #[derive(Debug)]
+#[pytrace]
 pub struct PyFilter {
     predicate: PyObjectRef,
     iterator: PyIter,
-}
-
-#[cfg(feature = "gc")]
-unsafe impl crate::object::Trace for PyFilter {
-    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
-        self.predicate.trace(tracer_fn);
-        self.iterator.trace(tracer_fn);
-    }
 }
 
 impl PyPayload for PyFilter {

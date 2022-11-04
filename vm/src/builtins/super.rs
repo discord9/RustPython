@@ -13,17 +13,10 @@ use crate::{
 
 #[pyclass(module = false, name = "super")]
 #[derive(Debug)]
+#[pytrace]
 pub struct PySuper {
     typ: PyTypeRef,
     obj: Option<(PyObjectRef, PyTypeRef)>,
-}
-
-#[cfg(feature = "gc")]
-unsafe impl crate::object::Trace for PySuper {
-    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
-        self.typ.trace(tracer_fn);
-        self.obj.trace(tracer_fn);
-    }
 }
 
 impl PyPayload for PySuper {
@@ -33,19 +26,12 @@ impl PyPayload for PySuper {
 }
 
 #[derive(FromArgs)]
+#[pytrace]
 pub struct PySuperNewArgs {
     #[pyarg(positional, optional)]
     py_type: OptionalArg<PyTypeRef>,
     #[pyarg(positional, optional)]
     py_obj: OptionalArg<PyObjectRef>,
-}
-
-#[cfg(feature = "gc")]
-unsafe impl crate::object::Trace for PySuperNewArgs {
-    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
-        self.py_type.trace(tracer_fn);
-        self.py_obj.trace(tracer_fn);
-    }
 }
 
 impl Constructor for PySuper {

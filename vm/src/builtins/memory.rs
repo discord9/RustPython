@@ -32,16 +32,10 @@ use itertools::Itertools;
 use rustpython_common::lock::PyRwLock;
 use std::{cmp::Ordering, fmt::Debug, mem::ManuallyDrop, ops::Range};
 
+#[pytrace]
 #[derive(FromArgs)]
 pub struct PyMemoryViewNewArgs {
     object: PyObjectRef,
-}
-
-#[cfg(feature = "gc")]
-unsafe impl crate::object::Trace for PyMemoryViewNewArgs {
-    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
-        self.object.trace(tracer_fn);
-    }
 }
 
 #[pyclass(module = false, name = "memoryview")]
@@ -1122,15 +1116,9 @@ impl Iterable for PyMemoryView {
 
 #[pyclass(module = false, name = "memory_iterator")]
 #[derive(Debug)]
+#[pytrace]
 pub struct PyMemoryViewIterator {
     internal: PyRwLock<PositionIterInternal<PyRef<PyMemoryView>>>,
-}
-
-#[cfg(feature = "gc")]
-unsafe impl crate::object::Trace for PyMemoryViewIterator {
-    fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
-        self.internal.trace(tracer_fn);
-    }
 }
 
 impl PyPayload for PyMemoryViewIterator {
