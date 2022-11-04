@@ -12,7 +12,7 @@ use crate::{
     PyObject,
 };
 
-use super::{GcObj, GcObjRef, GcStatus, TraceHelper};
+use super::{mem_balance::MemBalancer, GcObj, GcObjRef, GcStatus, TraceHelper};
 
 #[cfg(feature = "threading")]
 pub static LOCK_TIMEOUT: Duration = Duration::from_secs(5);
@@ -62,7 +62,8 @@ pub struct Collector {
     /// for stop the world, will be try to check lock every time deref ObjecteRef
     /// to achive pausing
     pause: PyRwLock<()>,
-    last_gc_time: PyMutex<Instant>,
+    last_heartbeat: PyMutex<Instant>,
+    mem_bal: PyMutex<MemBalancer>,
     is_enabled: PyMutex<bool>,
 }
 
@@ -74,7 +75,7 @@ impl std::fmt::Debug for Collector {
                 &format!("[{} objects in buffer]", self.roots_len()),
             )
             .field("pause", &self.pause)
-            .field("last_gc_time", &self.last_gc_time)
+            .field("last_gc_time", &self.last_heartbeat)
             .finish()
     }
 }
@@ -84,7 +85,8 @@ impl Default for Collector {
         Self {
             roots: Default::default(),
             pause: Default::default(),
-            last_gc_time: PyMutex::new(Instant::now()),
+            last_heartbeat: PyMutex::new(Instant::now()),
+            mem_bal: PyMutex::new(MemBalancer::new()),
             is_enabled: PyMutex::new(true),
         }
     }
@@ -141,9 +143,11 @@ impl Collector {
         // This prevent set multiple IS_GC_THREAD thread local variable to true
         // using write() to gain exclusive access
         Self::IS_GC_THREAD.with(|v| v.set(true));
+        self.mem_bal.lock().mark_start_gc();
         let freed = self.mark_roots();
         self.scan_roots();
         let ret_cycle = self.collect_roots(lock);
+        self.mem_bal.lock().mark_end_gc();
         (freed, ret_cycle).into()
     }
 
@@ -250,10 +254,7 @@ impl Collector {
                 self.collect_white(obj, &mut white);
             })
             .count();
-        let len_white = white.len();
-        if !white.is_empty() {
-            warn!("Cyclic garbage collected, count={}", white.len());
-        }
+
         // Run drop on each of nodes.
         for i in &white {
             // Calling drop() will decrement the reference count on any of our live children.
@@ -293,6 +294,7 @@ impl Collector {
             })
             .collect();
 
+        let mut cnt = 0;
         // drop first, deallocate later so to avoid heap corruption
         // cause by circular ref and therefore
         // access pointer of already dropped value's memory region
@@ -303,15 +305,21 @@ impl Collector {
                 if can_dealloc {
                     let ret = unsafe { PyObject::dealloc_only(*i) };
                     debug_assert!(ret);
+                    cnt += 1;
+                    unsafe {
+                        PyObject::dealloc_only(*i);
+                    }
                 }
             })
             .count();
+
+        warn!("Cyclic garbage collected, count={}", cnt);
 
         // mark the end of GC here so another gc can begin(if end early could lead to stack overflow)
         Self::IS_GC_THREAD.with(|v| v.set(false));
         drop(lock);
 
-        len_white
+        white.len()
     }
     fn collect_white(&self, obj: GcObjRef, white: &mut Vec<NonNull<GcObj>>) {
         if obj.header().color() == Color::White && !obj.header().buffered() {
@@ -440,6 +448,7 @@ impl Collector {
     pub fn should_gc(&self) -> bool {
         // TODO: use "Optimal Heap Limits for Reducing Browser Memory Use"(http://arxiv.org/abs/2204.10455)
         // to optimize gc condition
+
         if !self.is_enabled() {
             return false;
         }
@@ -447,21 +456,34 @@ impl Collector {
         if self.pause.try_write().is_none() {
             return false;
         }
-        // FIXME(discord9): better condition, could be important
-        if self.roots_len() > 10007 {
-            if Self::IS_GC_THREAD.with(|v| v.get()) {
-                // Already in gc, return early
-                return false;
+
+        let mut balancer = self.mem_bal.lock();
+        if balancer.is_support() {
+            let ret = balancer.excess_heap_limit();
+            if self.last_heartbeat.lock().elapsed().as_secs() >= 1 {
+                *self.last_heartbeat.lock() = Instant::now();
+                // heartbeat update alloc speed every second
+                balancer.update_mem_delta();
+                balancer.compute_heap_limit();
             }
-            let mut last_gc_time = self.last_gc_time.lock();
-            if last_gc_time.elapsed().as_secs() >= 1 {
-                *last_gc_time = Instant::now();
-                true
+            ret
+        } else {
+            // FIXME(discord9): better condition, could be important
+            if self.roots_len() > 10007 {
+                if Self::IS_GC_THREAD.with(|v| v.get()) {
+                    // Already in gc, return early
+                    return false;
+                }
+                let mut last_gc_time = self.last_heartbeat.lock();
+                if last_gc_time.elapsed().as_secs() >= 1 {
+                    *last_gc_time = Instant::now();
+                    true
+                } else {
+                    false
+                }
             } else {
                 false
             }
-        } else {
-            false
         }
     }
 

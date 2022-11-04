@@ -1,5 +1,6 @@
 mod collector;
 mod header;
+mod mem_balance;
 mod trace;
 
 pub use collector::{Collector, GLOBAL_COLLECTOR};
