@@ -448,7 +448,7 @@ impl Collector {
             return false;
         }
         // FIXME(discord9): better condition, could be important
-        if self.roots_len() > 700 {
+        if self.roots_len() > 10007 {
             if Self::IS_GC_THREAD.with(|v| v.get()) {
                 // Already in gc, return early
                 return false;
