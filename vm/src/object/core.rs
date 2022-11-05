@@ -88,6 +88,7 @@ struct PyObjVTable {
     drop_only: unsafe fn(*mut PyObject),
     dealloc_only: unsafe fn(*mut PyObject),
     debug: unsafe fn(&PyObject, &mut fmt::Formatter) -> fmt::Result,
+    size: usize,
 }
 
 unsafe fn drop_dealloc_obj<T: PyObjectPayload>(x: *mut PyObject) {
@@ -163,6 +164,7 @@ impl PyObjVTable {
                 drop_only: drop_only_obj::<T>,
                 dealloc_only: dealloc_only_obj::<T>,
                 debug: debug_obj::<T>,
+                size: std::mem::size_of::<T>(),
             };
         }
         &Helper::<T>::VTABLE
@@ -1089,6 +1091,10 @@ impl PyObject {
 
         dealloc_only(ptr.as_ptr());
         true
+    }
+
+    pub(in crate::object) unsafe fn size_of(ptr: NonNull<PyObject>) -> usize {
+        ptr.as_ref().0.vtable.size
     }
 
     /// # Safety

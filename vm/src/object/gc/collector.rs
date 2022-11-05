@@ -147,7 +147,6 @@ impl Collector {
         let freed = self.mark_roots();
         self.scan_roots();
         let ret_cycle = self.collect_roots(lock);
-        self.mem_bal.lock().mark_end_gc();
         (freed, ret_cycle).into()
     }
 
@@ -295,6 +294,8 @@ impl Collector {
             .collect();
 
         let mut cnt = 0;
+        let mut deny = 0;
+        let mut tot_size: usize = 0;
         // drop first, deallocate later so to avoid heap corruption
         // cause by circular ref and therefore
         // access pointer of already dropped value's memory region
@@ -307,13 +308,22 @@ impl Collector {
                     debug_assert!(ret);
                     cnt += 1;
                     unsafe {
+                        tot_size += PyObject::size_of(*i);
                         PyObject::dealloc_only(*i);
                     }
+                } else {
+                    deny += 1
                 }
             })
             .count();
 
-        warn!("Cyclic garbage collected, count={}", cnt);
+        warn!(
+            "Cyclic garbage collected, count={}, denied={deny}, collected = {} MB",
+            cnt,
+            tot_size / 1024 / 1024
+        );
+
+        self.mem_bal.lock().mark_end_gc(tot_size as u64);
 
         // mark the end of GC here so another gc can begin(if end early could lead to stack overflow)
         Self::IS_GC_THREAD.with(|v| v.set(false));

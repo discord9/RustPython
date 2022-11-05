@@ -78,15 +78,11 @@ impl MemBalancer {
         error!("Mem when start gc={}MB", self.mem_before_gc / 1024 / 1024);
     }
 
-    pub fn mark_end_gc(&mut self) {
+    pub fn mark_end_gc(&mut self, gced_bytes: u64) {
         let cur = get_mem_usage().unwrap_or(0);
         error!("Gc end, mem = {}MB", cur / 1024 / 1024);
-        let gced_bytes = if self.mem_before_gc > cur {
-            self.mem_before_gc - cur
-        } else {
-            // to prevent ridiciously large E
-            1024
-        }; // else something is wrong, gc is not doing its' thing, or some thing is delaying dealloc of heap?
+        // to prevent extremely large E
+        let gced_bytes = gced_bytes.max(1024);
         self.on_gc(gced_bytes, self.gc_start_time.elapsed(), cur);
     }
 
