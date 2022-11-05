@@ -121,7 +121,6 @@ unsafe fn drop_only_obj<T: PyObjectPayload>(x: *mut PyObject) {
         #[cfg(debug_assertions)]
         is_drop,
         typeid,
-        vtable,
         typ,
         dict,
         weak_list,
@@ -136,11 +135,11 @@ unsafe fn drop_only_obj<T: PyObjectPayload>(x: *mut PyObject) {
 /// # Safety
 /// - should only be called after its' destructor is done(i.e. called `drop_value`(which called drop_in_place))
 /// - panic on a null pointer
-/// TODO: move drop `header` here to prevent UB
+/// move drop `header` here to prevent UB
 unsafe fn dealloc_only_obj<T: PyObjectPayload>(x: *mut PyObject) {
     let obj = x.cast::<PyInner<T>>().as_ref().expect("Non-Null Pointer");
     #[cfg(feature = "gc")]
-    partially_drop!(obj.header);
+    partially_drop!(obj.header, vtable);
     std::alloc::dealloc(
         x.cast(),
         std::alloc::Layout::for_value(x.cast::<PyInner<T>>().as_ref().unwrap()),
