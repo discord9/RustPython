@@ -75,14 +75,21 @@ impl MemBalancer {
     pub fn mark_start_gc(&mut self) {
         self.mem_before_gc = get_mem_usage().unwrap_or(0);
         self.gc_start_time = Instant::now();
-        error!("Mem when start gc={}MB", self.mem_before_gc / 1024 / 1024);
+        debug!("Mem when start gc={}MB", self.mem_before_gc / 1024 / 1024);
     }
 
     pub fn mark_end_gc(&mut self, gced_bytes: u64) {
         let cur = get_mem_usage().unwrap_or(0);
-        error!("Gc end, mem = {}MB", cur / 1024 / 1024);
+        debug!("Gc end, mem = {}MB", cur / 1024 / 1024);
         // to prevent extremely large E
         let gced_bytes = gced_bytes.max(1024);
+        let gced_bytes = gced_bytes.max(if self.mem_before_gc > cur {
+            (self.mem_before_gc - cur).max(1024)
+        } else {
+            // to prevent ridiciously large E
+            1024
+        }); // else something is wrong, gc is not doing its' thing, or some thing is delaying dealloc of heap?
+
         self.on_gc(gced_bytes, self.gc_start_time.elapsed(), cur);
     }
 
@@ -120,10 +127,8 @@ impl MemBalancer {
         let g = self.mem_delta as f32 / self.beat_period.as_secs_f32();
         let s = self.gced_bytes as f32 / self.gc_time.as_secs_f32();
         let e = (l_c * g / s).sqrt() as u64;
-        dbg!(self.live / 1024 / 1024);
-        dbg!(e / 1024 / 1024);
         self.heap_limit = self.live + e.max(e_min) + Self::NURSERY;
-        error!(
+        info!(
             "New heap limit = {}MB, cur mem = {:?}MB, E = {e}",
             self.heap_limit / 1024 / 1024,
             get_mem_usage().unwrap() / 1024 / 1024

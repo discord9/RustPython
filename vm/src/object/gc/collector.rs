@@ -304,12 +304,11 @@ impl Collector {
             .zip(can_deallocs)
             .map(|(i, can_dealloc)| {
                 if can_dealloc {
-                    let ret = unsafe { PyObject::dealloc_only(*i) };
-                    debug_assert!(ret);
                     cnt += 1;
                     unsafe {
                         tot_size += PyObject::size_of(*i);
-                        PyObject::dealloc_only(*i);
+                        let ret = PyObject::dealloc_only(*i);
+                        debug_assert!(ret);
                     }
                 } else {
                     deny += 1
@@ -317,7 +316,7 @@ impl Collector {
             })
             .count();
 
-        warn!(
+        info!(
             "Cyclic garbage collected, count={}, denied={deny}, collected = {} MB",
             cnt,
             tot_size / 1024 / 1024
