@@ -134,7 +134,8 @@ macro_rules! list_traceable {
         };
         $MACRO_NAME!(
             // builtin types
-            // PyRange, PyStr is acyclic, therefore no trace needed for them
+            // PyStr is acyclic, therefore no trace needed for them
+            PyRange,
             PyBaseException,
             PyBoundMethod,
             PyDict,
