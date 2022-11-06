@@ -165,7 +165,8 @@ impl Collector {
                         unsafe {
                             // only dealloc here, because already drop(only) in Object's impl Drop
                             // PyObject::dealloc_only(ptr.cast::<PyObject>());
-                            PyObject::dealloc_only(**ptr);
+                            let ret = PyObject::dealloc_only(**ptr);
+                            debug_assert!(ret);
                             // obj is dangling after this line?
                         }
                     }
@@ -300,9 +301,8 @@ impl Collector {
             .zip(can_deallocs)
             .map(|(i, can_dealloc)| {
                 if can_dealloc {
-                    unsafe {
-                        PyObject::dealloc_only(*i);
-                    }
+                    let ret = unsafe { PyObject::dealloc_only(*i) };
+                    debug_assert!(ret);
                 }
             })
             .count();
