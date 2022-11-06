@@ -172,7 +172,7 @@ pub(crate) fn get_jit_args<'a>(
         }
     }
 
-    let (defaults, kwdefaults) = func.defaults_and_kwdefaults.lock().clone();
+    let (defaults, kwdefaults) = func.defaults_and_kwdefaults.read().clone();
 
     // fill in positional defaults
     if let Some(defaults) = defaults {

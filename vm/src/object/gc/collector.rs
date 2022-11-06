@@ -155,7 +155,7 @@ impl Collector {
             .filter(|ptr| {
                 let obj = unsafe { ptr.as_ref() };
                 if obj.header().color() == Color::Purple {
-                    self.mark_gray(obj);
+                    Self::mark_gray(obj);
                     true
                 } else {
                     obj.header().set_buffered(false);
@@ -165,7 +165,8 @@ impl Collector {
                         unsafe {
                             // only dealloc here, because already drop(only) in Object's impl Drop
                             // PyObject::dealloc_only(ptr.cast::<PyObject>());
-                            PyObject::dealloc_only(**ptr);
+                            let ret = PyObject::dealloc_only(**ptr);
+                            debug_assert!(ret);
                             // obj is dangling after this line?
                         }
                     }
@@ -177,7 +178,7 @@ impl Collector {
         freed
     }
 
-    fn mark_gray(&self, obj: GcObjRef) {
+    fn mark_gray(obj: GcObjRef) {
         if obj.header().color() != Color::Gray {
             obj.header().set_color(Color::Gray);
             obj.trace(&mut |ch| {
@@ -185,7 +186,7 @@ impl Collector {
                     return;
                 }
                 ch.header().dec();
-                self.mark_gray(ch);
+                Self::mark_gray(ch);
             });
         }
     }
@@ -196,28 +197,28 @@ impl Collector {
             .iter()
             .map(|ptr| {
                 let obj = unsafe { ptr.as_ref() };
-                self.scan(obj);
+                Self::scan(obj);
             })
             .count();
     }
 
-    fn scan(&self, obj: GcObjRef) {
+    fn scan(obj: GcObjRef) {
         if obj.header().color() == Color::Gray {
             if obj.header().rc() > 0 {
-                self.scan_black(obj)
+                Self::scan_black(obj)
             } else {
                 obj.header().set_color(Color::White);
                 obj.trace(&mut |ch| {
                     if ch.header().is_leaked() {
                         return;
                     }
-                    self.scan(ch);
+                    Self::scan(ch);
                 });
             }
         }
     }
 
-    fn scan_black(&self, obj: GcObjRef) {
+    fn scan_black(obj: GcObjRef) {
         obj.header().set_color(Color::Black);
         obj.trace(&mut |ch| {
             if ch.header().is_leaked() {
@@ -228,7 +229,7 @@ impl Collector {
                 debug_assert!(
                     ch.header().color() == Color::Gray || ch.header().color() == Color::White
                 );
-                self.scan_black(ch)
+                Self::scan_black(ch)
             }
         });
     }
@@ -246,7 +247,7 @@ impl Collector {
             .map(|ptr| {
                 let obj = unsafe { ptr.as_ref() };
                 obj.header().set_buffered(false);
-                self.collect_white(obj, &mut white);
+                Self::collect_white(obj, &mut white);
             })
             .count();
         let len_white = white.len();
@@ -300,9 +301,8 @@ impl Collector {
             .zip(can_deallocs)
             .map(|(i, can_dealloc)| {
                 if can_dealloc {
-                    unsafe {
-                        PyObject::dealloc_only(*i);
-                    }
+                    let ret = unsafe { PyObject::dealloc_only(*i) };
+                    debug_assert!(ret);
                 }
             })
             .count();
@@ -313,7 +313,7 @@ impl Collector {
 
         len_white
     }
-    fn collect_white(&self, obj: GcObjRef, white: &mut Vec<NonNull<GcObj>>) {
+    fn collect_white(obj: GcObjRef, white: &mut Vec<NonNull<GcObj>>) {
         if obj.header().color() == Color::White && !obj.header().buffered() {
             obj.header().set_color(Color::Black);
             obj.header().set_in_cycle(true);
@@ -321,7 +321,7 @@ impl Collector {
                 if ch.header().is_leaked() {
                     return;
                 }
-                self.collect_white(ch, white)
+                Self::collect_white(ch, white)
             });
             white.push(NonNull::from(obj));
         }

@@ -81,12 +81,11 @@ where
 unsafe impl<T: Trace> Trace for PyRwLock<T> {
     #[inline]
     fn trace(&self, tracer_fn: &mut TracerFn) {
-        match self.try_read_recursive() {
-            Some(inner) => inner.trace(tracer_fn),
-            // this means something else is holding the lock,
-            // but since gc stopped the world, during gc the lock is always held
-            // so it is safe to ignore those in gc
-            None => (),
+        // if can't get a lock, this means something else is holding the lock,
+        // but since gc stopped the world, during gc the lock is always held
+        // so it is safe to ignore those in gc
+        if let Some(inner) = self.try_read_recursive() {
+            inner.trace(tracer_fn)
         }
     }
 }
