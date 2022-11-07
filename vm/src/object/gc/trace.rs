@@ -1,9 +1,9 @@
-use std::{any::TypeId, collections::HashSet};
+use std::{any::TypeId, collections::HashSet, ptr::NonNull};
 
 use once_cell::sync::Lazy;
-use rustpython_common::lock::PyRwLock;
+use rustpython_common::lock::{PyMutex, PyRwLock};
 
-use crate::{object::PyObjectPayload, AsObject, PyObjectRef, PyRef};
+use crate::{object::PyObjectPayload, AsObject, PyObject, PyObjectRef, PyRef};
 
 use super::GcObjRef;
 
@@ -87,6 +87,26 @@ unsafe impl<T: Trace> Trace for PyRwLock<T> {
         if let Some(inner) = self.try_read_recursive() {
             inner.trace(tracer_fn)
         }
+    }
+}
+
+unsafe impl<T: Trace> Trace for PyMutex<T> {
+    #[inline]
+    fn trace(&self, tracer_fn: &mut TracerFn) {
+        let mut chs: Vec<NonNull<PyObject>> = Vec::new();
+        if let Some(obj) = self.try_lock() {
+            obj.trace(&mut |ch| {
+                chs.push(NonNull::from(ch));
+            })
+        }
+        chs.iter()
+            .map(|ch| {
+                // TODO: only deref when gc is pausing the world
+                // Safety: during gc, this should be fine, because nothing should write during gc's tracing?
+                let ch = unsafe { ch.as_ref() };
+                tracer_fn(ch);
+            })
+            .count();
     }
 }
 
