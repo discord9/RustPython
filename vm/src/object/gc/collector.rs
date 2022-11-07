@@ -254,13 +254,23 @@ impl Collector {
         if !white.is_empty() {
             warn!("Cyclic garbage collected, count={}", white.len());
         }
+
+        // first only run __del__ to prevent accesss dropped object hence UB
+        let can_drops: Vec<_> = white
+            .iter()
+            .map(|i| unsafe { PyObject::del_only(*i) })
+            .collect();
+
         // Run drop on each of nodes.
-        for i in &white {
+        white.iter().zip(&can_drops).for_each(|(i, can_drop)| {
             // Calling drop() will decrement the reference count on any of our live children.
             // However, during trial deletion the reference count was already decremented
             // so we'll end up decrementing twice. To avoid that, we increment the count
             // just before calling drop() so that it balances out. This is another difference
             // from the original paper caused by having destructors that we need to run.
+            if !can_drop {
+                return;
+            }
             let obj = unsafe { i.as_ref() };
             obj.trace(&mut |ch| {
                 if ch.header().is_leaked() {
@@ -271,16 +281,9 @@ impl Collector {
                     ch.header().inc();
                 }
             });
-        }
-
-        // first only run __del__ to prevent accesss dropped object hence UB
-        let can_drops: Vec<_> = white
-            .iter()
-            .map(|i| unsafe { PyObject::del_only(*i) })
-            .collect();
+        });
 
         // drop all for once at seperate loop to avoid certain cycle ref double drop bug
-        // TODO: check and add detailed explain(could be something with __del__ func do)
         let can_deallocs: Vec<_> = white
             .iter()
             .zip(can_drops)
