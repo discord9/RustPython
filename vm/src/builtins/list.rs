@@ -1,3 +1,5 @@
+use rustpython_common::lock::PyMutex;
+
 use super::{PositionIterInternal, PyGenericAlias, PyTupleRef, PyType, PyTypeRef};
 use crate::atomic_func;
 use crate::common::lock::{
@@ -180,7 +182,7 @@ impl PyList {
     fn reversed(zelf: PyRef<Self>) -> PyListReverseIterator {
         let position = zelf.len().saturating_sub(1);
         PyListReverseIterator {
-            internal: PyRwLock::new(PositionIterInternal::new(zelf, position)),
+            internal: PyMutex::new(PositionIterInternal::new(zelf, position)),
         }
     }
 
@@ -460,7 +462,7 @@ impl AsSequence for PyList {
 impl Iterable for PyList {
     fn iter(zelf: PyRef<Self>, vm: &VirtualMachine) -> PyResult {
         Ok(PyListIterator {
-            internal: PyRwLock::new(PositionIterInternal::new(zelf, 0)),
+            internal: PyMutex::new(PositionIterInternal::new(zelf, 0)),
         }
         .into_pyobject(vm))
     }
@@ -516,7 +518,7 @@ fn do_sort(
 #[derive(Debug)]
 #[pytrace]
 pub struct PyListIterator {
-    internal: PyRwLock<PositionIterInternal<PyListRef>>,
+    internal: PyMutex<PositionIterInternal<PyListRef>>,
 }
 
 impl PyPayload for PyListIterator {
@@ -529,20 +531,20 @@ impl PyPayload for PyListIterator {
 impl PyListIterator {
     #[pymethod(magic)]
     fn length_hint(&self) -> usize {
-        self.internal.read().length_hint(|obj| obj.len())
+        self.internal.lock().length_hint(|obj| obj.len())
     }
 
     #[pymethod(magic)]
     fn setstate(&self, state: PyObjectRef, vm: &VirtualMachine) -> PyResult<()> {
         self.internal
-            .write()
+            .lock()
             .set_state(state, |obj, pos| pos.min(obj.len()), vm)
     }
 
     #[pymethod(magic)]
     fn reduce(&self, vm: &VirtualMachine) -> PyTupleRef {
         self.internal
-            .read()
+            .lock()
             .builtins_iter_reduce(|x| x.clone().into(), vm)
     }
 }
@@ -551,7 +553,7 @@ impl Unconstructible for PyListIterator {}
 impl IterNextIterable for PyListIterator {}
 impl IterNext for PyListIterator {
     fn next(zelf: &crate::Py<Self>, _vm: &VirtualMachine) -> PyResult<PyIterReturn> {
-        zelf.internal.write().next(|list, pos| {
+        zelf.internal.lock().next(|list, pos| {
             let vec = list.borrow_vec();
             Ok(PyIterReturn::from_result(vec.get(pos).cloned().ok_or(None)))
         })
@@ -562,7 +564,7 @@ impl IterNext for PyListIterator {
 #[derive(Debug)]
 #[pytrace]
 pub struct PyListReverseIterator {
-    internal: PyRwLock<PositionIterInternal<PyListRef>>,
+    internal: PyMutex<PositionIterInternal<PyListRef>>,
 }
 
 impl PyPayload for PyListReverseIterator {
@@ -575,20 +577,20 @@ impl PyPayload for PyListReverseIterator {
 impl PyListReverseIterator {
     #[pymethod(magic)]
     fn length_hint(&self) -> usize {
-        self.internal.read().rev_length_hint(|obj| obj.len())
+        self.internal.lock().rev_length_hint(|obj| obj.len())
     }
 
     #[pymethod(magic)]
     fn setstate(&self, state: PyObjectRef, vm: &VirtualMachine) -> PyResult<()> {
         self.internal
-            .write()
+            .lock()
             .set_state(state, |obj, pos| pos.min(obj.len()), vm)
     }
 
     #[pymethod(magic)]
     fn reduce(&self, vm: &VirtualMachine) -> PyTupleRef {
         self.internal
-            .read()
+            .lock()
             .builtins_reversed_reduce(|x| x.clone().into(), vm)
     }
 }
@@ -597,7 +599,7 @@ impl Unconstructible for PyListReverseIterator {}
 impl IterNextIterable for PyListReverseIterator {}
 impl IterNext for PyListReverseIterator {
     fn next(zelf: &crate::Py<Self>, _vm: &VirtualMachine) -> PyResult<PyIterReturn> {
-        zelf.internal.write().rev_next(|list, pos| {
+        zelf.internal.lock().rev_next(|list, pos| {
             let vec = list.borrow_vec();
             Ok(PyIterReturn::from_result(vec.get(pos).cloned().ok_or(None)))
         })

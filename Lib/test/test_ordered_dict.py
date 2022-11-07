@@ -640,8 +640,6 @@ class OrderedDictTests:
         dict.update(od, [('spam', 1)])
         self.assertNotIn('NULL', repr(od))
 
-    # TODO: RUSTPYTHON
-    @unittest.expectedFailure
     def test_reference_loop(self):
         # Issue 25935
         OrderedDict = self.OrderedDict

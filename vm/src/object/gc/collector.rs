@@ -141,6 +141,9 @@ impl Collector {
         // This prevent set multiple IS_GC_THREAD thread local variable to true
         // using write() to gain exclusive access
         Self::IS_GC_THREAD.with(|v| v.set(true));
+        if self.roots_len() == 0 {
+            return (0, 0).into();
+        }
         let freed = self.mark_roots();
         self.scan_roots();
         let ret_cycle = self.collect_roots(lock);
@@ -491,6 +494,23 @@ impl Collector {
         Self::IS_GC_THREAD.with(|v| v.get())
     }
 
+    fn loop_wait_with_warning(&self) -> PyRwLockReadGuard<()> {
+        let mut gc_wait = 0;
+        loop {
+            gc_wait += 1;
+            let res = self.pause.try_read_recursive_for(LOCK_TIMEOUT);
+            match res {
+                Some(res) => break res,
+                None => {
+                    warn!(
+                        "Wait GC lock for {} secs",
+                        (gc_wait * LOCK_TIMEOUT).as_secs_f32()
+                    )
+                }
+            }
+        }
+    }
+
     /// This function will block if is a garbage collect is happening
     pub fn do_pausing(&self) {
         // if there is no multi-thread, there is no need to pause,
@@ -506,10 +526,8 @@ impl Collector {
 
             // however when gc-ing the object graph must stay the same so check and try to lock until gc is done
             // timeout is to prevent dead lock(which is worse than panic?)
-            let _lock = self
-                .pause
-                .try_read_recursive_for(LOCK_TIMEOUT)
-                .expect("Could be in deadlock!");
+
+            let _lock = self.loop_wait_with_warning();
         }
         // when not threading, one could still run multiple vm on multiple thread(which have a GC per thread)
         // but when call `gc()`, it automatically pause the world for this thread.
@@ -528,11 +546,7 @@ impl Collector {
                 // and any call to do_pausing is probably from drop() or what so allow it to continue execute.
                 return None;
             }
-            Some(
-                self.pause
-                    .try_read_recursive_for(LOCK_TIMEOUT)
-                    .expect("Could be in deadlock"),
-            )
+            Some(self.loop_wait_with_warning())
         }
         #[cfg(not(feature = "threading"))]
         return None;
