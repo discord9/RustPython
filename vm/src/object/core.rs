@@ -24,9 +24,11 @@ use crate::{
         linked_list::{Link, LinkedList, Pointers},
         lock::{PyMutex, PyMutexGuard, PyRwLock},
     },
-    list_traceable,
     vm::VirtualMachine,
 };
+
+#[cfg(feature = "gc")]
+use crate::list_traceable;
 use itertools::Itertools;
 use std::{
     any::TypeId,

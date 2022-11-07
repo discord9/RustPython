@@ -29,7 +29,7 @@ use crate::{
 };
 use crossbeam_utils::atomic::AtomicCell;
 use itertools::Itertools;
-use rustpython_common::lock::PyRwLock;
+use rustpython_common::lock::PyMutex;
 use std::{cmp::Ordering, fmt::Debug, mem::ManuallyDrop, ops::Range};
 
 #[pytrace]
@@ -1108,7 +1108,7 @@ fn is_equiv_structure(a: &BufferDescriptor, b: &BufferDescriptor) -> bool {
 impl Iterable for PyMemoryView {
     fn iter(zelf: PyRef<Self>, vm: &VirtualMachine) -> PyResult {
         Ok(PyMemoryViewIterator {
-            internal: PyRwLock::new(PositionIterInternal::new(zelf, 0)),
+            internal: PyMutex::new(PositionIterInternal::new(zelf, 0)),
         }
         .into_pyobject(vm))
     }
@@ -1118,7 +1118,7 @@ impl Iterable for PyMemoryView {
 #[derive(Debug)]
 #[pytrace]
 pub struct PyMemoryViewIterator {
-    internal: PyRwLock<PositionIterInternal<PyRef<PyMemoryView>>>,
+    internal: PyMutex<PositionIterInternal<PyRef<PyMemoryView>>>,
 }
 
 impl PyPayload for PyMemoryViewIterator {
@@ -1132,7 +1132,7 @@ impl PyMemoryViewIterator {
     #[pymethod(magic)]
     fn reduce(&self, vm: &VirtualMachine) -> PyTupleRef {
         self.internal
-            .read()
+            .lock()
             .builtins_iter_reduce(|x| x.clone().into(), vm)
     }
 }
@@ -1141,7 +1141,7 @@ impl Unconstructible for PyMemoryViewIterator {}
 impl IterNextIterable for PyMemoryViewIterator {}
 impl IterNext for PyMemoryViewIterator {
     fn next(zelf: &crate::Py<Self>, vm: &VirtualMachine) -> PyResult<PyIterReturn> {
-        zelf.internal.write().next(|mv, pos| {
+        zelf.internal.lock().next(|mv, pos| {
             let len = mv.len(vm)?;
             Ok(if pos >= len {
                 PyIterReturn::StopIteration(None)

@@ -20,7 +20,6 @@ use crate::{
     AsObject, Context, Py, PyObject, PyObjectRef, PyPayload, PyRef, PyResult, VirtualMachine,
 };
 use itertools::Itertools;
-use rustpython_common::lock::PyRwLock;
 #[cfg(feature = "jit")]
 use rustpython_jit::CompiledCode;
 
@@ -30,7 +29,7 @@ pub struct PyFunction {
     code: PyRef<PyCode>,
     globals: PyDictRef,
     closure: Option<PyTupleTyped<PyCellRef>>,
-    defaults_and_kwdefaults: PyRwLock<(Option<PyTupleRef>, Option<PyDictRef>)>,
+    defaults_and_kwdefaults: PyMutex<(Option<PyTupleRef>, Option<PyDictRef>)>,
     name: PyMutex<PyStrRef>,
     qualname: PyMutex<PyStrRef>,
     #[cfg(feature = "jit")]
@@ -60,7 +59,7 @@ impl PyFunction {
             code,
             globals,
             closure,
-            defaults_and_kwdefaults: PyRwLock::new((defaults, kw_only_defaults)),
+            defaults_and_kwdefaults: PyMutex::new((defaults, kw_only_defaults)),
             name,
             qualname,
             #[cfg(feature = "jit")]
@@ -170,7 +169,7 @@ impl PyFunction {
         macro_rules! get_defaults {
             () => {{
                 defaults_and_kwdefaults
-                    .get_or_insert_with(|| self.defaults_and_kwdefaults.read().clone())
+                    .get_or_insert_with(|| self.defaults_and_kwdefaults.lock().clone())
             }};
         }
 
@@ -350,20 +349,20 @@ impl PyFunction {
 
     #[pygetset(magic)]
     fn defaults(&self) -> Option<PyTupleRef> {
-        self.defaults_and_kwdefaults.read().0.clone()
+        self.defaults_and_kwdefaults.lock().0.clone()
     }
     #[pygetset(magic, setter)]
     fn set_defaults(&self, defaults: Option<PyTupleRef>) {
-        self.defaults_and_kwdefaults.write().0 = defaults
+        self.defaults_and_kwdefaults.lock().0 = defaults
     }
 
     #[pygetset(magic)]
     fn kwdefaults(&self) -> Option<PyDictRef> {
-        self.defaults_and_kwdefaults.read().1.clone()
+        self.defaults_and_kwdefaults.lock().1.clone()
     }
     #[pygetset(magic, setter)]
     fn set_kwdefaults(&self, kwdefaults: Option<PyDictRef>) {
-        self.defaults_and_kwdefaults.write().1 = kwdefaults
+        self.defaults_and_kwdefaults.lock().1 = kwdefaults
     }
 
     // {"__closure__",   T_OBJECT,     OFF(func_closure), READONLY},
@@ -626,7 +625,7 @@ impl PyPayload for PyBoundMethod {
 #[derive(Debug, Default)]
 #[pytrace]
 pub(crate) struct PyCell {
-    contents: PyRwLock<Option<PyObjectRef>>,
+    contents: PyMutex<Option<PyObjectRef>>,
 }
 
 pub(crate) type PyCellRef = PyRef<PyCell>;
@@ -651,15 +650,15 @@ impl Constructor for PyCell {
 impl PyCell {
     pub fn new(contents: Option<PyObjectRef>) -> Self {
         Self {
-            contents: PyRwLock::new(contents),
+            contents: PyMutex::new(contents),
         }
     }
 
     pub fn get(&self) -> Option<PyObjectRef> {
-        self.contents.read().clone()
+        self.contents.lock().clone()
     }
     pub fn set(&self, x: Option<PyObjectRef>) {
-        *self.contents.write() = x;
+        *self.contents.lock() = x;
     }
 
     #[pygetset]

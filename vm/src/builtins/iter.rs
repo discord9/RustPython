@@ -11,7 +11,7 @@ use crate::{
     Context, Py, PyObject, PyObjectRef, PyPayload, PyResult, VirtualMachine,
 };
 use rustpython_common::{
-    lock::{PyRwLock, PyRwLockUpgradableReadGuard},
+    lock::{PyMutex, PyRwLock, PyRwLockUpgradableReadGuard},
     static_cell,
 };
 
@@ -182,7 +182,7 @@ pub struct PySequenceIterator {
     // cached sequence methods
     #[notrace]
     seq_methods: &'static PySequenceMethods,
-    internal: PyRwLock<PositionIterInternal<PyObjectRef>>,
+    internal: PyMutex<PositionIterInternal<PyObjectRef>>,
 }
 
 impl PyPayload for PySequenceIterator {
@@ -197,13 +197,13 @@ impl PySequenceIterator {
         let seq = PySequence::try_protocol(&obj, vm)?;
         Ok(Self {
             seq_methods: seq.methods,
-            internal: PyRwLock::new(PositionIterInternal::new(obj, 0)),
+            internal: PyMutex::new(PositionIterInternal::new(obj, 0)),
         })
     }
 
     #[pymethod(magic)]
     fn length_hint(&self, vm: &VirtualMachine) -> PyObjectRef {
-        let internal = self.internal.read();
+        let internal = self.internal.lock();
         if let IterStatus::Active(obj) = &internal.status {
             let seq = PySequence {
                 obj,
@@ -219,19 +219,19 @@ impl PySequenceIterator {
 
     #[pymethod(magic)]
     fn reduce(&self, vm: &VirtualMachine) -> PyTupleRef {
-        self.internal.read().builtins_iter_reduce(|x| x.clone(), vm)
+        self.internal.lock().builtins_iter_reduce(|x| x.clone(), vm)
     }
 
     #[pymethod(magic)]
     fn setstate(&self, state: PyObjectRef, vm: &VirtualMachine) -> PyResult<()> {
-        self.internal.write().set_state(state, |_, pos| pos, vm)
+        self.internal.lock().set_state(state, |_, pos| pos, vm)
     }
 }
 
 impl IterNextIterable for PySequenceIterator {}
 impl IterNext for PySequenceIterator {
     fn next(zelf: &crate::Py<Self>, vm: &VirtualMachine) -> PyResult<PyIterReturn> {
-        zelf.internal.write().next(|obj, pos| {
+        zelf.internal.lock().next(|obj, pos| {
             let seq = PySequence {
                 obj,
                 methods: zelf.seq_methods,

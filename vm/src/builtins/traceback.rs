@@ -1,4 +1,4 @@
-use rustpython_common::lock::PyRwLock;
+use rustpython_common::lock::PyMutex;
 
 use super::PyType;
 use crate::{class::PyClassImpl, frame::FrameRef, Context, Py, PyPayload, PyRef, VirtualMachine};
@@ -6,7 +6,7 @@ use crate::{class::PyClassImpl, frame::FrameRef, Context, Py, PyPayload, PyRef, 
 #[pyclass(module = false, name = "traceback")]
 #[derive(Debug)]
 pub struct PyTraceback {
-    pub next: PyRwLock<Option<PyTracebackRef>>,
+    pub next: PyMutex<Option<PyTracebackRef>>,
     pub frame: FrameRef,
     pub lasti: u32,
     pub lineno: usize,
@@ -31,7 +31,7 @@ impl PyPayload for PyTraceback {
 impl PyTraceback {
     pub fn new(next: Option<PyRef<Self>>, frame: FrameRef, lasti: u32, lineno: usize) -> Self {
         PyTraceback {
-            next: PyRwLock::new(next),
+            next: PyMutex::new(next),
             frame,
             lasti,
             lineno,
@@ -55,18 +55,18 @@ impl PyTraceback {
 
     #[pygetset]
     fn tb_next(&self) -> Option<PyRef<Self>> {
-        self.next.read().as_ref().cloned()
+        self.next.lock().as_ref().cloned()
     }
 
     #[pygetset(setter)]
     fn set_tb_next(&self, value: Option<PyRef<Self>>) {
-        *self.next.write() = value;
+        *self.next.lock() = value;
     }
 }
 
 impl PyTracebackRef {
     pub fn iter(&self) -> impl Iterator<Item = PyTracebackRef> {
-        std::iter::successors(Some(self.clone()), |tb| tb.next.read().clone())
+        std::iter::successors(Some(self.clone()), |tb| tb.next.lock().clone())
     }
 }
 

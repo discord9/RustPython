@@ -12,6 +12,7 @@ use crate::{
 };
 use num_bigint::BigInt;
 use num_traits::Zero;
+use rustpython_common::lock::PyMutex;
 
 #[pyclass(module = false, name = "enumerate")]
 #[derive(Debug)]
@@ -86,7 +87,7 @@ impl IterNext for PyEnumerate {
 #[derive(Debug)]
 #[pytrace]
 pub struct PyReverseSequenceIterator {
-    internal: PyRwLock<PositionIterInternal<PyObjectRef>>,
+    internal: PyMutex<PositionIterInternal<PyObjectRef>>,
 }
 
 impl PyPayload for PyReverseSequenceIterator {
@@ -100,13 +101,13 @@ impl PyReverseSequenceIterator {
     pub fn new(obj: PyObjectRef, len: usize) -> Self {
         let position = len.saturating_sub(1);
         Self {
-            internal: PyRwLock::new(PositionIterInternal::new(obj, position)),
+            internal: PyMutex::new(PositionIterInternal::new(obj, position)),
         }
     }
 
     #[pymethod(magic)]
     fn length_hint(&self, vm: &VirtualMachine) -> PyResult<usize> {
-        let internal = self.internal.read();
+        let internal = self.internal.lock();
         if let IterStatus::Active(obj) = &internal.status {
             if internal.position <= obj.length(vm)? {
                 return Ok(internal.position + 1);
@@ -117,13 +118,13 @@ impl PyReverseSequenceIterator {
 
     #[pymethod(magic)]
     fn setstate(&self, state: PyObjectRef, vm: &VirtualMachine) -> PyResult<()> {
-        self.internal.write().set_state(state, |_, pos| pos, vm)
+        self.internal.lock().set_state(state, |_, pos| pos, vm)
     }
 
     #[pymethod(magic)]
     fn reduce(&self, vm: &VirtualMachine) -> PyTupleRef {
         self.internal
-            .read()
+            .lock()
             .builtins_reversed_reduce(|x| x.clone(), vm)
     }
 }
@@ -132,7 +133,7 @@ impl IterNextIterable for PyReverseSequenceIterator {}
 impl IterNext for PyReverseSequenceIterator {
     fn next(zelf: &crate::Py<Self>, vm: &VirtualMachine) -> PyResult<PyIterReturn> {
         zelf.internal
-            .write()
+            .lock()
             .rev_next(|obj, pos| PyIterReturn::from_getitem_result(obj.get_item(&pos, vm), vm))
     }
 }

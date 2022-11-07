@@ -354,7 +354,10 @@ impl ExecutingFrame<'_> {
         loop {
             gc_cnt += 1;
             if gc_cnt > 1000 {
-                crate::object::try_gc();
+                #[cfg(feature = "gc")]
+                {
+                    crate::object::try_gc();
+                }
                 gc_cnt = 0;
             }
             let idx = self.lasti() as usize;
