@@ -486,6 +486,11 @@ impl Collector {
         pub static IS_GC_THREAD: Cell<bool> = Cell::new(false);
     }
 
+    #[inline]
+    pub fn is_gcing(&self) -> bool {
+        Self::IS_GC_THREAD.with(|v| v.get())
+    }
+
     /// This function will block if is a garbage collect is happening
     pub fn do_pausing(&self) {
         // if there is no multi-thread, there is no need to pause,

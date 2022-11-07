@@ -96,12 +96,18 @@ unsafe impl<T: Trace> Trace for PyMutex<T> {
         let mut chs: Vec<NonNull<PyObject>> = Vec::new();
         if let Some(obj) = self.try_lock() {
             obj.trace(&mut |ch| {
-                chs.push(NonNull::from(ch));
+                if ch.header().gc().is_gcing() {
+                    chs.push(NonNull::from(ch));
+                } else {
+                    error!(
+                        "Trying to trace a PyMutex<{}> while not gc, undefined behavior will occur",
+                        std::any::type_name::<T>()
+                    )
+                }
             })
         }
         chs.iter()
             .map(|ch| {
-                // TODO: only deref when gc is pausing the world
                 // Safety: during gc, this should be fine, because nothing should write during gc's tracing?
                 let ch = unsafe { ch.as_ref() };
                 tracer_fn(ch);
