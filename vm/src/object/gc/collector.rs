@@ -102,7 +102,9 @@ impl Collector {
             return (0, 0).into();
             // already call collect_cycle() once
         }
-
+        if self.roots_len() == 0 {
+            return (0, 0).into();
+        }
         // acquire stop-the-world lock
         let lock = {
             #[cfg(feature = "threading")]
@@ -141,9 +143,6 @@ impl Collector {
         // This prevent set multiple IS_GC_THREAD thread local variable to true
         // using write() to gain exclusive access
         Self::IS_GC_THREAD.with(|v| v.set(true));
-        if self.roots_len() == 0 {
-            return (0, 0).into();
-        }
         let freed = self.mark_roots();
         self.scan_roots();
         let ret_cycle = self.collect_roots(lock);
@@ -255,25 +254,19 @@ impl Collector {
             .count();
         let len_white = white.len();
         if !white.is_empty() {
-            warn!("Cyclic garbage collected, count={}", white.len());
+            info!("Cyclic garbage collected, count={}", white.len());
         }
 
-        // first only run __del__ to prevent accesss dropped object hence UB
-        let can_drops: Vec<_> = white
-            .iter()
-            .map(|i| unsafe { PyObject::del_only(*i) })
-            .collect();
+        // TODO: maybe never run __del__ anyway, for running a __del__ function is an implementation detail!!!!
 
         // Run drop on each of nodes.
-        white.iter().zip(&can_drops).for_each(|(i, can_drop)| {
+        white.iter().for_each(|i| {
             // Calling drop() will decrement the reference count on any of our live children.
             // However, during trial deletion the reference count was already decremented
             // so we'll end up decrementing twice. To avoid that, we increment the count
             // just before calling drop() so that it balances out. This is another difference
             // from the original paper caused by having destructors that we need to run.
-            if !can_drop {
-                return;
-            }
+
             let obj = unsafe { i.as_ref() };
             obj.trace(&mut |ch| {
                 if ch.header().is_leaked() {
@@ -289,15 +282,12 @@ impl Collector {
         // drop all for once at seperate loop to avoid certain cycle ref double drop bug
         let can_deallocs: Vec<_> = white
             .iter()
-            .zip(can_drops)
-            .map(|(i, can_drop)| {
-                if can_drop {
-                    unsafe { PyObject::drop_only(*i) }
-                } else {
-                    false
-                }
-            })
+            .map(|i| unsafe { PyObject::drop_only(*i) })
             .collect();
+
+        // mark the end of GC here so another gc can begin(if end early could lead to stack overflow)
+        drop(lock);
+        Self::IS_GC_THREAD.with(|v| v.set(false));
 
         // drop first, deallocate later so to avoid heap corruption
         // cause by circular ref and therefore
@@ -312,10 +302,6 @@ impl Collector {
                 }
             })
             .count();
-
-        // mark the end of GC here so another gc can begin(if end early could lead to stack overflow)
-        Self::IS_GC_THREAD.with(|v| v.set(false));
-        drop(lock);
 
         len_white
     }
@@ -494,18 +480,28 @@ impl Collector {
         Self::IS_GC_THREAD.with(|v| v.get())
     }
 
-    fn loop_wait_with_warning(&self) -> PyRwLockReadGuard<()> {
+    fn loop_wait_with_warning(&self) -> Option<PyRwLockReadGuard<()>> {
+        if Self::IS_GC_THREAD.with(|v| v.get()) {
+            // if is same thread, then this thread is already stop by gc itself,
+            // no need to block.
+            // and any call to do_pausing is probably from drop() or what so allow it to continue execute.
+            return None;
+        }
+
         let mut gc_wait = 0;
         loop {
             gc_wait += 1;
             let res = self.pause.try_read_recursive_for(LOCK_TIMEOUT);
             match res {
-                Some(res) => break res,
+                Some(res) => break Some(res),
                 None => {
                     warn!(
                         "Wait GC lock for {} secs",
                         (gc_wait * LOCK_TIMEOUT).as_secs_f32()
-                    )
+                    );
+                    if gc_wait > 6 {
+                        panic!("GC Pause is too long")
+                    }
                 }
             }
         }
@@ -517,13 +513,6 @@ impl Collector {
         // for running different vm in different thread will make sure them have no depend whatsoever
         #[cfg(feature = "threading")]
         {
-            if Self::IS_GC_THREAD.with(|v| v.get()) {
-                // if is same thread, then this thread is already stop by gc itself,
-                // no need to block.
-                // and any call to do_pausing is probably from drop() or what so allow it to continue execute.
-                return;
-            }
-
             // however when gc-ing the object graph must stay the same so check and try to lock until gc is done
             // timeout is to prevent dead lock(which is worse than panic?)
 
@@ -540,13 +529,7 @@ impl Collector {
     pub fn try_pausing(&self) -> Option<PyRwLockReadGuard<()>> {
         #[cfg(feature = "threading")]
         {
-            if Self::IS_GC_THREAD.with(|v| v.get()) {
-                // if is same thread, then this thread is already stop by gc itself,
-                // no need to block.
-                // and any call to do_pausing is probably from drop() or what so allow it to continue execute.
-                return None;
-            }
-            Some(self.loop_wait_with_warning())
+            self.loop_wait_with_warning()
         }
         #[cfg(not(feature = "threading"))]
         return None;
