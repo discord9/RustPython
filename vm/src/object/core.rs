@@ -375,6 +375,7 @@ impl WeakRefList {
                 }
                 PyMutexGuard::unlocked(&mut inner, || {
                     for wr in v.drain(..) {
+                        wr.set_dead();
                         let cb = unsafe { wr.callback.get().replace(None) };
                         if let Some(cb) = cb {
                             crate::vm::thread::with_vm(&cb, |vm| {
@@ -382,7 +383,6 @@ impl WeakRefList {
                                 let _ = vm.invoke(&cb, (wr.clone(),));
                             });
                         }
-                        wr.set_dead()
                     }
                 })
             }
@@ -964,8 +964,7 @@ impl PyObject {
         self
     }
 
-    #[inline(always)] // the outer function is never inlined
-    fn drop_slow_inner(&self) -> Result<(), ()> {
+    fn try_del(&self) -> Result<(), ()> {
         // __del__ is mostly not implemented
         #[inline(never)]
         #[cold]
@@ -1017,16 +1016,26 @@ impl PyObject {
         if let Some(slot_del) = del {
             call_slot_del(self, slot_del)?;
         }
+        Ok(())
+    }
+
+    fn clear_weakref(&self) {
         if let Some(wrl) = self.weak_ref_list() {
             wrl.clear();
         }
+    }
+
+    #[inline(always)] // the outer function is never inlined
+    fn drop_slow_inner(&self) -> Result<(), ()> {
+        self.try_del()?;
+        self.clear_weakref();
 
         Ok(())
     }
 
     /// only run `__del__`(or `slot_del` depends on the actual object), doesn't drop or dealloc
     pub(in crate::object) unsafe fn del_only(ptr: NonNull<Self>) -> bool {
-        if let Err(()) = ptr.as_ref().drop_slow_inner() {
+        if let Err(()) = ptr.as_ref().try_del() {
             return false;
         }
         true
@@ -1059,15 +1068,17 @@ impl PyObject {
         if !ptr.as_ref().header().check_set_drop_only() {
             return false;
         }
+        let zelf = ptr.as_ref();
+        zelf.clear_weakref();
         // not set PyInner's is_drop because still havn't dealloc
-        let drop_only = ptr.as_ref().0.vtable.drop_only;
+        let drop_only = zelf.0.vtable.drop_only;
 
         drop_only(ptr.as_ptr());
         true
     }
     /// run object's __del__ and then rust's destructor but doesn't dealloc
     pub(in crate::object) unsafe fn del_drop(ptr: NonNull<PyObject>) -> bool {
-        if let Err(()) = ptr.as_ref().drop_slow_inner() {
+        if let Err(()) = ptr.as_ref().try_del() {
             // abort drop for whatever reason
             return false;
         }
