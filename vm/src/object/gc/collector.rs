@@ -110,8 +110,6 @@ impl Collector {
         }
         // acquire stop-the-world lock
         let lock = {
-            // just check if last gc is done
-            drop(self.cleanup_cycle.lock());
             #[cfg(feature = "threading")]
             {
                 // if can't access pause lock for a second, return because gc is not that emergency,
@@ -148,6 +146,9 @@ impl Collector {
         // This prevent set multiple IS_GC_THREAD thread local variable to true
         // using write() to gain exclusive access
         Self::IS_GC_THREAD.with(|v| v.set(true));
+        // just check if last gc is done
+        drop(self.cleanup_cycle.lock());
+
         let freed = self.mark_roots();
         self.scan_roots();
         let ret_cycle = self.collect_roots(lock);
@@ -494,6 +495,11 @@ impl Collector {
             // if is same thread, then this thread is already stop by gc itself,
             // no need to block.
             // and any call to do_pausing is probably from drop() or what so allow it to continue execute.
+            return None;
+        }
+        if self.cleanup_cycle.is_locked() {
+            // the latest gc is not done, but the world can continue for collect known cycle doesn't require a static object graph?
+            // this might prevent high freq gc call to pause the world forever?
             return None;
         }
 
