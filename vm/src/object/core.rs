@@ -198,9 +198,6 @@ struct PyInner<T> {
 #[cfg(feature = "gc")]
 unsafe impl Trace for PyInner<Erased> {
     fn trace(&self, tracer_fn: &mut TracerFn) {
-        // get a lock to prevent graph changing when tracing?
-        let _lock = self.header.try_pausing();
-
         // trace PyInner's other field(that is except payload)
         // self.typ.trace(tracer_fn);
         self.dict.trace(tracer_fn);
