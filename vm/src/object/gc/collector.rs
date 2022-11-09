@@ -64,6 +64,8 @@ pub struct Collector {
     pause: PyRwLock<()>,
     last_gc_time: PyMutex<Instant>,
     is_enabled: PyMutex<bool>,
+    // prevent a new gc to happen before this gc is completed
+    cleanup_cycle: PyMutex<()>,
 }
 
 impl std::fmt::Debug for Collector {
@@ -86,6 +88,7 @@ impl Default for Collector {
             pause: Default::default(),
             last_gc_time: PyMutex::new(Instant::now()),
             is_enabled: PyMutex::new(true),
+            cleanup_cycle: PyMutex::new(()),
         }
     }
 }
@@ -107,6 +110,8 @@ impl Collector {
         }
         // acquire stop-the-world lock
         let lock = {
+            // just check if last gc is done
+            drop(self.cleanup_cycle.lock());
             #[cfg(feature = "threading")]
             {
                 // if can't access pause lock for a second, return because gc is not that emergency,
@@ -257,6 +262,12 @@ impl Collector {
             info!("Cyclic garbage collected, count={}", white.len());
         }
 
+        // mark the end of GC here so another gc can begin(if end early could lead to stack overflow)
+        // because a dead cycle can't actively change object graph anymore
+        let _cleanup_lock = self.cleanup_cycle.lock();
+        drop(lock);
+        Self::IS_GC_THREAD.with(|v| v.set(false));
+        // unsafe { PyObject::del_only(*i) }
         // TODO: maybe never run __del__ anyway, for running a __del__ function is an implementation detail!!!!
 
         // Run drop on each of nodes.
@@ -278,17 +289,11 @@ impl Collector {
                 }
             });
         });
-
         // drop all for once at seperate loop to avoid certain cycle ref double drop bug
         let can_deallocs: Vec<_> = white
             .iter()
             .map(|i| unsafe { PyObject::drop_only(*i) })
             .collect();
-
-        // mark the end of GC here so another gc can begin(if end early could lead to stack overflow)
-        drop(lock);
-        Self::IS_GC_THREAD.with(|v| v.set(false));
-
         // drop first, deallocate later so to avoid heap corruption
         // cause by circular ref and therefore
         // access pointer of already dropped value's memory region
@@ -302,6 +307,7 @@ impl Collector {
                 }
             })
             .count();
+        // TODO: prevent a new GC to happen before this line
 
         len_white
     }
@@ -329,7 +335,7 @@ impl Collector {
         // acquire exclusive access to obj's header
         #[cfg(feature = "threading")]
         let _lock = obj.header().exclusive();
-        obj.header().do_pausing();
+        let _lock_gc = obj.header().try_pausing();
         obj.header().inc();
         obj.header().set_color(Color::Black);
     }
@@ -436,7 +442,7 @@ impl Collector {
             return false;
         }
         // if can't acquire lock, some other thread is already in gc
-        if self.pause.try_write().is_none() {
+        if self.pause.is_locked_exclusive() {
             return false;
         }
         // FIXME(discord9): better condition, could be important
@@ -460,6 +466,8 @@ impl Collector {
     /// _suggest_(may or may not) collector to collect garbage. return number of cyclic garbage being collected
     #[inline]
     pub fn fast_try_gc(&self) -> GcResult {
+        // so that if other thread is gcing, this thread can be stopped in time
+        self.do_pausing();
         if self.should_gc() {
             self.collect_cycles(false)
         } else {
@@ -480,6 +488,7 @@ impl Collector {
         Self::IS_GC_THREAD.with(|v| v.get())
     }
 
+    #[cfg(feature = "threading")]
     fn loop_wait_with_warning(&self) -> Option<PyRwLockReadGuard<()>> {
         if Self::IS_GC_THREAD.with(|v| v.get()) {
             // if is same thread, then this thread is already stop by gc itself,
