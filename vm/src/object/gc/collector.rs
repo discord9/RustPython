@@ -64,7 +64,7 @@ pub struct Collector {
     pause: PyRwLock<()>,
     last_gc_time: PyMutex<Instant>,
     is_enabled: PyMutex<bool>,
-    // prevent a new gc to happen before this gc is completed
+    /// acquire this to prevent a new gc to happen before this gc is completed
     cleanup_cycle: PyMutex<()>,
 }
 
@@ -124,6 +124,7 @@ impl Collector {
                         }
                     }
                 } else {
+                    // if not forced to gc, a non-blocking check to see if gc is possible
                     match self.pause.try_write() {
                         Some(v) => v,
                         None => {
@@ -325,10 +326,8 @@ impl Collector {
             white.push(NonNull::from(obj));
         }
     }
-}
 
-// inc/dec
-impl Collector {
+    // basic inc/dec operation
     pub fn increment(&self, obj: &PyObject) {
         if obj.header().is_leaked() {
             return;
@@ -336,6 +335,7 @@ impl Collector {
         // acquire exclusive access to obj's header
         #[cfg(feature = "threading")]
         let _lock = obj.header().exclusive();
+        // prevent starting a gc in the middle of change header state
         let _lock_gc = obj.header().try_pausing();
         obj.header().inc();
         obj.header().set_color(Color::Black);
@@ -349,12 +349,13 @@ impl Collector {
             return GcStatus::ShouldKeep;
         }
 
-        // acquire exclusive access to obj's header
+        // acquire exclusive access to obj's header, so no decrement in the middle of increment of vice versa
         #[cfg(feature = "threading")]
-        let _lock = obj.header().exclusive();
+        let _lock_obj = obj.header().exclusive();
+        // prevent starting a gc in the middle of decrement
+        let _lock_gc = obj.header().try_pausing();
         // prevent RAII Drop to drop below zero
         if obj.header().rc() > 0 {
-            let _lock = obj.header().try_pausing();
             debug_assert!(!obj.header().is_drop());
             let rc = obj.header().dec();
             if rc == 0 {
@@ -407,10 +408,9 @@ impl Collector {
             }
         }
     }
-}
 
-// methods about gc condition
-impl Collector {
+    // methods about gc condition
+
     #[inline]
     fn roots_len(&self) -> usize {
         self.roots.lock().len()
@@ -475,10 +475,9 @@ impl Collector {
             (0, 0).into()
         }
     }
-}
 
-// methods about stopping the world
-impl Collector {
+    // methods about stopping the world
+
     thread_local! {
         /// only set to true when start a gc in thread, assume any drop() impl doesn't create new thread, so gc only work in this one thread.
         pub static IS_GC_THREAD: Cell<bool> = Cell::new(false);
