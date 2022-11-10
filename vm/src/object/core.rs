@@ -125,7 +125,6 @@ unsafe fn drop_only_obj<T: PyObjectPayload>(x: *mut PyObject) {
         typeid,
         typ,
         dict,
-        weak_list,
         slots,
         payload
     );
@@ -141,7 +140,7 @@ unsafe fn drop_only_obj<T: PyObjectPayload>(x: *mut PyObject) {
 unsafe fn dealloc_only_obj<T: PyObjectPayload>(x: *mut PyObject) {
     let obj = x.cast::<PyInner<T>>().as_ref().expect("Non-Null Pointer");
     #[cfg(feature = "gc")]
-    partially_drop!(obj.header, vtable);
+    partially_drop!(obj.header, vtable, weak_list);
     std::alloc::dealloc(
         x.cast(),
         std::alloc::Layout::for_value(x.cast::<PyInner<T>>().as_ref().unwrap()),
@@ -305,6 +304,7 @@ impl WeakRefList {
                 let predicate = {
                     #[cfg(feature = "gc")]
                     {
+                        debug_assert!(!generic_weakref.as_object().header().is_dealloc());
                         generic_weakref.as_object().header().rc() != 0
                     }
                     #[cfg(not(feature = "gc"))]
