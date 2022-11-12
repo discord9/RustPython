@@ -53,6 +53,8 @@ impl State {
     const DEALLOC_OFFSET: u8 = 5;
     const LEAK_MASK: u8 = 0b0100_0000;
     const LEAK_OFFSET: u8 = 6;
+    const DONE_MAKS: u8 = 0b1000_0000;
+    const DONE_OFFSET: u8 = 7;
     fn color(&self) -> Color {
         let color = self.inner & Self::COLOR_MASK;
         match color {
@@ -77,6 +79,7 @@ impl State {
     getset! {is_drop, set_drop, Self::DROP_MASK, Self::DROP_OFFSET}
     getset! {is_dealloc, set_dealloc, Self::DEALLOC_MASK, Self::DEALLOC_OFFSET}
     getset! {is_leak, set_leak, Self::LEAK_MASK, Self::LEAK_OFFSET}
+    getset! {is_done_drop, set_done_drop, Self::DONE_MAKS, Self::DONE_OFFSET}
 }
 
 #[test]
@@ -123,6 +126,7 @@ impl Default for GcHeader {
     }
 }
 
+// TODO: use macro for getter/setter
 impl GcHeader {
     pub fn new() -> Self {
         Default::default()
@@ -139,6 +143,14 @@ impl GcHeader {
 
     pub fn gc(&self) -> PyRc<Collector> {
         self.gc.clone()
+    }
+
+    pub fn is_done_drop(&self) -> bool {
+        self.state.lock().is_done_drop()
+    }
+
+    pub fn set_done_drop(&self, b: bool) {
+        self.state.lock().set_done_drop(b)
     }
 
     pub fn is_in_cycle(&self) -> bool {

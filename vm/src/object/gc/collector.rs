@@ -119,7 +119,7 @@ impl Collector {
                     match self.pause.try_write_for(std::time::Duration::from_secs(1)) {
                         Some(v) => v,
                         None => {
-                            warn!("Can't acquire lock to stop the world, stop gc now.");
+                            warn!("Can't acquire lock to stop the world.");
                             return (0, 0).into();
                         }
                     }
@@ -128,7 +128,7 @@ impl Collector {
                     match self.pause.try_write() {
                         Some(v) => v,
                         None => {
-                            warn!("Fast GC fail to acquire write lock, stop gc now.");
+                            warn!("Fast GC fail to acquire write lock.");
                             return (0, 0).into();
                         }
                     }

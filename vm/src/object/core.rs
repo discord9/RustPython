@@ -257,7 +257,7 @@ struct WeakListInner {
     list: LinkedList<WeakLink, Py<PyWeak>>,
     generic_weakref: Option<NonNull<Py<PyWeak>>>,
     obj: Option<NonNull<PyObject>>,
-    // one for each live PyWeak with a reference to this, + 1 for the referent object if it's not dead
+    /// one for each live PyWeak with a reference to this, + 1 for the referent object if it's not dead
     ref_count: usize,
 }
 
@@ -346,6 +346,7 @@ impl WeakRefList {
             // TODO: can be an arrayvec
             let mut v = Vec::with_capacity(16);
             loop {
+                let mut wr_dealloc = Vec::with_capacity(16);
                 let inner2 = &mut *inner;
                 let iter = inner2
                     .list
@@ -363,7 +364,26 @@ impl WeakRefList {
 
                         // if strong_count == 0 there's some reentrancy going on. we don't
                         // want to call the callback
-                        (wr.as_object().strong_count() > 0).then(|| (*wr).clone())
+                        // if rc()==0, should never take this object in the first place
+                        // lock header to make sure no one is changing rc when refering,
+                        // also unlocked when clone happen(which require exclusive lock)
+                        let mut header = wr.as_object().header().exclusive();
+                        // because __del__ might temporarily revive a object too
+                        let ret = (wr.as_object().strong_count() > 0
+                            && !wr.as_object().header().is_drop())
+                        .then(|| PyMutexGuard::unlocked(&mut header, || (*wr).clone()));
+                        if ret.is_none() {
+                            // if rc == 0, self is either already dropped or being dropping(the drop function is still executing)
+                            // so we need to wait until drop is done
+                            // We make sure that a alive PyWeak can only be dealloc by its' owner
+                            let obj = wr.as_object();
+                            if obj.header().is_drop() {
+                                // dealloc those needed dealloc later
+                                wr_dealloc.push(NonNull::from(wr.as_object()));
+                            } // even in cycle, a alive weak ref is not deallocated
+                              // PyWeak itself can't form cycles, but for example, a PyDict storing PyWeak can, hence make PyWeak in cycle
+                        }
+                        ret
                     })
                     .take(16);
                 v.extend(iter);
@@ -372,7 +392,6 @@ impl WeakRefList {
                 }
                 PyMutexGuard::unlocked(&mut inner, || {
                     for wr in v.drain(..) {
-                        wr.set_dead();
                         let cb = unsafe { wr.callback.get().replace(None) };
                         if let Some(cb) = cb {
                             crate::vm::thread::with_vm(&cb, |vm| {
@@ -380,8 +399,28 @@ impl WeakRefList {
                                 let _ = vm.invoke(&cb, (wr.clone(),));
                             });
                         }
+                        wr.set_dead();
+                        // if this wr happen to be the last one(that is it is already dead)
+                        // RAII should drop&dealloc it
                     }
-                })
+                });
+                // so drop for PyWeak(on another thread) may acquire the lock to drop
+                PyMutexGuard::unlocked_fair(&mut inner, || {
+                    for wr in wr_dealloc {
+                        let obj = unsafe { wr.as_ref() };
+                        for i in 0..i32::MAX {
+                            if obj.header().is_done_drop() {
+                                break;
+                            }
+                            if i % 100_000 == 0 {
+                                error!("Wait too long for PyWeak to done drop: iter {i}");
+                            }
+                        }
+                        unsafe {
+                            PyObject::dealloc_only(wr);
+                        }
+                    }
+                });
             }
             inner.ref_count -= 1;
             (inner.ref_count == 0).then_some(ptr)
@@ -650,6 +689,11 @@ pub struct PyObject(PyInner<Erased>);
 
 // TODO: move to core.rs
 impl PyObject {
+    fn is_alive_weakref(&self) -> bool {
+        self.payload::<PyWeak>()
+            .map(|zelf| !zelf.is_dead())
+            .unwrap_or(false)
+    }
     pub fn header(&self) -> &GcHeader {
         &self.0.header
     }
@@ -1041,6 +1085,14 @@ impl PyObject {
     /// Can only be called when ref_count has dropped to zero. `ptr` must be valid, it run __del__ then drop&dealloc
     #[inline(never)]
     pub(in crate::object) unsafe fn drop_slow(ptr: NonNull<PyObject>) -> bool {
+        let zelf = ptr.as_ref();
+
+        if zelf.is_alive_weakref() {
+            // if is alive weak ref, let referred object do the dealloc for ourself
+            // and only do del+drop in here
+            // not dealloc so header is still accessiable, and let
+            return Self::del_drop(ptr);
+        }
         if let Err(()) = ptr.as_ref().drop_slow_inner() {
             // abort drop for whatever reason
             return false;
@@ -1062,16 +1114,20 @@ impl PyObject {
 
     /// only run rust RAII destructor, no __del__ neither dealloc
     pub(in crate::object) unsafe fn drop_only(ptr: NonNull<PyObject>) -> bool {
+        // no need to check for PyWeak here, because we are not gettig dealloc anyway
         if !ptr.as_ref().header().check_set_drop_only() {
             return false;
         }
+        let can_dealloc = !ptr.as_ref().is_alive_weakref();
         let zelf = ptr.as_ref();
         zelf.clear_weakref();
         // not set PyInner's is_drop because still havn't dealloc
         let drop_only = zelf.0.vtable.drop_only;
 
         drop_only(ptr.as_ptr());
-        true
+        // Safety: after drop_only, header should still remain undropped
+        ptr.as_ref().header().set_done_drop(true);
+        can_dealloc
     }
     /// run object's __del__ and then rust's destructor but doesn't dealloc
     pub(in crate::object) unsafe fn del_drop(ptr: NonNull<PyObject>) -> bool {
@@ -1084,6 +1140,7 @@ impl PyObject {
     }
 
     pub(in crate::object) unsafe fn dealloc_only(ptr: NonNull<PyObject>) -> bool {
+        // can't check for if is a alive PyWeak here because already dropped payload
         #[cfg(feature = "gc")]
         {
             if !ptr.as_ref().header().check_set_dealloc_only() {
