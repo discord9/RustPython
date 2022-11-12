@@ -267,7 +267,8 @@ impl Collector {
         // mark the end of GC here so another gc can begin(if end early could lead to stack overflow)
         // because a dead cycle can't actively change object graph anymore
         let _cleanup_lock = self.cleanup_cycle.lock();
-        drop(lock);
+        // unlock fair so high freq gc wouldn't stop the world forever
+        PyRwLockWriteGuard::unlock_fair(lock);
         Self::IS_GC_THREAD.with(|v| v.set(false));
         // unsafe { PyObject::del_only(*i) }
         // TODO: maybe never run __del__ anyway, for running a __del__ function is an implementation detail!!!!
