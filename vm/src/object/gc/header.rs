@@ -41,7 +41,6 @@ macro_rules! getset {
     };
 }
 
-#[allow(unused)]
 impl State {
     const COLOR_MASK: u8 = 0b0000_0011;
     const CYCLE_MASK: u8 = 0b0000_0100;
@@ -133,6 +132,7 @@ impl GcHeader {
         self.ref_cnt.load(Ordering::Relaxed)
     }
 
+    /// gain a exclusive lock to header
     pub fn exclusive(&self) -> PyMutexGuard<()> {
         self.exclusive.lock()
     }
@@ -226,8 +226,8 @@ impl GcHeader {
 
     pub fn try_pausing(&self) -> Option<PyRwLockReadGuard<()>> {
         if self.is_dealloc() {
+            // could be false alarm for PyWeak, like set is_dealloc, then block by guard and havn't drop&dealloc
             warn!("Try to pausing a already deallocated object: {:?}", self);
-            panic!();
         }
         self.gc.try_pausing()
     }
@@ -235,8 +235,8 @@ impl GcHeader {
     /// This function will block if is a garbage collect is happening
     pub fn do_pausing(&self) {
         if self.is_dealloc() {
+            // could be false alarm for PyWeak, like set is_dealloc, then block by guard and havn't drop&dealloc
             warn!("Try to pausing a already deallocated object: {:?}", self);
-            panic!()
         }
         self.gc.do_pausing();
     }

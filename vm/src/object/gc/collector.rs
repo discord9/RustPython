@@ -264,7 +264,7 @@ impl Collector {
             info!("Cyclic garbage collected, count={}", white.len());
         }
 
-        // mark the end of GC here so another gc can begin(if end early could lead to stack overflow)
+        // mark the end of GC, but another gc can only begin after acquire cleanup_cycle lock
         // because a dead cycle can't actively change object graph anymore
         let _cleanup_lock = self.cleanup_cycle.lock();
         // unlock fair so high freq gc wouldn't stop the world forever
@@ -334,10 +334,11 @@ impl Collector {
             return;
         }
         // acquire exclusive access to obj's header
-        #[cfg(feature = "threading")]
-        let _lock = obj.header().exclusive();
+
         // prevent starting a gc in the middle of change header state
         let _lock_gc = obj.header().try_pausing();
+        #[cfg(feature = "threading")]
+        let _lock = obj.header().exclusive();
         obj.header().inc();
         obj.header().set_color(Color::Black);
     }
@@ -350,11 +351,12 @@ impl Collector {
             return GcStatus::ShouldKeep;
         }
 
+        // prevent starting a gc in the middle of decrement
+        let _lock_gc = obj.header().try_pausing();
+
         // acquire exclusive access to obj's header, so no decrement in the middle of increment of vice versa
         #[cfg(feature = "threading")]
         let _lock_obj = obj.header().exclusive();
-        // prevent starting a gc in the middle of decrement
-        let _lock_gc = obj.header().try_pausing();
         // prevent RAII Drop to drop below zero
         if obj.header().rc() > 0 {
             debug_assert!(!obj.header().is_drop());
