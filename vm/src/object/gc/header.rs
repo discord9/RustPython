@@ -239,7 +239,7 @@ impl GcHeader {
     pub fn try_pausing(&self) -> Option<PyRwLockReadGuard<()>> {
         if self.is_dealloc() {
             // could be false alarm for PyWeak, like set is_dealloc, then block by guard and havn't drop&dealloc
-            warn!("Try to pausing a already deallocated object: {:?}", self);
+            debug!("Try to pausing a already deallocated object: {:?}", self);
         }
         self.gc.try_pausing()
     }
@@ -248,7 +248,7 @@ impl GcHeader {
     pub fn do_pausing(&self) {
         if self.is_dealloc() {
             // could be false alarm for PyWeak, like set is_dealloc, then block by guard and havn't drop&dealloc
-            warn!("Try to pausing a already deallocated object: {:?}", self);
+            debug!("Try to pausing a already deallocated object: {:?}", self);
         }
         self.gc.do_pausing();
     }
