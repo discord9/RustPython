@@ -7,5 +7,6 @@ mod payload;
 
 pub use self::core::*;
 pub use self::ext::*;
+#[cfg(feature = "gc")]
 pub use self::gc::*;
 pub use self::payload::*;
