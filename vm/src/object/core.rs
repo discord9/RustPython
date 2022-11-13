@@ -10,11 +10,15 @@
 //!
 //! PyRef<PyWeak> may looking like to be called as PyObjectWeak by the rule,
 //! but not to do to remember it is a PyRef object.
+#![cfg_attr(not(feature = "gc"), allow(unused))]
 use super::{
     ext::{AsObject, PyResult},
     payload::PyObjectPayload,
-    GcHeader, GcStatus, PyAtomicRef, Trace, TracerFn,
+    PyAtomicRef,
 };
+
+#[cfg(feature = "gc")]
+use super::{GcHeader, GcStatus, Trace, TracerFn};
 #[cfg(not(feature = "gc"))]
 use crate::common::refcount::RefCount;
 use crate::{
@@ -104,6 +108,7 @@ unsafe fn drop_dealloc_obj<T: PyObjectPayload>(x: *mut PyObject) {
     drop(Box::from_raw(x as *mut PyInner<T>));
 }
 
+#[cfg(feature = "gc")]
 macro_rules! partially_drop {
     ($OBJ: ident. $($(#[$attr:meta])? $FIELD: ident),*) => {
         $(
@@ -116,18 +121,21 @@ macro_rules! partially_drop {
 /// drop only(doesn't deallocate)
 /// NOTE: `header` is not drop to prevent UB
 unsafe fn drop_only_obj<T: PyObjectPayload>(x: *mut PyObject) {
-    let obj = x.cast::<PyInner<T>>().as_ref().expect("Non-Null Pointer");
     #[cfg(feature = "gc")]
-    partially_drop!(
-        obj.
-        #[cfg(debug_assertions)]
-        is_drop,
-        typeid,
-        typ,
-        dict,
-        slots,
-        payload
-    );
+    {
+        let obj = x.cast::<PyInner<T>>().as_ref().expect("Non-Null Pointer");
+        partially_drop!(
+            obj.
+            #[cfg(debug_assertions)]
+            is_drop,
+            typeid,
+            typ,
+            dict,
+            slots,
+            payload
+        );
+    }
+
     #[cfg(not(feature = "gc"))]
     x.cast::<PyInner<T>>().drop_in_place()
 }
@@ -138,9 +146,11 @@ unsafe fn drop_only_obj<T: PyObjectPayload>(x: *mut PyObject) {
 /// - panic on a null pointer
 /// move drop `header` here to prevent UB
 unsafe fn dealloc_only_obj<T: PyObjectPayload>(x: *mut PyObject) {
-    let obj = x.cast::<PyInner<T>>().as_ref().expect("Non-Null Pointer");
     #[cfg(feature = "gc")]
-    partially_drop!(obj.header, vtable, weak_list);
+    {
+        let obj = x.cast::<PyInner<T>>().as_ref().expect("Non-Null Pointer");
+        partially_drop!(obj.header, vtable, weak_list);
+    }
     std::alloc::dealloc(
         x.cast(),
         std::alloc::Layout::for_value(x.cast::<PyInner<T>>().as_ref().unwrap()),
@@ -365,12 +375,14 @@ impl WeakRefList {
                         // want to call the callback
                         // lock header to make sure no one is changing rc when refering,
                         // also unlocked when clone happen(which require exclusive lock)
+                        #[cfg(feature = "gc")]
                         let mut header = wr.as_object().header().exclusive();
                         // exclusive lock to header prevent this condition:
                         // thread1: rc == 1 ->               -> clone, but already set to dropped&deallocated!!!
                         // thread2:         dec rc to 0 -> drop&dealloc, set field and do drop(but block by guard lock)
                         // after this drop&dealloc is invitable, but still hold a live ref, so memory corrupt
                         // because __del__ might temporarily revive a object too
+                        #[cfg(feature = "gc")]
                         let ret = (wr.as_object().strong_count() > 0
                             && !wr.as_object().header().is_drop())
                         .then(|| PyMutexGuard::unlocked(&mut header, || (*wr).clone()));
@@ -379,6 +391,8 @@ impl WeakRefList {
                         // thread2: dec to 0,drop PyWeak -> lock guard, remove from weak ref list -> run drop_dealloc
                         // if thread 2 gain guard lock early, then it can remove itself from weak ref list, hence no wr with rc==0
                         // for testcase `test_subclass_refs_with_cycle`, a delete weakref 's rc is zero, so it will not call callback
+                        #[cfg(not(feature = "gc"))]
+                        let ret = (wr.as_object().strong_count() > 0).then(|| (*wr).clone());
                         ret
                     })
                     .take(16);
@@ -578,6 +592,7 @@ struct InstanceDict {
     d: PyRwLock<PyDictRef>,
 }
 
+#[cfg(feature = "gc")]
 unsafe impl Trace for InstanceDict {
     fn trace(&self, tracer_fn: &mut TracerFn) {
         self.d.trace(tracer_fn)
@@ -666,8 +681,9 @@ cfg_if::cfg_if! {
 #[repr(transparent)]
 pub struct PyObject(PyInner<Erased>);
 
-// TODO: move to core.rs
+#[cfg(feature = "gc")]
 impl PyObject {
+    #[cfg(feature = "gc")]
     pub fn header(&self) -> &GcHeader {
         &self.0.header
     }
@@ -1083,7 +1099,7 @@ impl PyObject {
 
     /// only run rust RAII destructor, no __del__ neither dealloc
     pub(in crate::object) unsafe fn drop_only(ptr: NonNull<PyObject>) -> bool {
-        // no need to check for PyWeak here, because we are not gettig dealloc anyway
+        #[cfg(feature = "gc")]
         if !ptr.as_ref().header().check_set_drop_only() {
             return false;
         }
@@ -1094,6 +1110,7 @@ impl PyObject {
 
         drop_only(ptr.as_ptr());
         // Safety: after drop_only, header should still remain undropped
+        #[cfg(feature = "gc")]
         ptr.as_ref().header().set_done_drop(true);
         true
     }
@@ -1192,7 +1209,7 @@ impl Drop for PyObjectRef {
     #[inline]
     fn drop(&mut self) {
         if self.0.ref_count.dec() {
-            unsafe { PyObject::drop_slow(self.ptr) }
+            unsafe { PyObject::drop_slow(self.ptr) };
         }
     }
 }
@@ -1213,7 +1230,7 @@ impl Drop for PyObjectRef {
             return;
         }
         if self.0.ref_count.dec() {
-            unsafe { PyObject::drop_slow(self.ptr) }
+            unsafe { PyObject::drop_slow(self.ptr) };
         }
     }
 }
@@ -1301,7 +1318,6 @@ impl<T: PyObjectPayload> Deref for Py<T> {
 
     #[inline(always)]
     fn deref(&self) -> &Self::Target {
-        debug_assert!(!self.0.header.is_dealloc());
         &self.0.payload
     }
 }
@@ -1361,7 +1377,7 @@ impl<T: PyObjectPayload> Drop for PyRef<T> {
     #[inline]
     fn drop(&mut self) {
         if self.0.ref_count.dec() {
-            unsafe { PyObject::drop_slow(self.ptr.cast::<PyObject>()) }
+            unsafe { PyObject::drop_slow(self.ptr.cast::<PyObject>()) };
         }
     }
 }
@@ -1385,7 +1401,7 @@ impl<T: PyObjectPayload> Drop for PyRef<T> {
             .or_insert_with(|| std::any::type_name::<T>().to_string());
 
         if self.0.ref_count.dec() {
-            unsafe { PyObject::drop_slow(self.ptr.cast::<PyObject>()) }
+            unsafe { PyObject::drop_slow(self.ptr.cast::<PyObject>()) };
         }
     }
 }
