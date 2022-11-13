@@ -516,8 +516,11 @@ impl Collector {
                         "Wait GC lock for {} secs",
                         (gc_wait * LOCK_TIMEOUT).as_secs_f32()
                     );
-                    if gc_wait > 6 {
-                        panic!("GC Pause is too long")
+                    if gc_wait % 5 == 0 {
+                        warn!(
+                            "GC Pause is too long: {} s",
+                            (gc_wait * LOCK_TIMEOUT).as_secs_f32()
+                        )
                     }
                 }
             }
