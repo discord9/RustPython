@@ -375,17 +375,25 @@ impl WeakRefList {
                         // want to call the callback
                         // lock header to make sure no one is changing rc when refering,
                         // also unlocked when clone happen(which require exclusive lock)
-                        #[cfg(feature = "gc")]
-                        let mut header = wr.as_object().header().exclusive();
+
                         // exclusive lock to header prevent this condition:
                         // thread1: rc == 1 ->               -> clone, but already set to dropped&deallocated!!!
                         // thread2:         dec rc to 0 -> drop&dealloc, set field and do drop(but block by guard lock)
                         // after this drop&dealloc is invitable, but still hold a live ref, so memory corrupt
                         // because __del__ might temporarily revive a object too
                         #[cfg(feature = "gc")]
-                        let ret = (wr.as_object().strong_count() > 0
-                            && !wr.as_object().header().is_drop())
-                        .then(|| PyMutexGuard::unlocked(&mut header, || (*wr).clone()));
+                        let ret = {
+                            let _header = wr.as_object().header().exclusive();
+                            (wr.as_object().strong_count() > 0
+                                && !wr.as_object().header().is_drop())
+                            .then(|| {
+                                let obj = wr.as_object();
+                                // incref without acquire exclusive lock
+                                obj.header().inc();
+                                obj.header().set_color(crate::object::gc::Color::Black);
+                                PyRef { ptr: wr.ptr }
+                            })
+                        };
                         // the only way rc can be zero is during drop on another thread, like this:
                         // thread1: clear -> lock guard -> get wr(rc==0)
                         // thread2: dec to 0,drop PyWeak -> lock guard, remove from weak ref list -> run drop_dealloc
