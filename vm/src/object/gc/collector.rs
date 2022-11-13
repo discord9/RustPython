@@ -105,9 +105,10 @@ impl Collector {
             return (0, 0).into();
             // already call collect_cycle() once
         }
-        if self.roots_len() == 0 {
+        if self.roots_len() == 0 || self.cleanup_cycle.is_locked() {
             return (0, 0).into();
         }
+
         // acquire stop-the-world lock
         let lock = {
             #[cfg(feature = "threading")]
@@ -147,8 +148,6 @@ impl Collector {
         // This prevent set multiple IS_GC_THREAD thread local variable to true
         // using write() to gain exclusive access
         Self::IS_GC_THREAD.with(|v| v.set(true));
-        // just check if last gc is done
-        drop(self.cleanup_cycle.lock());
 
         let freed = self.mark_roots();
         self.scan_roots();
@@ -519,11 +518,14 @@ impl Collector {
                         "Wait GC lock for {} secs",
                         (gc_wait * LOCK_TIMEOUT).as_secs_f32()
                     );
-                    if gc_wait % 5 == 0 {
+                    if gc_wait == 12 {
+                        // a minutes is too long for gc
                         warn!(
                             "GC Pause is too long: {} s",
                             (gc_wait * LOCK_TIMEOUT).as_secs_f32()
-                        )
+                        );
+                        // deadlock is happening, better terminate program instead of waitting
+                        std::process::exit(1);
                     }
                 }
             }

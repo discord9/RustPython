@@ -383,6 +383,8 @@ impl WeakRefList {
                         // because __del__ might temporarily revive a object too
                         #[cfg(feature = "gc")]
                         let ret = {
+                            // make sure no gc is happening when trying to manually do the INCREF thing
+                            let _no_gc = wr.as_object().header().try_pausing();
                             let _header = wr.as_object().header().exclusive();
                             (wr.as_object().strong_count() > 0
                                 && !wr.as_object().header().is_drop())
