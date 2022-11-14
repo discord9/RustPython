@@ -6,24 +6,52 @@ mod gc {
 
     #[pyfunction]
     fn collect(_args: FuncArgs, _vm: &VirtualMachine) -> i32 {
-        usize::from(rustpython_vm::object::collect()) as i32
+        #[cfg(feature = "gc")]
+        {
+            usize::from(rustpython_vm::object::collect()) as i32
+        }
+        #[cfg(not(feature = "gc"))]
+        {
+            0
+        }
     }
 
     #[pyfunction]
     fn isenabled(_args: FuncArgs, _vm: &VirtualMachine) -> bool {
-        rustpython_vm::object::isenabled()
+        #[cfg(feature = "gc")]
+        {
+            rustpython_vm::object::isenabled()
+        }
+        #[cfg(not(feature = "gc"))]
+        {
+            false
+        }
     }
 
     #[pyfunction]
     fn enable(_args: FuncArgs, vm: &VirtualMachine) -> PyResult {
-        rustpython_vm::object::enable();
-        Ok(vm.new_pyobj(true))
+        #[cfg(feature = "gc")]
+        {
+            rustpython_vm::object::enable();
+            Ok(vm.new_pyobj(true))
+        }
+        #[cfg(not(feature = "gc"))]
+        {
+            Err(vm.new_not_implemented_error("".to_owned()))
+        }
     }
 
     #[pyfunction]
     fn disable(_args: FuncArgs, vm: &VirtualMachine) -> PyResult {
-        rustpython_vm::object::disable();
-        Ok(vm.new_pyobj(true))
+        #[cfg(feature = "gc")]
+        {
+            rustpython_vm::object::disable();
+            Ok(vm.new_pyobj(true))
+        }
+        #[cfg(not(feature = "gc"))]
+        {
+            Err(vm.new_not_implemented_error("".to_owned()))
+        }
     }
 
     #[pyfunction]
