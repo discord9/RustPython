@@ -5,6 +5,12 @@ use rustpython_common::{
 use std::{cell::Cell, ptr::NonNull, time::Instant};
 
 #[cfg(feature = "threading")]
+use std::sync::Weak;
+
+#[cfg(not(feature = "threading"))]
+use std::rc::Weak;
+
+#[cfg(feature = "threading")]
 use std::time::Duration;
 
 use crate::{
@@ -66,6 +72,7 @@ pub struct Collector {
     is_enabled: PyMutex<bool>,
     /// acquire this to prevent a new gc to happen before this gc is completed
     cleanup_cycle: PyMutex<()>,
+    zelf: PyMutex<Option<Weak<Self>>>,
 }
 
 impl std::fmt::Debug for Collector {
@@ -89,12 +96,26 @@ impl Default for Collector {
             last_gc_time: PyMutex::new(Instant::now()),
             is_enabled: PyMutex::new(true),
             cleanup_cycle: PyMutex::new(()),
+            zelf: PyMutex::new(None),
         }
     }
 }
 
 // core of gc algorithm
 impl Collector {
+    /// try get number of object this garbage collector managed
+    fn try_get_obj_cnt(&self) -> Option<usize> {
+        match &*self.zelf.lock() {
+            Some(v) => v.upgrade().map(|r| PyRc::strong_count(&r) - 2),
+            None => self.roots.lock().get(0).map(|elem| {
+                let gc = unsafe { elem.as_ref() }.header().gc();
+                let ret = PyRc::strong_count(&gc);
+                let weak = PyRc::downgrade(&gc);
+                *self.zelf.lock() = Some(weak);
+                ret - 2
+            }),
+        }
+    }
     /*
     unsafe fn drop_dealloc(obj: NonNull<PyObject>) {
         PyObject::drop_slow(obj)
