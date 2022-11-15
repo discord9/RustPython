@@ -651,6 +651,9 @@ class OrderedDictTests:
         r = weakref.ref(A)
         del A
         gc.collect()
+        # TODO: RustPython, Need to fix this: somehow after del A, it takes two call to `gc.collect()`
+        # for gc to realize a loop is there and to be collected
+        gc.collect()
         self.assertIsNone(r())
 
     # TODO: RUSTPYTHON
