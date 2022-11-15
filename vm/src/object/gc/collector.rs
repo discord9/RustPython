@@ -1,5 +1,5 @@
 use rustpython_common::{
-    lock::{PyMutex, PyRwLock, PyRwLockReadGuard, PyRwLockWriteGuard},
+    lock::{PyMutex, PyMutexGuard, PyRwLock, PyRwLockReadGuard, PyRwLockWriteGuard},
     rc::PyRc,
 };
 use std::{cell::Cell, ptr::NonNull, time::Instant};
@@ -149,15 +149,22 @@ impl Collector {
         // using write() to gain exclusive access
         Self::IS_GC_THREAD.with(|v| v.set(true));
 
-        let freed = self.mark_roots();
-        self.scan_roots();
-        let ret_cycle = self.collect_roots(lock);
+        // the three main step of GC
+        // 1. mark roots: which get trial DECREF object so cycles get zero rc
+        // 2. scan roots: get non-cycle object back to normal values
+        // 3. collect roots: collect cycles starting from roots
+        let freed = Self::mark_roots(&mut *self.roots.lock());
+        Self::scan_roots(&mut *self.roots.lock());
+        let ret_cycle = self.collect_roots(self.roots.lock(), lock);
         (freed, ret_cycle).into()
     }
 
-    fn mark_roots(&self) -> usize {
+    fn mark_roots<R>(mut roots: R) -> usize
+    where
+        R: AsMut<Vec<WrappedPtr>>,
+    {
         let mut freed = 0;
-        let old_roots: Vec<_> = { self.roots.lock().drain(..).collect() };
+        let old_roots: Vec<_> = { roots.as_mut().drain(..).collect() };
         let mut new_roots = old_roots
             .into_iter()
             .filter(|ptr| {
@@ -182,7 +189,7 @@ impl Collector {
                 }
             })
             .collect();
-        (*self.roots.lock()).append(&mut new_roots);
+        roots.as_mut().append(&mut new_roots);
         freed
     }
 
@@ -199,9 +206,12 @@ impl Collector {
         }
     }
 
-    fn scan_roots(&self) {
-        self.roots
-            .lock()
+    fn scan_roots<R>(mut roots: R)
+    where
+        R: AsMut<Vec<WrappedPtr>>,
+    {
+        roots
+            .as_mut()
             .iter()
             .map(|ptr| {
                 let obj = unsafe { ptr.as_ref() };
@@ -242,13 +252,19 @@ impl Collector {
         });
     }
 
-    fn collect_roots(&self, lock: PyRwLockWriteGuard<()>) -> usize {
+    fn collect_roots(
+        &self,
+        mut roots_lock: PyMutexGuard<Vec<WrappedPtr>>,
+        lock: PyRwLockWriteGuard<()>,
+    ) -> usize {
         // Collecting the nodes into this Vec is difference from the original
         // Bacon-Rajan paper. We need this because we have destructors(RAII) and
         // running them during traversal will cause cycles to be broken which
         // ruins the rest of our traversal.
         let mut white = Vec::new();
-        let roots: Vec<_> = { self.roots.lock().drain(..).collect() };
+        let roots: Vec<_> = { roots_lock.drain(..).collect() };
+        // future inc/dec will accesss roots so drop lock in here
+        drop(roots_lock);
         // release gc pause lock in here, for after this line no white garbage will be access by mutator
         roots
             .into_iter()
@@ -279,10 +295,10 @@ impl Collector {
         // 0.5. add back one ref for all thing in white
         // 1. clear weakref
         // 2. run del
-        // 3. revive cycle which have revivied object in it
+        // 3. check if cycle is still isolated(using mark_roots&scan_roots), remember to acquire gc's exclusive lock to prevent graph from change
         // (atomic op required, maybe acquire a lock on them?
         //or if a object dead immediate before even incref, it will be wrongly revived, but if rc is added back, that should be ok)
-        // 4. drop the rest, then dealloc them
+        // 4. drop the still isolated cycle(which is confirmed garbage), then dealloc them
 
         // Run drop on each of nodes.
         white.iter().for_each(|i| {
@@ -306,7 +322,7 @@ impl Collector {
         // drop all for once at seperate loop to avoid certain cycle ref double drop bug
         let can_deallocs: Vec<_> = white
             .iter()
-            .map(|i| unsafe { PyObject::drop_only(*i) })
+            .map(|i| unsafe { PyObject::drop_clr_wr(*i) })
             .collect();
         // drop first, deallocate later so to avoid heap corruption
         // cause by circular ref and therefore
