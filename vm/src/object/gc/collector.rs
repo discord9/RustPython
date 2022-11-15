@@ -272,8 +272,17 @@ impl Collector {
         #[cfg(not(feature = "threading"))]
         drop(lock);
         Self::IS_GC_THREAD.with(|v| v.set(false));
-        // unsafe { PyObject::del_only(*i) }
+
         // TODO: maybe never run __del__ anyway, for running a __del__ function is an implementation detail!!!!
+        // TODO: impl PEP 442
+        // 0. count&mark cycle with indexies
+        // 0.5. add back one ref for all thing in white
+        // 1. clear weakref
+        // 2. run del
+        // 3. revive cycle which have revivied object in it
+        // (atomic op required, maybe acquire a lock on them?
+        //or if a object dead immediate before even incref, it will be wrongly revived, but if rc is added back, that should be ok)
+        // 4. drop the rest, then dealloc them
 
         // Run drop on each of nodes.
         white.iter().for_each(|i| {
