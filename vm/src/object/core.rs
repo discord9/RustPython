@@ -1107,14 +1107,15 @@ impl PyObject {
         true
     }
 
-    /// only run rust RAII destructor, no __del__ neither dealloc
-    pub(in crate::object) unsafe fn drop_only(ptr: NonNull<PyObject>) -> bool {
+    /// only clear weakref and then run rust RAII destructor, no __del__ neither dealloc
+    pub(in crate::object) unsafe fn drop_clr_wr(ptr: NonNull<PyObject>) -> bool {
         #[cfg(feature = "gc")]
         if !ptr.as_ref().header().check_set_drop_only() {
             return false;
         }
         let zelf = ptr.as_ref();
         zelf.clear_weakref();
+
         // not set PyInner's is_drop because still havn't dealloc
         let drop_only = zelf.0.vtable.drop_only;
 
@@ -1131,7 +1132,7 @@ impl PyObject {
             return false;
         }
 
-        Self::drop_only(ptr)
+        Self::drop_clr_wr(ptr)
     }
 
     pub(in crate::object) unsafe fn dealloc_only(ptr: NonNull<PyObject>) -> bool {
