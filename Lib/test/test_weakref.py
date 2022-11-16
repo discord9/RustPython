@@ -1919,6 +1919,7 @@ class MappingTestCase(TestBase):
             for i in range(100000):
                 if i%1000==0:
                     print("\rLoop:"+str(i)+"/100000     ", end="")
+                    sys.stdout.flush()
                 d[10] = RefCycle()
                 x = d.pop(10, 10)
                 self.assertIsNot(x, None)  # we never put None in there!
@@ -1932,6 +1933,7 @@ class MappingTestCase(TestBase):
             for i in range(200000):
                 if i%1000==0:
                     print("\rLoop:"+str(i)+"/200000     ", end="")
+                    sys.stdout.flush()
                 o = RefCycle()
                 d[10] = o
                 # o is still alive, so the dict can't be empty
