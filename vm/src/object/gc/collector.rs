@@ -252,43 +252,11 @@ impl Collector {
         });
     }
 
-    fn collect_roots(
-        &self,
-        mut roots_lock: PyMutexGuard<Vec<WrappedPtr>>,
-        lock: PyRwLockWriteGuard<()>,
-    ) -> usize {
-        // Collecting the nodes into this Vec is difference from the original
-        // Bacon-Rajan paper. We need this because we have destructors(RAII) and
-        // running them during traversal will cause cycles to be broken which
-        // ruins the rest of our traversal.
-        let mut white = Vec::new();
-        let roots: Vec<_> = { roots_lock.drain(..).collect() };
-        // future inc/dec will accesss roots so drop lock in here
-        drop(roots_lock);
-        // release gc pause lock in here, for after this line no white garbage will be access by mutator
-        roots
-            .into_iter()
-            .map(|ptr| {
-                let obj = unsafe { ptr.as_ref() };
-                obj.header().set_buffered(false);
-                Self::collect_white(obj, &mut white);
-            })
-            .count();
-        let len_white = white.len();
+    /// free everything in white, safe to use even when those objects form cycle refs
+    fn free_cycles(&self, white: Vec<NonNull<PyObject>>) {
         if !white.is_empty() {
             info!("Cyclic garbage collected, count={}", white.len());
         }
-
-        // mark the end of GC, but another gc can only begin after acquire cleanup_cycle lock
-        // because a dead cycle can't actively change object graph anymore
-        let _cleanup_lock = self.cleanup_cycle.lock();
-        // unlock fair so high freq gc wouldn't stop the world forever
-        #[cfg(feature = "threading")]
-        PyRwLockWriteGuard::unlock_fair(lock);
-        #[cfg(not(feature = "threading"))]
-        drop(lock);
-        Self::IS_GC_THREAD.with(|v| v.set(false));
-
         // TODO: maybe never run __del__ anyway, for running a __del__ function is an implementation detail!!!!
         // TODO: impl PEP 442
         // 0. count&mark cycle with indexies
@@ -337,7 +305,46 @@ impl Collector {
                 }
             })
             .count();
-        // TODO: prevent a new GC to happen before this line
+    }
+
+    fn collect_roots(
+        &self,
+        mut roots_lock: PyMutexGuard<Vec<WrappedPtr>>,
+        lock: PyRwLockWriteGuard<()>,
+    ) -> usize {
+        // Collecting the nodes into this Vec is difference from the original
+        // Bacon-Rajan paper. We need this because we have destructors(RAII) and
+        // running them during traversal will cause cycles to be broken which
+        // ruins the rest of our traversal.
+        let mut white = Vec::new();
+        let roots: Vec<_> = { roots_lock.drain(..).collect() };
+        // future inc/dec will accesss roots so drop lock in here
+        drop(roots_lock);
+        // release gc pause lock in here, for after this line no white garbage will be access by mutator
+        roots
+            .into_iter()
+            .map(|ptr| {
+                let obj = unsafe { ptr.as_ref() };
+                obj.header().set_buffered(false);
+                Self::collect_white(obj, &mut white);
+            })
+            .count();
+        let len_white = white.len();
+        if !white.is_empty() {
+            info!("Cyclic garbage collected, count={}", white.len());
+        }
+
+        // mark the end of GC, but another gc can only begin after acquire cleanup_cycle lock
+        // because a dead cycle can't actively change object graph anymore
+        let _cleanup_lock = self.cleanup_cycle.lock();
+        // unlock fair so high freq gc wouldn't stop the world forever
+        #[cfg(feature = "threading")]
+        PyRwLockWriteGuard::unlock_fair(lock);
+        #[cfg(not(feature = "threading"))]
+        drop(lock);
+        Self::IS_GC_THREAD.with(|v| v.set(false));
+
+        self.free_cycles(white);
 
         len_white
     }
