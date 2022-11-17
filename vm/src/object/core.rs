@@ -1126,9 +1126,10 @@ impl PyObject {
         true
     }
 
+    #[cfg(feature = "gc")]
+    #[allow(unused)]
     pub(crate) unsafe fn drop_only(ptr: NonNull<PyObject>) -> bool {
         let zelf = ptr.as_ref();
-        #[cfg(feature = "gc")]
         if !zelf.header().check_set_drop_only() {
             return false;
         }
@@ -1138,7 +1139,6 @@ impl PyObject {
 
         drop_only(ptr.as_ptr());
         // Safety: after drop_only, header should still remain undropped
-        #[cfg(feature = "gc")]
         zelf.header().set_done_drop(true);
         true
     }
