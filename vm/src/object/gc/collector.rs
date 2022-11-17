@@ -153,13 +153,14 @@ impl Collector {
         // 1. mark roots: which get trial DECREF object so cycles get zero rc
         // 2. scan roots: get non-cycle object back to normal values
         // 3. collect roots: collect cycles starting from roots
-        let freed = Self::mark_roots(&mut *self.roots.lock());
+        let freed = Self::mark_roots(&mut *self.roots.lock(), true);
         Self::scan_roots(&mut *self.roots.lock());
         let ret_cycle = self.collect_roots(self.roots.lock(), lock);
         (freed, ret_cycle).into()
     }
 
-    fn mark_roots<R>(mut roots: R) -> usize
+    /// start decref from roots, also dealloc obj in roots which is dropped before(rc==0&color==black)
+    fn mark_roots<R>(mut roots: R, free: bool) -> usize
     where
         R: AsMut<Vec<WrappedPtr>>,
     {
@@ -173,9 +174,14 @@ impl Collector {
                     Self::mark_gray(obj);
                     true
                 } else {
+                    if !free {
+                        return false;
+                    }
                     obj.header().set_buffered(false);
                     if obj.header().color() == Color::Black && obj.header().rc() == 0 {
-                        debug_assert!(obj.header().is_drop() && !obj.header().is_dealloc());
+                        if obj.header().is_dealloc() || !obj.header().is_drop() {
+                            panic!("{:#?}", obj.header());
+                        }
                         freed += 1;
                         unsafe {
                             // only dealloc here, because already drop(only) in Object's impl Drop
@@ -259,8 +265,7 @@ impl Collector {
         }
         // TODO: maybe never run __del__ anyway, for running a __del__ function is an implementation detail!!!!
         // TODO: impl PEP 442
-        // 0. count&mark cycle with indexies
-        // 0.5. add back one ref for all thing in white
+        // 0. add back one ref for all thing in white
         // 1. clear weakref
         // 2. run del
         // 3. check if cycle is still isolated(using mark_roots&scan_roots), remember to acquire gc's exclusive lock to prevent graph from change
@@ -282,15 +287,67 @@ impl Collector {
                     return;
                 }
                 debug_assert!(!ch.header().is_dealloc());
-                if ch.header().rc() > 0 {
-                    ch.header().inc();
-                }
+                ch.increment()
             });
         });
+
+        white.iter().for_each(|i| {
+            let obj = unsafe { i.as_ref() };
+            obj.clear_weakref();
+        });
+        // after clear weakref, this object is still valid and usable
+
+        white.iter().for_each(|i| {
+            let obj = unsafe { i.as_ref() };
+            let _ = obj.try_del();
+        });
+
+        // start another gc using `white` as `roots` to check if starting from white, if cycle is still isolated
+        let white = {
+            let gc_lock = self.pause.write();
+            Self::IS_GC_THREAD.with(|v| v.set(true));
+            let mut no_purple: Vec<_> = Vec::new();
+            let mut white: Vec<_> = white
+                .into_iter()
+                .map(|i| {
+                    let obj = unsafe { i.as_ref() };
+                    if obj.header().color() != Color::Purple {
+                        no_purple.push(i);
+                    } else {
+                        obj.header().set_in_cycle(false);
+                        // so it can be added when collect white
+                    }
+                    // else: either it is truly revived, or part of a newly formed cycle, which will later be added to new_white after makr&scan
+                    WrappedPtr::from(i)
+                })
+                .collect();
+
+            Self::mark_roots(&mut white, false);
+            Self::scan_roots(&mut white);
+            // the new cycle being collected
+            let mut new_white = no_purple;
+            let old = new_white.len();
+            white.into_iter().for_each(|ptr| {
+                let obj = unsafe { ptr.as_ref() };
+                Self::collect_white(obj, &mut new_white);
+            });
+
+            let delta = new_white.len() - old;
+            info!("PEP442 cycle={delta}");
+
+            Self::IS_GC_THREAD.with(|v| v.set(false));
+            drop(gc_lock);
+            new_white
+        };
+
+        info!("PEP 442 collected, count={}", white.len());
+
         // drop all for once at seperate loop to avoid certain cycle ref double drop bug
+        // FIXME: what about objects that's still have weakref?
+        // i.e: a new object being created in `__del__`, and later collected as garbage
         let can_deallocs: Vec<_> = white
             .iter()
-            .map(|i| unsafe { PyObject::drop_clr_wr(*i) })
+            .map(|i| unsafe { PyObject::drop_only(*i) })
             .collect();
         // drop first, deallocate later so to avoid heap corruption
         // cause by circular ref and therefore
@@ -338,11 +395,11 @@ impl Collector {
         // because a dead cycle can't actively change object graph anymore
         let _cleanup_lock = self.cleanup_cycle.lock();
         // unlock fair so high freq gc wouldn't stop the world forever
+        Self::IS_GC_THREAD.with(|v| v.set(false));
         #[cfg(feature = "threading")]
         PyRwLockWriteGuard::unlock_fair(lock);
         #[cfg(not(feature = "threading"))]
         drop(lock);
-        Self::IS_GC_THREAD.with(|v| v.set(false));
 
         self.free_cycles(white);
 
@@ -351,6 +408,9 @@ impl Collector {
     fn collect_white(obj: GcObjRef, white: &mut Vec<NonNull<GcObj>>) {
         if obj.header().color() == Color::White && !obj.header().buffered() {
             obj.header().set_color(Color::Black);
+            if obj.header().is_in_cycle() {
+                return;
+            }
             obj.header().set_in_cycle(true);
             obj.trace(&mut |ch| {
                 if ch.header().is_leaked() {
@@ -393,7 +453,6 @@ impl Collector {
         let _lock_obj = obj.header().exclusive();
         // prevent RAII Drop to drop below zero
         if obj.header().rc() > 0 {
-            debug_assert!(!obj.header().is_drop());
             let rc = obj.header().dec();
             if rc == 0 {
                 self.release(obj)
@@ -439,7 +498,7 @@ impl Collector {
             // prevent add to buffer for multiple times
             let mut roots = self.roots.lock();
             let header = obj.header();
-            if !header.buffered() {
+            if !header.buffered() && !header.is_in_cycle() {
                 header.set_buffered(true);
                 roots.push(NonNull::from(obj).into());
             }

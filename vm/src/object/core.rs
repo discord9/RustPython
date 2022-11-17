@@ -1130,7 +1130,7 @@ impl PyObject {
         let zelf = ptr.as_ref();
         #[cfg(feature = "gc")]
         if !zelf.header().check_set_drop_only() {
-            return false;
+            return zelf.header().is_drop() && !zelf.header().is_dealloc();
         }
 
         // not set PyInner's is_drop because still havn't dealloc
