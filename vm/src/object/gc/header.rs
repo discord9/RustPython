@@ -30,31 +30,33 @@ impl Default for State {
     }
 }
 
+type StateBytes = u8;
+
 macro_rules! getset {
     ($GETTER: ident, $SETTER: ident, $MASK: path, $OFFSET: path) => {
         fn $GETTER(&self) -> bool {
             ((self.inner & $MASK) >> $OFFSET) != 0
         }
         fn $SETTER(&mut self, b: bool) {
-            self.inner = (self.inner & !$MASK) | ((b as u8) << $OFFSET)
+            self.inner = (self.inner & !$MASK) | ((b as StateBytes) << $OFFSET)
         }
     };
 }
 
 impl State {
-    const COLOR_MASK: u8 = 0b0000_0011;
-    const CYCLE_MASK: u8 = 0b0000_0100;
-    const CYCLE_OFFSET: u8 = 2;
-    const BUF_MASK: u8 = 0b0000_1000;
-    const BUF_OFFSET: u8 = 3;
-    const DROP_MASK: u8 = 0b0001_0000;
-    const DROP_OFFSET: u8 = 4;
-    const DEALLOC_MASK: u8 = 0b0010_0000;
-    const DEALLOC_OFFSET: u8 = 5;
-    const LEAK_MASK: u8 = 0b0100_0000;
-    const LEAK_OFFSET: u8 = 6;
-    const DONE_MAKS: u8 = 0b1000_0000;
-    const DONE_OFFSET: u8 = 7;
+    const COLOR_MASK: StateBytes = 0b0000_0011;
+    const CYCLE_MASK: StateBytes = 0b0000_0100;
+    const CYCLE_OFFSET: StateBytes = 2;
+    const BUF_MASK: StateBytes = 0b0000_1000;
+    const BUF_OFFSET: StateBytes = 3;
+    const DROP_MASK: StateBytes = 0b0001_0000;
+    const DROP_OFFSET: StateBytes = 4;
+    const DEALLOC_MASK: StateBytes = 0b0010_0000;
+    const DEALLOC_OFFSET: StateBytes = 5;
+    const LEAK_MASK: StateBytes = 0b0100_0000;
+    const LEAK_OFFSET: StateBytes = 6;
+    const DONE_MAKS: StateBytes = 0b1000_0000;
+    const DONE_OFFSET: StateBytes = 7;
     fn color(&self) -> Color {
         let color = self.inner & Self::COLOR_MASK;
         match color {
@@ -318,7 +320,7 @@ impl GcHeader {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[repr(C)]
 pub enum Color {
-    /// In use
+    /// In use(or free)
     Black,
     /// Possible member of cycle
     Gray,
