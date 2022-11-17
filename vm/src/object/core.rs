@@ -1008,7 +1008,7 @@ impl PyObject {
         self
     }
 
-    fn try_del(&self) -> Result<(), ()> {
+    pub(crate) fn try_del(&self) -> Result<(), ()> {
         // __del__ is mostly not implemented
         #[inline(never)]
         #[cold]
@@ -1063,7 +1063,7 @@ impl PyObject {
         Ok(())
     }
 
-    fn clear_weakref(&self) {
+    pub(crate) fn clear_weakref(&self) {
         if let Some(wrl) = self.weak_ref_list() {
             wrl.clear();
         }
@@ -1107,7 +1107,7 @@ impl PyObject {
         true
     }
 
-    /// only clear weakref and then run rust RAII destructor, no __del__ neither dealloc
+    /// only clear weakref and then run rust RAII destructor, no `__del__` neither dealloc
     pub(in crate::object) unsafe fn drop_clr_wr(ptr: NonNull<PyObject>) -> bool {
         #[cfg(feature = "gc")]
         if !ptr.as_ref().header().check_set_drop_only() {
@@ -1125,6 +1125,24 @@ impl PyObject {
         ptr.as_ref().header().set_done_drop(true);
         true
     }
+
+    pub(crate) unsafe fn drop_only(ptr: NonNull<PyObject>) -> bool {
+        let zelf = ptr.as_ref();
+        #[cfg(feature = "gc")]
+        if !zelf.header().check_set_drop_only() {
+            return false;
+        }
+
+        // not set PyInner's is_drop because still havn't dealloc
+        let drop_only = zelf.0.vtable.drop_only;
+
+        drop_only(ptr.as_ptr());
+        // Safety: after drop_only, header should still remain undropped
+        #[cfg(feature = "gc")]
+        zelf.header().set_done_drop(true);
+        true
+    }
+
     /// run object's __del__ and then rust's destructor but doesn't dealloc
     pub(in crate::object) unsafe fn del_drop(ptr: NonNull<PyObject>) -> bool {
         if let Err(()) = ptr.as_ref().try_del() {
