@@ -253,10 +253,7 @@ impl Collector {
     }
 
     /// free everything in white, safe to use even when those objects form cycle refs
-    fn free_cycles(&self, white: Vec<NonNull<PyObject>>) {
-        if !white.is_empty() {
-            info!("Cyclic garbage collected, count={}", white.len());
-        }
+    fn free_cycles(&self, white: Vec<NonNull<PyObject>>) -> usize {
         // TODO: maybe never run __del__ anyway, for running a __del__ function is an implementation detail!!!!
         // TODO: impl PEP 442
         // 0. count&mark cycle with indexies
@@ -305,6 +302,8 @@ impl Collector {
                 }
             })
             .count();
+        info!("Cyclic garbage collected, count={}", white.len());
+        white.len()
     }
 
     fn collect_roots(
