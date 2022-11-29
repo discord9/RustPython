@@ -1,3 +1,5 @@
+use once_cell::sync::Lazy;
+
 use super::{PyDict, PyDictRef, PyGenericAlias, PyList, PyTuple, PyType, PyTypeRef};
 use crate::{
     atomic_func,
@@ -219,7 +221,7 @@ impl AsSequence for PyMappingProxy {
 
 impl AsNumber for PyMappingProxy {
     fn as_number() -> &'static PyNumberMethods {
-        static AS_NUMBER: PyNumberMethods = PyNumberMethods {
+        static AS_NUMBER: Lazy<PyNumberMethods> = Lazy::new(|| PyNumberMethods {
             or: atomic_func!(|num, args, vm| {
                 PyMappingProxy::number_downcast(num).or(args.to_pyobject(vm), vm)
             }),
@@ -227,7 +229,7 @@ impl AsNumber for PyMappingProxy {
                 PyMappingProxy::number_downcast(num).ior(args.to_pyobject(vm), vm)
             }),
             ..PyNumberMethods::NOT_IMPLEMENTED
-        };
+        });
         &AS_NUMBER
     }
 }

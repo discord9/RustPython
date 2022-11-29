@@ -19,6 +19,7 @@ use bstr::ByteSlice;
 use num_bigint::{BigInt, BigUint, Sign};
 use num_integer::Integer;
 use num_traits::{One, Pow, PrimInt, Signed, ToPrimitive, Zero};
+use once_cell::sync::Lazy;
 use std::ops::Neg;
 use std::{fmt, ops::Not};
 
@@ -756,7 +757,7 @@ impl Hashable for PyInt {
 
 impl AsNumber for PyInt {
     fn as_number() -> &'static PyNumberMethods {
-        static AS_NUMBER: PyNumberMethods = PyNumberMethods {
+        static AS_NUMBER: Lazy<PyNumberMethods> = Lazy::new(|| PyNumberMethods {
             add: atomic_func!(|num, other, vm| PyInt::number_int_op(num, other, |a, b| a + b, vm)),
             subtract: atomic_func!(|num, other, vm| PyInt::number_int_op(
                 num,
@@ -822,7 +823,7 @@ impl AsNumber for PyInt {
             }),
             index: atomic_func!(|num, vm| Ok(PyInt::number_int(num, vm))),
             ..PyNumberMethods::NOT_IMPLEMENTED
-        };
+        });
         &AS_NUMBER
     }
 }

@@ -26,6 +26,7 @@ use crate::{
     TryFromBorrowedObject, TryFromObject, VirtualMachine,
 };
 use bstr::ByteSlice;
+use once_cell::sync::Lazy;
 use std::{mem::size_of, ops::Deref};
 
 #[pyclass(module = false, name = "bytes")]
@@ -610,14 +611,14 @@ impl AsSequence for PyBytes {
 
 impl AsNumber for PyBytes {
     fn as_number() -> &'static PyNumberMethods {
-        static AS_NUMBER: PyNumberMethods = PyNumberMethods {
+        static AS_NUMBER: Lazy<PyNumberMethods> = Lazy::new(|| PyNumberMethods {
             remainder: atomic_func!(|number, other, vm| {
                 PyBytes::number_downcast(number)
                     .mod_(other.to_owned(), vm)
                     .to_pyresult(vm)
             }),
             ..PyNumberMethods::NOT_IMPLEMENTED
-        };
+        });
         &AS_NUMBER
     }
 }
