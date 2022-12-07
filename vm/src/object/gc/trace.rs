@@ -63,6 +63,18 @@ where
     }
 }
 
+unsafe impl<T> Trace for Box<[T]>
+where
+    T: Trace,
+{
+    #[inline]
+    fn trace(&self, tracer_fn: &mut TracerFn) {
+        for elem in &**self {
+            elem.trace(tracer_fn);
+        }
+    }
+}
+
 unsafe impl<T> Trace for Vec<T>
 where
     T: Trace,
