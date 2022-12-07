@@ -15,7 +15,7 @@ pub(crate) fn impl_pytrace(attr: AttributeArgs, mut item: DeriveInput) -> Result
         syn::Data::Struct(s) => {
             let fields = &mut s.fields;
             if let syn::Fields::Named(ref mut fields) = fields {
-                let res: Vec<_> = fields
+                let res: TokenStream = fields
                     .named
                     .iter_mut()
                     .map(|f| {
@@ -35,7 +35,7 @@ pub(crate) fn impl_pytrace(attr: AttributeArgs, mut item: DeriveInput) -> Result
                         });
                         if do_trace {
                             quote!(
-                                self.#name.trace(tracer_fn);
+                                ::rustpython_vm::object::Trace::trace(&self.#name, tracer_fn);
                             )
                         } else {
                             quote!()
@@ -50,10 +50,6 @@ pub(crate) fn impl_pytrace(attr: AttributeArgs, mut item: DeriveInput) -> Result
         syn::Data::Enum(_) => todo!(),
         syn::Data::Union(_) => todo!(),
     };
-
-    let trace_code = trace_code
-        .into_iter()
-        .fold(quote! {}, |acc, new| quote! { #acc #new });
 
     let ret = quote! {
         #item

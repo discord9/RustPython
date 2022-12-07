@@ -10,7 +10,7 @@
 //!
 //! PyRef<PyWeak> may looking like to be called as PyObjectWeak by the rule,
 //! but not to do to remember it is a PyRef object.
-#![cfg_attr(not(feature = "gc_bacon"), allow(unused))]
+
 use super::{
     ext::{AsObject, PyResult},
     payload::PyObjectPayload,
@@ -91,7 +91,9 @@ struct Erased;
 
 struct PyObjVTable {
     drop_dealloc: unsafe fn(*mut PyObject),
+    #[cfg(feature = "gc_bacon")]
     drop_only: unsafe fn(*mut PyObject),
+    #[cfg(feature = "gc_bacon")]
     dealloc_only: unsafe fn(*mut PyObject),
     debug: unsafe fn(&PyObject, &mut fmt::Formatter) -> fmt::Result,
 }
@@ -120,24 +122,19 @@ macro_rules! partially_drop {
 
 /// drop only(doesn't deallocate)
 /// NOTE: `header` is not drop to prevent UB
+#[cfg(feature = "gc_bacon")]
 unsafe fn drop_only_obj<T: PyObjectPayload>(x: *mut PyObject) {
-    #[cfg(feature = "gc_bacon")]
-    {
-        let obj = x.cast::<PyInner<T>>().as_ref().expect("Non-Null Pointer");
-        partially_drop!(
-            obj.
-            #[cfg(debug_assertions)]
-            is_drop,
-            typeid,
-            typ,
-            dict,
-            slots,
-            payload
-        );
-    }
-
-    #[cfg(not(feature = "gc_bacon"))]
-    x.cast::<PyInner<T>>().drop_in_place()
+    let obj = x.cast::<PyInner<T>>().as_ref().expect("Non-Null Pointer");
+    partially_drop!(
+        obj.
+        #[cfg(debug_assertions)]
+        is_drop,
+        typeid,
+        typ,
+        dict,
+        slots,
+        payload
+    );
 }
 
 /// deallocate memory with type info(cast as PyInner<T>) in heap only, DOES NOT run destructor
@@ -145,12 +142,12 @@ unsafe fn drop_only_obj<T: PyObjectPayload>(x: *mut PyObject) {
 /// - should only be called after its' destructor is done(i.e. called `drop_value`(which called drop_in_place))
 /// - panic on a null pointer
 /// move drop `header` here to prevent UB
+#[cfg(feature = "gc_bacon")]
 unsafe fn dealloc_only_obj<T: PyObjectPayload>(x: *mut PyObject) {
-    #[cfg(feature = "gc_bacon")]
     {
         let obj = x.cast::<PyInner<T>>().as_ref().expect("Non-Null Pointer");
         partially_drop!(obj.header, vtable, weak_list);
-    }
+    } // don't want keep a ref to a to be deallocated object
     std::alloc::dealloc(
         x.cast(),
         std::alloc::Layout::for_value(x.cast::<PyInner<T>>().as_ref().unwrap()),
@@ -171,7 +168,9 @@ impl PyObjVTable {
         impl<T: PyObjectPayload> VtableHelper for Helper<T> {
             const VTABLE: PyObjVTable = PyObjVTable {
                 drop_dealloc: drop_dealloc_obj::<T>,
+                #[cfg(feature = "gc_bacon")]
                 drop_only: drop_only_obj::<T>,
+                #[cfg(feature = "gc_bacon")]
                 dealloc_only: dealloc_only_obj::<T>,
                 debug: debug_obj::<T>,
             };
@@ -1077,6 +1076,7 @@ impl PyObject {
         Ok(())
     }
 
+    #[cfg(feature = "gc_bacon")]
     /// only run `__del__`(or `slot_del` depends on the actual object), doesn't drop or dealloc
     pub(in crate::object) unsafe fn del_only(ptr: NonNull<Self>) -> bool {
         if let Err(()) = ptr.as_ref().try_del() {
@@ -1107,6 +1107,7 @@ impl PyObject {
         true
     }
 
+    #[cfg(feature = "gc_bacon")]
     /// only clear weakref and then run rust RAII destructor, no `__del__` neither dealloc
     pub(in crate::object) unsafe fn drop_clr_wr(ptr: NonNull<PyObject>) -> bool {
         #[cfg(feature = "gc_bacon")]
@@ -1143,6 +1144,7 @@ impl PyObject {
         true
     }
 
+    #[cfg(feature = "gc_bacon")]
     /// run object's __del__ and then rust's destructor but doesn't dealloc
     pub(in crate::object) unsafe fn del_drop(ptr: NonNull<PyObject>) -> bool {
         if let Err(()) = ptr.as_ref().try_del() {
@@ -1153,6 +1155,7 @@ impl PyObject {
         Self::drop_clr_wr(ptr)
     }
 
+    #[cfg(feature = "gc_bacon")]
     pub(in crate::object) unsafe fn dealloc_only(ptr: NonNull<PyObject>) -> bool {
         // can't check for if is a alive PyWeak here because already dropped payload
         #[cfg(feature = "gc_bacon")]
