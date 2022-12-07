@@ -20,7 +20,7 @@ use std::{
     io::{self, BufRead, BufReader},
     ops::Deref,
 };
-#[cfg(feature = "gc")]
+#[cfg(feature = "gc_bacon")]
 unsafe impl crate::object::Trace for PyBaseException {
     fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
         self.traceback.trace(tracer_fn);

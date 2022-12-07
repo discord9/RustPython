@@ -57,7 +57,7 @@ pub(crate) fn impl_pytrace(attr: AttributeArgs, mut item: DeriveInput) -> Result
 
     let ret = quote! {
         #item
-        #[cfg(feature = "gc")]
+        #[cfg(feature = "gc_bacon")]
         unsafe impl ::rustpython_vm::object::Trace for #ty {
             fn trace(&self, tracer_fn: &mut ::rustpython_vm::object::TracerFn) {
                 #trace_code

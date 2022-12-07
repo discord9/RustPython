@@ -462,7 +462,7 @@ pub struct PyTupleTyped<T: TransmuteFromObject> {
     _marker: PhantomData<Vec<T>>,
 }
 
-#[cfg(feature = "gc")]
+#[cfg(feature = "gc_bacon")]
 unsafe impl<T> crate::object::Trace for PyTupleTyped<T>
 where
     T: TransmuteFromObject + crate::object::Trace,

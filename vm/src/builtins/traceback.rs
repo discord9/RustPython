@@ -12,7 +12,7 @@ pub struct PyTraceback {
     pub lineno: usize,
 }
 
-#[cfg(feature = "gc")]
+#[cfg(feature = "gc_bacon")]
 unsafe impl crate::object::Trace for PyTraceback {
     fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
         self.next.trace(tracer_fn);
