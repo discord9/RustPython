@@ -28,11 +28,6 @@ use super::{GcHeader, GcStatus, Trace, TracerFn};
 use crate::common::refcount::RefCount;
 use crate::{
     builtins::{PyDictRef, PyType, PyTypeRef},
-    common::{
-        atomic::{OncePtr, PyAtomic, Radium},
-        linked_list::{Link, LinkedList, Pointers},
-        lock::{PyMutex, PyMutexGuard, PyRwLock},
-    },
     vm::VirtualMachine,
 };
 
@@ -1722,6 +1717,9 @@ pub(crate) fn init_type_hierarchy() -> (PyTypeRef, PyTypeRef, PyTypeRef) {
                 &mut (*object_type_ptr).typ as *mut PyRwLock<PyTypeRef> as *mut UninitRef<PyType>,
                 PyRwLock::new(NonNull::new_unchecked(type_type_ptr)),
             );
+            #[cfg(feature = "gc")]
+            (*type_type_ptr.cast::<PyObject>()).increment();
+            #[cfg(not(feature = "gc"))]
             (*type_type_ptr).ref_count.inc();
             ptr::write(
                 &mut (*type_type_ptr).typ as *mut PyRwLock<PyTypeRef> as *mut UninitRef<PyType>,

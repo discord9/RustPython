@@ -1,5 +1,3 @@
-use rustpython_common::lock::PyMutex;
-
 use super::{PositionIterInternal, PyGenericAlias, PyType, PyTypeRef};
 use crate::common::{hash::PyHash, lock::PyMutex};
 use crate::{
