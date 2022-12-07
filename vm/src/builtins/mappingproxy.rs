@@ -24,7 +24,7 @@ enum MappingProxyInner {
     Mapping(ArgMapping),
 }
 
-#[cfg(feature = "gc")]
+#[cfg(feature = "gc_bacon")]
 unsafe impl crate::object::Trace for MappingProxyInner {
     fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
         match self {

@@ -42,7 +42,7 @@ pub struct PyType {
     pub heaptype_ext: Option<Pin<Box<HeapTypeExt>>>,
 }
 
-#[cfg(feature = "gc")]
+#[cfg(feature = "gc_bacon")]
 unsafe impl crate::object::Trace for PyType {
     fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
         self.base.trace(tracer_fn);

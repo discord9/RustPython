@@ -59,8 +59,8 @@ unicode_names2 = { version = "0.6.0", git = "https://github.com/youknowone/unico
 widestring = "0.5.1"
 
 [features]
-default = ["threading", "stdlib", "zlib", "importlib", "encodings", "rustpython-parser/lalrpop", "gc"]
-gc = ["rustpython-vm/gc", "rustpython-stdlib/gc"]
+default = ["threading", "stdlib", "zlib", "importlib", "encodings", "rustpython-parser/lalrpop", "gc_bacon"]
+gc_bacon = ["rustpython-vm/gc_bacon", "rustpython-stdlib/gc"]
 importlib = ["rustpython-vm/importlib"]
 encodings = ["rustpython-vm/encodings"]
 stdlib = ["rustpython-stdlib", "rustpython-pylib"]

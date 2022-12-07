@@ -36,7 +36,7 @@ pub struct PyFunction {
     jitted_code: OnceCell<CompiledCode>,
 }
 
-#[cfg(feature = "gc")]
+#[cfg(feature = "gc_bacon")]
 unsafe impl crate::object::Trace for PyFunction {
     fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
         self.globals.trace(tracer_fn);

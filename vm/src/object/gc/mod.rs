@@ -37,7 +37,7 @@ impl GcStatus {
 }
 
 pub fn collect() -> GcResult {
-    #[cfg(feature = "gc")]
+    #[cfg(feature = "gc_bacon")]
     {
         #[cfg(feature = "threading")]
         {
@@ -48,14 +48,14 @@ pub fn collect() -> GcResult {
             GLOBAL_COLLECTOR.with(|v| v.force_gc())
         }
     }
-    #[cfg(not(feature = "gc"))]
+    #[cfg(not(feature = "gc_bacon"))]
     {
         Default::default()
     }
 }
 
 pub fn try_gc() -> GcResult {
-    #[cfg(feature = "gc")]
+    #[cfg(feature = "gc_bacon")]
     {
         #[cfg(feature = "threading")]
         {
@@ -66,14 +66,14 @@ pub fn try_gc() -> GcResult {
             GLOBAL_COLLECTOR.with(|v| v.fast_try_gc())
         }
     }
-    #[cfg(not(feature = "gc"))]
+    #[cfg(not(feature = "gc_bacon"))]
     {
         Default::default()
     }
 }
 
 pub fn isenabled() -> bool {
-    #[cfg(feature = "gc")]
+    #[cfg(feature = "gc_bacon")]
     {
         #[cfg(feature = "threading")]
         {
@@ -84,14 +84,14 @@ pub fn isenabled() -> bool {
             GLOBAL_COLLECTOR.with(|v| v.is_enabled())
         }
     }
-    #[cfg(not(feature = "gc"))]
+    #[cfg(not(feature = "gc_bacon"))]
     {
         false
     }
 }
 
 pub fn enable() {
-    #[cfg(feature = "gc")]
+    #[cfg(feature = "gc_bacon")]
     {
         #[cfg(feature = "threading")]
         {
@@ -102,12 +102,12 @@ pub fn enable() {
             GLOBAL_COLLECTOR.with(|v| v.enable())
         }
     }
-    #[cfg(not(feature = "gc"))]
+    #[cfg(not(feature = "gc_bacon"))]
     return;
 }
 
 pub fn disable() {
-    #[cfg(feature = "gc")]
+    #[cfg(feature = "gc_bacon")]
     {
         #[cfg(feature = "threading")]
         {
@@ -118,6 +118,6 @@ pub fn disable() {
             GLOBAL_COLLECTOR.with(|v| v.disable())
         }
     }
-    #[cfg(not(feature = "gc"))]
+    #[cfg(not(feature = "gc_bacon"))]
     return;
 }

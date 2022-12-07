@@ -31,7 +31,7 @@ pub struct Dict<T = PyObjectRef> {
     inner: PyRwLock<DictInner<T>>,
 }
 
-#[cfg(feature = "gc")]
+#[cfg(feature = "gc_bacon")]
 unsafe impl<T: crate::object::Trace> crate::object::Trace for Dict<T> {
     fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
         self.inner.trace(tracer_fn);
@@ -76,7 +76,7 @@ struct DictInner<T> {
     entries: Vec<Option<DictEntry<T>>>,
 }
 
-#[cfg(feature = "gc")]
+#[cfg(feature = "gc_bacon")]
 unsafe impl<T: crate::object::Trace> crate::object::Trace for DictInner<T> {
     fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
         self.entries

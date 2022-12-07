@@ -204,7 +204,7 @@ pub struct PyNumber<'a> {
     methods: &'a PyNumberMethods,
 }
 
-#[cfg(feature = "gc")]
+#[cfg(feature = "gc_bacon")]
 unsafe impl<'a> crate::object::Trace for PyNumber<'a> {
     fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
         self.obj.trace(tracer_fn)

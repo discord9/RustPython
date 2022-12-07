@@ -353,7 +353,7 @@ impl ExecutingFrame<'_> {
         loop {
             gc_cnt += 1;
             if gc_cnt > 1000 {
-                #[cfg(feature = "gc")]
+                #[cfg(feature = "gc_bacon")]
                 {
                     crate::object::try_gc();
                 }
