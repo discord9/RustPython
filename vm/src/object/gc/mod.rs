@@ -4,7 +4,7 @@ mod trace;
 
 pub use collector::{Collector, GLOBAL_COLLECTOR};
 pub use header::{Color, GcHeader, GcResult};
-pub use trace::{Trace, TraceHelper, TracerFn};
+pub use trace::{MaybeTrace, Trace, TraceHelper, TracerFn};
 
 use crate::PyObject;
 
