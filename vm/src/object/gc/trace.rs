@@ -9,6 +9,14 @@ use super::GcObjRef;
 
 pub type TracerFn<'a> = dyn FnMut(GcObjRef) + 'a;
 
+/// impl for PyObjectPayload, `pyclass` proc macro will handle the actual dispatch if type impl trace
+pub trait MaybeTrace {
+    /// if is traceable, will be used by vtable to determine
+    const IS_TRACE: bool = false;
+    // if this type is traceable, then call with tracer_fn, default to do nothing
+    fn try_trace(&self, _tracer_fn: &mut TracerFn) {}
+}
+
 /// # Safety
 /// impl `trace()` with caution! Following those guideline so trace doesn't cause memory error!:
 /// - Make sure that every owned object(Every PyObjectRef/PyRef) is called with tracer_fn **at most once**.
