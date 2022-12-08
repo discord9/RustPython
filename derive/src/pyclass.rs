@@ -335,8 +335,8 @@ pub(crate) fn impl_pyclass(attr: AttributeArgs, item: Item) -> Result<TokenStrea
 
     let ret = quote! {
         #item
-        #class_def
         #maybe_trace
+        #class_def
     };
     Ok(ret)
 }

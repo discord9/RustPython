@@ -31,8 +31,6 @@ use crate::{
     vm::VirtualMachine,
 };
 
-#[cfg(feature = "gc_bacon")]
-use crate::list_traceable;
 use itertools::Itertools;
 use std::{
     any::TypeId,
@@ -88,14 +86,22 @@ pub static ID2TYPE: Lazy<std::sync::Mutex<std::collections::HashMap<TypeId, Stri
 /// A type to just represent "we've erased the type of this object, cast it before you use it"
 #[derive(Debug)]
 struct Erased;
-
-struct PyObjVTable {
-    drop_dealloc: unsafe fn(*mut PyObject),
-    #[cfg(feature = "gc_bacon")]
-    drop_only: unsafe fn(*mut PyObject),
-    #[cfg(feature = "gc_bacon")]
-    dealloc_only: unsafe fn(*mut PyObject),
-    debug: unsafe fn(&PyObject, &mut fmt::Formatter) -> fmt::Result,
+cfg_if::cfg_if! {
+    if #[cfg(feature = "gc_bacon")] {
+        struct PyObjVTable {
+            drop_dealloc: unsafe fn(*mut PyObject),
+            drop_only: unsafe fn(*mut PyObject),
+            dealloc_only: unsafe fn(*mut PyObject),
+            debug: unsafe fn(&PyObject, &mut fmt::Formatter) -> fmt::Result,
+            trace: Option<unsafe fn(&PyObject, &mut TracerFn)>
+        }
+    }
+    else{
+        struct PyObjVTable {
+            drop_dealloc: unsafe fn(*mut PyObject),
+            debug: unsafe fn(&PyObject, &mut fmt::Formatter) -> fmt::Result,
+        }
+    }
 }
 
 unsafe fn drop_dealloc_obj<T: PyObjectPayload>(x: *mut PyObject) {
@@ -159,6 +165,12 @@ unsafe fn debug_obj<T: PyObjectPayload>(x: &PyObject, f: &mut fmt::Formatter) ->
     fmt::Debug::fmt(x, f)
 }
 
+unsafe fn try_trace_obj<T: PyObjectPayload>(x: &PyObject, tracer_fn: &mut TracerFn) {
+    let x = &*(x as *const PyObject as *const PyInner<T>);
+    let payload = &x.payload;
+    payload.try_trace(tracer_fn)
+}
+
 impl PyObjVTable {
     pub fn of<T: PyObjectPayload>() -> &'static Self {
         struct Helper<T: PyObjectPayload>(PhantomData<T>);
@@ -173,6 +185,13 @@ impl PyObjVTable {
                 #[cfg(feature = "gc_bacon")]
                 dealloc_only: dealloc_only_obj::<T>,
                 debug: debug_obj::<T>,
+                trace: {
+                    if T::IS_TRACE {
+                        Some(try_trace_obj::<T>)
+                    } else {
+                        None
+                    }
+                },
             };
         }
         &Helper::<T>::VTABLE
@@ -212,23 +231,12 @@ unsafe impl Trace for PyInner<Erased> {
         // weak_list keeps a *pointer* to a struct for maintaince weak ref, so no ownership, no trace
         self.slots.trace(tracer_fn);
 
-        /// FIXME(discord9): Optional trait bound(Like a ?GcTrace) require specialization
-        ///
-        /// https://stackoverflow.com/questions/68701910/function-optional-trait-bound-in-rust
-        ///
-        /// fall back to use TypeId for now
-        macro_rules! optional_trace {
-            ($($TY: ty),*$(,)?) => {
-                $(
-                    if TypeId::of::<$TY>() == self.typeid{
-                        // Safety: because typeid said so!
-                        let inner: &PyInner<$TY> = unsafe { &*(self as *const PyInner<Erased> as *const PyInner<$TY>) };
-                        inner.payload.trace(tracer_fn);
-                    }
-                )else*
-            };
-        }
-        list_traceable!(optional_trace);
+        if let Some(f) = self.vtable.trace {
+            unsafe {
+                let zelf = &*(self as *const PyInner<Erased> as *const PyObject);
+                f(zelf, tracer_fn)
+            }
+        };
     }
 }
 
