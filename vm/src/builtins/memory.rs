@@ -30,7 +30,6 @@ use crate::{
 use crossbeam_utils::atomic::AtomicCell;
 use itertools::Itertools;
 use once_cell::sync::Lazy;
-use rustpython_common::lock::PyRwLock;
 use std::{cmp::Ordering, fmt::Debug, mem::ManuallyDrop, ops::Range};
 
 #[pytrace]

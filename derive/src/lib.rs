@@ -95,6 +95,10 @@ pub fn pypayload(input: TokenStream) -> TokenStream {
 /// use on struct with named fields like `struct A{x:i32, y:i32}` to impl `Trace` for datatype
 ///
 /// use `#[notrace]` on fields you wish not to trace
+///
+/// add `trace` attr to `#[pyclass]` to make it
+/// traceable(Even from type-erased PyObject)(i.e. write `#[pyclass(trace)]`)
+/// better to place after `#[pyclass]` so pyclass know `pytrace`'s existance and impl a MaybeTrace calling Trace
 #[proc_macro_attribute]
 pub fn pytrace(
     attr: proc_macro::TokenStream,
