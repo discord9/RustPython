@@ -194,6 +194,20 @@ impl ItemMetaInner {
         Ok(value)
     }
 
+    pub fn _exist_path(&self, key: &str) -> Result<bool> {
+        if let Some((_, meta)) = self.meta_map.get(key) {
+            match meta {
+                Meta::Path(p) => Ok(path_eq(p, key)),
+                other => Err(syn::Error::new_spanned(
+                    other,
+                    format!("#[{}({})] is expected", self.meta_name(), key),
+                )),
+            }
+        } else {
+            Ok(false)
+        }
+    }
+
     pub fn _bool(&self, key: &str) -> Result<bool> {
         let value = if let Some((_, meta)) = self.meta_map.get(key) {
             match meta {
@@ -287,7 +301,8 @@ impl ItemMeta for AttrItemMeta {
 pub(crate) struct ClassItemMeta(ItemMetaInner);
 
 impl ItemMeta for ClassItemMeta {
-    const ALLOWED_NAMES: &'static [&'static str] = &["module", "name", "base", "metaclass"];
+    const ALLOWED_NAMES: &'static [&'static str] =
+        &["module", "name", "base", "metaclass", "trace"];
 
     fn from_inner(inner: ItemMetaInner) -> Self {
         Self(inner)
@@ -328,6 +343,10 @@ impl ClassItemMeta {
 
     pub fn metaclass(&self) -> Result<Option<String>> {
         self.inner()._optional_str("metaclass")
+    }
+
+    pub fn is_trace(&self) -> Result<bool> {
+        self.inner()._exist_path("trace")
     }
 
     pub fn module(&self) -> Result<Option<String>> {
