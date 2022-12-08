@@ -2,16 +2,9 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{AttributeArgs, DeriveInput, Result};
 
-pub(crate) fn impl_pytrace(attr: AttributeArgs, mut item: DeriveInput) -> Result<TokenStream> {
-    if !attr.is_empty() {
-        panic!(
-            "pytrace macro expect no attr(s), found {} attr(s)",
-            attr.len()
-        );
-    }
-    let ty = &item.ident;
-
-    let trace_code = match &mut item.data {
+/// also remove `#[notrace]` attr, and not trace corresponding field
+fn gen_trace_code(item: &mut DeriveInput) -> Result<TokenStream> {
+    match &mut item.data {
         syn::Data::Struct(s) => {
             let fields = &mut s.fields;
             if let syn::Fields::Named(ref mut fields) = fields {
@@ -42,14 +35,27 @@ pub(crate) fn impl_pytrace(attr: AttributeArgs, mut item: DeriveInput) -> Result
                         }
                     })
                     .collect();
-                res
+                Ok(res)
             } else {
                 panic!("Expect only Named fields")
             }
         }
         syn::Data::Enum(_) => todo!(),
         syn::Data::Union(_) => todo!(),
-    };
+    }
+}
+
+pub(crate) fn impl_pytrace(attr: AttributeArgs, mut item: DeriveInput) -> Result<TokenStream> {
+    if !attr.is_empty() {
+        panic!(
+            "pytrace macro expect no attr(s), found {} attr(s)",
+            attr.len()
+        );
+    }
+
+    let trace_code = gen_trace_code(&mut item)?;
+
+    let ty = &item.ident;
 
     let ret = quote! {
         #item
