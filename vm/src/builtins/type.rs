@@ -31,7 +31,7 @@ use itertools::Itertools;
 use once_cell::sync::Lazy;
 use std::{borrow::Borrow, collections::HashSet, fmt, ops::Deref, pin::Pin, ptr::NonNull};
 
-#[pyclass(module = false, name = "type")]
+#[pyclass(module = false, name = "type", trace)]
 pub struct PyType {
     pub base: Option<PyTypeRef>,
     pub bases: Vec<PyTypeRef>,
