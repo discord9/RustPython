@@ -3,7 +3,7 @@ use rustpython_common::lock::PyMutex;
 use super::PyType;
 use crate::{class::PyClassImpl, frame::FrameRef, Context, Py, PyPayload, PyRef, VirtualMachine};
 
-#[pyclass(module = false, name = "traceback")]
+#[pyclass(module = false, name = "traceback", trace)]
 #[derive(Debug)]
 pub struct PyTraceback {
     pub next: PyMutex<Option<PyTracebackRef>>,

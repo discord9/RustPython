@@ -23,7 +23,7 @@ use itertools::Itertools;
 #[cfg(feature = "jit")]
 use rustpython_jit::CompiledCode;
 
-#[pyclass(module = false, name = "function")]
+#[pyclass(module = false, name = "function", trace)]
 #[derive(Debug)]
 pub struct PyFunction {
     code: PyRef<PyCode>,
