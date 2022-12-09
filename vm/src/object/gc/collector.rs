@@ -12,7 +12,7 @@ use crate::{
     PyObject,
 };
 
-use super::{GcObj, GcObjRef, GcStatus, TraceHelper};
+use super::{GcObj, GcObjRef, GcStatus};
 
 #[cfg(feature = "threading")]
 pub static LOCK_TIMEOUT: Duration = Duration::from_secs(5);
@@ -396,7 +396,7 @@ impl Collector {
             let rc = obj.header().dec();
             if rc == 0 {
                 self.release(obj)
-            } else if TraceHelper::is_traceable(obj.inner_typeid()) && !obj.header().is_leaked() {
+            } else if obj.is_traceable() && !obj.header().is_leaked() {
                 // only buffer traceable(and not leaked) object for that is where we can detect cycles
                 self.possible_root(obj);
                 GcStatus::ShouldKeep

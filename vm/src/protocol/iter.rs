@@ -15,9 +15,9 @@ where
     O: Borrow<PyObject>;
 
 #[cfg(feature = "gc_bacon")]
-unsafe impl<O: crate::object::Trace + Borrow<PyObject>> crate::object::Trace for PyIter<O> {
+unsafe impl<O: Borrow<PyObject>> crate::object::Trace for PyIter<O> {
     fn trace(&self, tracer_fn: &mut crate::object::TracerFn) {
-        self.0.trace(tracer_fn);
+        self.0.borrow().trace(tracer_fn);
     }
 }
 

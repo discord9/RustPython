@@ -1,8 +1,6 @@
-use rustpython_common::lock::PyMutex;
-
 use super::{PositionIterInternal, PyGenericAlias, PyType, PyTypeRef};
 use crate::atomic_func;
-use crate::common::hash::PyHash;
+use crate::common::{hash::PyHash, lock::PyMutex};
 use crate::{
     class::PyClassImpl,
     convert::{ToPyObject, TransmuteFromObject},
