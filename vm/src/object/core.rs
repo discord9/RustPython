@@ -106,7 +106,7 @@ cfg_if::cfg_if! {
 
 unsafe fn drop_dealloc_obj<T: PyObjectPayload>(x: *mut PyObject) {
     #[cfg(feature = "gc_bacon")]
-    if x.as_ref().unwrap().header().buffered() {
+    if (*x).header().buffered() {
         error!("Try to drop&dealloc a buffered object! Drop only for now!");
         drop_only_obj::<T>(x);
     } else {
@@ -130,7 +130,7 @@ macro_rules! partially_drop {
 /// NOTE: `header` is not drop to prevent UB
 #[cfg(feature = "gc_bacon")]
 unsafe fn drop_only_obj<T: PyObjectPayload>(x: *mut PyObject) {
-    let obj = x.cast::<PyInner<T>>().as_ref().expect("Non-Null Pointer");
+    let obj = &*x.cast::<PyInner<T>>();
     partially_drop!(
         obj.
         #[cfg(debug_assertions)]
@@ -151,12 +151,12 @@ unsafe fn drop_only_obj<T: PyObjectPayload>(x: *mut PyObject) {
 #[cfg(feature = "gc_bacon")]
 unsafe fn dealloc_only_obj<T: PyObjectPayload>(x: *mut PyObject) {
     {
-        let obj = x.cast::<PyInner<T>>().as_ref().expect("Non-Null Pointer");
+        let obj = &*x.cast::<PyInner<T>>();
         partially_drop!(obj.header, vtable, weak_list);
     } // don't want keep a ref to a to be deallocated object
     std::alloc::dealloc(
         x.cast(),
-        std::alloc::Layout::for_value(x.cast::<PyInner<T>>().as_ref().unwrap()),
+        std::alloc::Layout::for_value(&*x.cast::<PyInner<T>>()),
     );
 }
 
@@ -165,6 +165,7 @@ unsafe fn debug_obj<T: PyObjectPayload>(x: &PyObject, f: &mut fmt::Formatter) ->
     fmt::Debug::fmt(x, f)
 }
 
+#[cfg(feature = "gc_bacon")]
 unsafe fn try_trace_obj<T: PyObjectPayload>(x: &PyObject, tracer_fn: &mut TracerFn) {
     let x = &*(x as *const PyObject as *const PyInner<T>);
     let payload = &x.payload;
@@ -185,6 +186,7 @@ impl PyObjVTable {
                 #[cfg(feature = "gc_bacon")]
                 dealloc_only: dealloc_only_obj::<T>,
                 debug: debug_obj::<T>,
+                #[cfg(feature = "gc_bacon")]
                 trace: {
                     if T::IS_TRACE {
                         Some(try_trace_obj::<T>)
@@ -700,19 +702,17 @@ pub struct PyObject(PyInner<Erased>);
 
 #[cfg(feature = "gc_bacon")]
 impl PyObject {
-    #[cfg(feature = "gc_bacon")]
-    pub fn header(&self) -> &GcHeader {
+    pub(in crate::object) fn header(&self) -> &GcHeader {
         &self.0.header
     }
 
-    pub fn inner_typeid(&self) -> TypeId {
-        self.0.typeid
+    pub(in crate::object) fn is_traceable(&self) -> bool {
+        self.0.vtable.trace.is_some()
     }
-
-    pub fn increment(&self) {
+    fn increment(&self) {
         self.0.header.gc().increment(self)
     }
-    pub fn decrement(&self) -> GcStatus {
+    fn decrement(&self) -> GcStatus {
         self.0.header.gc().decrement(self)
     }
 }
@@ -1132,23 +1132,6 @@ impl PyObject {
         // Safety: after drop_only, header should still remain undropped
         #[cfg(feature = "gc_bacon")]
         ptr.as_ref().header().set_done_drop(true);
-        true
-    }
-
-    #[cfg(feature = "gc_bacon")]
-    #[allow(unused)]
-    pub(crate) unsafe fn drop_only(ptr: NonNull<PyObject>) -> bool {
-        let zelf = ptr.as_ref();
-        if !zelf.header().check_set_drop_only() {
-            return false;
-        }
-
-        // not set PyInner's is_drop because still havn't dealloc
-        let drop_only = zelf.0.vtable.drop_only;
-
-        drop_only(ptr.as_ptr());
-        // Safety: after drop_only, header should still remain undropped
-        zelf.header().set_done_drop(true);
         true
     }
 

@@ -1,8 +1,5 @@
 use super::{PositionIterInternal, PyGenericAlias, PyType, PyTypeRef};
-use crate::common::{
-    hash::PyHash,
-    lock::{PyMutex, PyRwLock},
-};
+use crate::common::{hash::PyHash, lock::PyMutex};
 use crate::{
     atomic_func,
     class::PyClassImpl,
