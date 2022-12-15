@@ -108,8 +108,7 @@ fn test_state() {
 pub struct GcHeader {
     ref_cnt: PyAtomic<usize>,
     state: PyMutex<State>,
-    exclusive: PyMutex<()>,
-    gc: PyRc<Collector>,
+    exclusive: PyMutex<()>
 }
 
 impl Default for GcHeader {
@@ -117,13 +116,7 @@ impl Default for GcHeader {
         Self {
             ref_cnt: 1.into(),
             state: Default::default(),
-            exclusive: PyMutex::new(()),
-            /// when threading, using a global GC
-            #[cfg(feature = "threading")]
-            gc: GLOBAL_COLLECTOR.clone(),
-            /// when not threading, using a gc per thread
-            #[cfg(not(feature = "threading"))]
-            gc: GLOBAL_COLLECTOR.with(|v| v.clone()),
+            exclusive: PyMutex::new(())
         }
     }
 }
@@ -143,8 +136,32 @@ impl GcHeader {
         self.exclusive.lock()
     }
 
+    pub fn with_gc<F, R>(&self, mut f: F)->R
+    where
+        F: FnMut(&'static Collector)->R,
+    {
+        #[cfg(feature = "threading")]
+        {
+            f(&GLOBAL_COLLECTOR)
+        }
+        /// when not threading, using a gc per thread
+        #[cfg(not(feature = "threading"))]
+        {
+            GLOBAL_COLLECTOR.with(|v| f(&v))
+        }
+    }
+
     pub fn gc(&self) -> PyRc<Collector> {
-        self.gc.clone()
+        #[cfg(feature = "threading")]
+        let gc = {
+            GLOBAL_COLLECTOR.clone()
+        };
+        /// when not threading, using a gc per thread
+        #[cfg(not(feature = "threading"))]
+        let gc = {
+            GLOBAL_COLLECTOR.with(|v| v.clone())
+        };
+        gc
     }
 
     pub fn is_done_drop(&self) -> bool {
@@ -243,7 +260,7 @@ impl GcHeader {
             // could be false alarm for PyWeak, like set is_dealloc, then block by guard and havn't drop&dealloc
             debug!("Try to pausing a already deallocated object: {:?}", self);
         }
-        self.gc.try_pausing()
+        self.with_gc(|gc|gc.try_pausing())
     }
 
     /// This function will block if is a garbage collect is happening
@@ -252,7 +269,7 @@ impl GcHeader {
             // could be false alarm for PyWeak, like set is_dealloc, then block by guard and havn't drop&dealloc
             debug!("Try to pausing a already deallocated object: {:?}", self);
         }
-        self.gc.do_pausing();
+        self.with_gc(|gc|gc.do_pausing());
     }
     pub fn color(&self) -> Color {
         self.state.lock().color()
