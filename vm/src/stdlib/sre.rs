@@ -375,9 +375,9 @@ mod _sre {
             };
 
             if flags.is_empty() {
-                Ok(format!("re.compile({})", s))
+                Ok(format!("re.compile({s})"))
             } else {
-                Ok(format!("re.compile({}, {})", s, flags))
+                Ok(format!("re.compile({s}, {flags})"))
             }
         }
 
@@ -756,14 +756,15 @@ mod _sre {
 
     impl AsMapping for Match {
         fn as_mapping() -> &'static PyMappingMethods {
-            static AS_MAPPING: PyMappingMethods = PyMappingMethods {
-                subscript: atomic_func!(|mapping, needle, vm| {
-                    Match::mapping_downcast(mapping)
-                        .getitem(needle.to_owned(), vm)
-                        .map(|x| x.to_pyobject(vm))
-                }),
-                ..PyMappingMethods::NOT_IMPLEMENTED
-            };
+            static AS_MAPPING: once_cell::sync::Lazy<PyMappingMethods> =
+                once_cell::sync::Lazy::new(|| PyMappingMethods {
+                    subscript: atomic_func!(|mapping, needle, vm| {
+                        Match::mapping_downcast(mapping)
+                            .getitem(needle.to_owned(), vm)
+                            .map(|x| x.to_pyobject(vm))
+                    }),
+                    ..PyMappingMethods::NOT_IMPLEMENTED
+                });
             &AS_MAPPING
         }
     }

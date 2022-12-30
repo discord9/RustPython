@@ -549,12 +549,12 @@ mod sys {
         }
         assert!(unraisable
             .exc_type
-            .fast_issubclass(vm.ctx.exceptions.exception_type));
+            .fast_issubclass(vm.ctx.exceptions.base_exception_type));
 
         // TODO: print module name and qualname
 
         if !vm.is_none(&unraisable.exc_value) {
-            write!(stderr, ": ");
+            write!(stderr, "{}: ", unraisable.exc_type);
             if let Ok(str) = unraisable.exc_value.str(vm) {
                 write!(stderr, "{}", str.as_str());
             } else {
@@ -619,8 +619,7 @@ mod sys {
             Ok(())
         } else {
             Err(vm.new_recursion_error(format!(
-                "cannot set the recursion limit to {} at the recursion depth {}: the limit is too low",
-                recursion_limit, recursion_depth
+                "cannot set the recursion limit to {recursion_limit} at the recursion depth {recursion_depth}: the limit is too low"
             )))
         }
     }
@@ -920,7 +919,7 @@ impl PyStderr<'_> {
                 return;
             }
         }
-        eprint!("{}", args)
+        eprint!("{args}")
     }
 }
 

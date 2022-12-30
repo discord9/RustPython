@@ -1,3 +1,5 @@
+use once_cell::sync::Lazy;
+
 /*
  * Builtin set type with a sequence of unique items.
  */
@@ -626,7 +628,7 @@ impl PySet {
         let borrowed_name = class.name();
         let class_name = borrowed_name.deref();
         let s = if zelf.inner.len() == 0 {
-            format!("{}()", class_name)
+            format!("{class_name}()")
         } else if let Some(_guard) = ReprGuard::enter(vm, zelf.as_object()) {
             let name = if class_name != "set" {
                 Some(class_name)
@@ -635,7 +637,7 @@ impl PySet {
             };
             zelf.inner.repr(name, vm)?
         } else {
-            format!("{}(...)", class_name)
+            format!("{class_name}(...)")
         };
         Ok(s)
     }
@@ -767,13 +769,13 @@ impl Initializer for PySet {
 
 impl AsSequence for PySet {
     fn as_sequence() -> &'static PySequenceMethods {
-        static AS_SEQUENCE: PySequenceMethods = PySequenceMethods {
+        static AS_SEQUENCE: Lazy<PySequenceMethods> = Lazy::new(|| PySequenceMethods {
             length: atomic_func!(|seq, _vm| Ok(PySet::sequence_downcast(seq).len())),
             contains: atomic_func!(|seq, needle, vm| PySet::sequence_downcast(seq)
                 .inner
                 .contains(needle, vm)),
             ..PySequenceMethods::NOT_IMPLEMENTED
-        };
+        });
         &AS_SEQUENCE
     }
 }
@@ -964,11 +966,11 @@ impl PyFrozenSet {
         let class = zelf.class();
         let class_name = class.name();
         let s = if inner.len() == 0 {
-            format!("{}()", class_name)
+            format!("{class_name}()")
         } else if let Some(_guard) = ReprGuard::enter(vm, zelf.as_object()) {
             inner.repr(Some(&class_name), vm)?
         } else {
-            format!("{}(...)", class_name)
+            format!("{class_name}(...)")
         };
         Ok(s)
     }
@@ -989,13 +991,13 @@ impl PyFrozenSet {
 
 impl AsSequence for PyFrozenSet {
     fn as_sequence() -> &'static PySequenceMethods {
-        static AS_SEQUENCE: PySequenceMethods = PySequenceMethods {
+        static AS_SEQUENCE: Lazy<PySequenceMethods> = Lazy::new(|| PySequenceMethods {
             length: atomic_func!(|seq, _vm| Ok(PyFrozenSet::sequence_downcast(seq).len())),
             contains: atomic_func!(|seq, needle, vm| PyFrozenSet::sequence_downcast(seq)
                 .inner
                 .contains(needle, vm)),
             ..PySequenceMethods::NOT_IMPLEMENTED
-        };
+        });
         &AS_SEQUENCE
     }
 }
@@ -1059,7 +1061,7 @@ impl TryFromObject for AnySet {
         {
             Ok(AnySet { object: obj })
         } else {
-            Err(vm.new_type_error(format!("{} is not a subtype of set or frozenset", class)))
+            Err(vm.new_type_error(format!("{class} is not a subtype of set or frozenset")))
         }
     }
 }

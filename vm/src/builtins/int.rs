@@ -20,6 +20,7 @@ use num_bigint::{BigInt, BigUint, Sign};
 use num_integer::Integer;
 use num_rational::Ratio;
 use num_traits::{One, Pow, PrimInt, Signed, ToPrimitive, Zero};
+use once_cell::sync::Lazy;
 use std::ops::{Div, Neg};
 use std::{fmt, ops::Not};
 
@@ -728,7 +729,7 @@ impl Hashable for PyInt {
 
 impl AsNumber for PyInt {
     fn as_number() -> &'static PyNumberMethods {
-        static AS_NUMBER: PyNumberMethods = PyNumberMethods {
+        static AS_NUMBER: Lazy<PyNumberMethods> = Lazy::new(|| PyNumberMethods {
             add: atomic_func!(|num, other, vm| PyInt::number_int_op(num, other, |a, b| a + b, vm)),
             subtract: atomic_func!(|num, other, vm| PyInt::number_int_op(
                 num,
@@ -794,14 +795,14 @@ impl AsNumber for PyInt {
             }),
             index: atomic_func!(|num, vm| Ok(PyInt::number_int(num, vm))),
             ..PyNumberMethods::NOT_IMPLEMENTED
-        };
+        });
         &AS_NUMBER
     }
 }
 
 impl PyInt {
     fn number_general_op<F>(
-        number: &PyNumber,
+        number: PyNumber,
         other: &PyObject,
         op: F,
         vm: &VirtualMachine,
@@ -816,14 +817,14 @@ impl PyInt {
         }
     }
 
-    fn number_int_op<F>(number: &PyNumber, other: &PyObject, op: F, vm: &VirtualMachine) -> PyResult
+    fn number_int_op<F>(number: PyNumber, other: &PyObject, op: F, vm: &VirtualMachine) -> PyResult
     where
         F: FnOnce(&BigInt, &BigInt) -> BigInt,
     {
         Self::number_general_op(number, other, |a, b, _vm| op(a, b).to_pyresult(vm), vm)
     }
 
-    fn number_int(number: &PyNumber, vm: &VirtualMachine) -> PyIntRef {
+    fn number_int(number: PyNumber, vm: &VirtualMachine) -> PyIntRef {
         if let Some(zelf) = number.obj.downcast_ref_if_exact::<Self>(vm) {
             zelf.to_owned()
         } else {

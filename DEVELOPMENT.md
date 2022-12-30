@@ -116,7 +116,7 @@ Understanding a new codebase takes time. Here's a brief view of the
 repository's structure:
 
 - `compiler/src`: python compilation to bytecode
-  - `bytecode/src`: python bytecode representation in rust structures
+  - `core/src`: python bytecode representation in rust structures
   - `parser/src`: python lexing, parsing and ast
 - `derive/src`: Rust language extensions and macros specific to rustpython
 - `Lib`: Carefully selected / copied files from CPython sourcecode. This is
@@ -173,8 +173,8 @@ Tree) to bytecode. The implementation of the compiler is found in the
 `compiler/src` directory. The compiler implements Python's symbol table,
 ast->bytecode compiler, and bytecode optimizer in Rust.
 
-Implementation of bytecode structure in Rust is found in the `bytecode/src`
-directory. `bytecode/src/lib.rs` contains the representation of
+Implementation of bytecode structure in Rust is found in the `compiler/core/src`
+directory. `compiler/core/src/bytecode.rs` contains the representation of
 instructions and operations in Rust. Further information about Python's
 bytecode instructions can be found in the
 [Python documentation](https://docs.python.org/3/library/dis.html#bytecodes).
@@ -189,7 +189,7 @@ Python Standard Library modules in Rust (`vm/src/stdlib`). In Python
 everything can be represented as an object. The `vm/src/builtins` directory holds
 the Rust code used to represent different Python objects and their methods. The
 core implementation of what a Python object is can be found in
-`vm/src/pyobjectrc.rs`.
+`vm/src/object/core.rs`.
 
 ### Code generation
 
@@ -202,4 +202,4 @@ There are some code generations involved in building RustPython:
 ## Questions
 
 Have you tried these steps and have a question, please chat with us on
-[gitter](https://gitter.im/rustpython/Lobby).
+[Discord](https://discord.gg/vru8NypEhv).

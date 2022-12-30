@@ -21,6 +21,7 @@ use num_bigint::{BigInt, ToBigInt};
 use num_complex::Complex64;
 use num_rational::Ratio;
 use num_traits::{Signed, ToPrimitive, Zero};
+use once_cell::sync::Lazy;
 
 #[pyclass(module = false, name = "float")]
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -123,7 +124,7 @@ fn inner_divmod(v1: f64, v2: f64, vm: &VirtualMachine) -> PyResult<(f64, f64)> {
 
 pub fn float_pow(v1: f64, v2: f64, vm: &VirtualMachine) -> PyResult {
     if v1.is_zero() && v2.is_sign_negative() {
-        let msg = format!("{} cannot be raised to a negative power", v1);
+        let msg = format!("{v1} cannot be raised to a negative power");
         Err(vm.new_zero_division_error(msg))
     } else if v1.is_sign_negative() && (v2.floor() - v2).abs() > f64::EPSILON {
         let v1 = Complex64::new(v1, 0.);
@@ -145,8 +146,8 @@ impl Constructor for PyFloat {
                     return Ok(val);
                 }
 
-                if let Some(f) = val.try_float_opt(vm)? {
-                    f.value
+                if let Some(f) = val.try_float_opt(vm) {
+                    f?.value
                 } else {
                     float_from_string(val, vm)?
                 }
@@ -179,9 +180,7 @@ fn float_from_string(val: PyObjectRef, vm: &VirtualMachine) -> PyResult<f64> {
     };
     float_ops::parse_bytes(b).ok_or_else(|| {
         val.repr(vm)
-            .map(|repr| {
-                vm.new_value_error(format!("could not convert string to float: '{}'", repr))
-            })
+            .map(|repr| vm.new_value_error(format!("could not convert string to float: '{repr}'")))
             .unwrap_or_else(|e| e)
     })
 }
@@ -549,7 +548,7 @@ impl Hashable for PyFloat {
 
 impl AsNumber for PyFloat {
     fn as_number() -> &'static PyNumberMethods {
-        static AS_NUMBER: PyNumberMethods = PyNumberMethods {
+        static AS_NUMBER: Lazy<PyNumberMethods> = Lazy::new(|| PyNumberMethods {
             add: atomic_func!(|num, other, vm| PyFloat::number_float_op(
                 num,
                 other,
@@ -602,14 +601,14 @@ impl AsNumber for PyFloat {
                 PyFloat::number_general_op(num, other, inner_div, vm)
             }),
             ..PyNumberMethods::NOT_IMPLEMENTED
-        };
+        });
         &AS_NUMBER
     }
 }
 
 impl PyFloat {
     fn number_general_op<F, R>(
-        number: &PyNumber,
+        number: PyNumber,
         other: &PyObject,
         op: F,
         vm: &VirtualMachine,
@@ -626,7 +625,7 @@ impl PyFloat {
     }
 
     fn number_float_op<F>(
-        number: &PyNumber,
+        number: PyNumber,
         other: &PyObject,
         op: F,
         vm: &VirtualMachine,
@@ -637,7 +636,7 @@ impl PyFloat {
         Self::number_general_op(number, other, |a, b, _vm| op(a, b), vm)
     }
 
-    fn number_float(number: &PyNumber, vm: &VirtualMachine) -> PyRef<PyFloat> {
+    fn number_float(number: PyNumber, vm: &VirtualMachine) -> PyRef<PyFloat> {
         if let Some(zelf) = number.obj.downcast_ref_if_exact::<Self>(vm) {
             zelf.to_owned()
         } else {

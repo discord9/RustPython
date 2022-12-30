@@ -15,6 +15,7 @@ use crate::{
 };
 use num_complex::Complex64;
 use num_traits::Zero;
+use once_cell::sync::Lazy;
 use rustpython_common::{float_ops, hash};
 use std::num::Wrapping;
 
@@ -68,8 +69,8 @@ impl PyObjectRef {
         if let Some(complex) = self.payload_if_subclass::<PyComplex>(vm) {
             return Ok(Some((complex.value, true)));
         }
-        if let Some(float) = self.try_float_opt(vm)? {
-            return Ok(Some((Complex64::new(float.to_f64(), 0.0), false)));
+        if let Some(float) = self.try_float_opt(vm) {
+            return Ok(Some((Complex64::new(float?.to_f64(), 0.0), false)));
         }
         Ok(None)
     }
@@ -99,7 +100,7 @@ fn inner_div(v1: Complex64, v2: Complex64, vm: &VirtualMachine) -> PyResult<Comp
 fn inner_pow(v1: Complex64, v2: Complex64, vm: &VirtualMachine) -> PyResult<Complex64> {
     if v1.is_zero() {
         return if v2.im != 0.0 {
-            let msg = format!("{} cannot be raised to a negative or complex power", v1);
+            let msg = format!("{v1} cannot be raised to a negative or complex power");
             Err(vm.new_zero_division_error(msg))
         } else if v2.is_zero() {
             Ok(Complex64::new(1.0, 0.0))
@@ -447,7 +448,7 @@ impl Hashable for PyComplex {
 
 impl AsNumber for PyComplex {
     fn as_number() -> &'static PyNumberMethods {
-        static AS_NUMBER: PyNumberMethods = PyNumberMethods {
+        static AS_NUMBER: Lazy<PyNumberMethods> = Lazy::new(|| PyNumberMethods {
             add: atomic_func!(|number, other, vm| PyComplex::number_complex_op(
                 number,
                 other,
@@ -481,14 +482,14 @@ impl AsNumber for PyComplex {
                 PyComplex::number_general_op(number, other, inner_div, vm)
             }),
             ..PyNumberMethods::NOT_IMPLEMENTED
-        };
+        });
         &AS_NUMBER
     }
 }
 
 impl PyComplex {
     fn number_general_op<F, R>(
-        number: &PyNumber,
+        number: PyNumber,
         other: &PyObject,
         op: F,
         vm: &VirtualMachine,
@@ -505,7 +506,7 @@ impl PyComplex {
     }
 
     fn number_complex_op<F>(
-        number: &PyNumber,
+        number: PyNumber,
         other: &PyObject,
         op: F,
         vm: &VirtualMachine,
@@ -516,7 +517,7 @@ impl PyComplex {
         Self::number_general_op(number, other, |a, b, _vm| op(a, b), vm)
     }
 
-    fn number_complex(number: &PyNumber, vm: &VirtualMachine) -> PyRef<PyComplex> {
+    fn number_complex(number: PyNumber, vm: &VirtualMachine) -> PyRef<PyComplex> {
         if let Some(zelf) = number.obj.downcast_ref_if_exact::<Self>(vm) {
             zelf.to_owned()
         } else {

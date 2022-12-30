@@ -17,6 +17,7 @@ use crossbeam_utils::atomic::AtomicCell;
 use num_bigint::{BigInt, Sign};
 use num_integer::Integer;
 use num_traits::{One, Signed, ToPrimitive, Zero};
+use once_cell::sync::Lazy;
 use std::cmp::max;
 
 // Search flag passed to iter_search
@@ -308,7 +309,7 @@ impl PyRange {
         if let Ok(int) = needle.clone().downcast::<PyInt>() {
             match self.index_of(int.as_bigint()) {
                 Some(idx) => Ok(idx),
-                None => Err(vm.new_value_error(format!("{} is not in range", int))),
+                None => Err(vm.new_value_error(format!("{int} is not in range"))),
             }
         } else {
             // Fallback to iteration.
@@ -392,7 +393,7 @@ impl PyRange {
 
 impl AsMapping for PyRange {
     fn as_mapping() -> &'static PyMappingMethods {
-        static AS_MAPPING: PyMappingMethods = PyMappingMethods {
+        static AS_MAPPING: Lazy<PyMappingMethods> = Lazy::new(|| PyMappingMethods {
             length: atomic_func!(
                 |mapping, vm| PyRange::mapping_downcast(mapping).protocol_length(vm)
             ),
@@ -400,14 +401,14 @@ impl AsMapping for PyRange {
                 PyRange::mapping_downcast(mapping).getitem(needle.to_owned(), vm)
             }),
             ..PyMappingMethods::NOT_IMPLEMENTED
-        };
+        });
         &AS_MAPPING
     }
 }
 
 impl AsSequence for PyRange {
     fn as_sequence() -> &'static PySequenceMethods {
-        static AS_SEQUENCE: PySequenceMethods = PySequenceMethods {
+        static AS_SEQUENCE: Lazy<PySequenceMethods> = Lazy::new(|| PySequenceMethods {
             length: atomic_func!(|seq, vm| PyRange::sequence_downcast(seq).protocol_length(vm)),
             item: atomic_func!(|seq, i, vm| {
                 PyRange::sequence_downcast(seq)
@@ -419,7 +420,7 @@ impl AsSequence for PyRange {
                 Ok(PyRange::sequence_downcast(seq).contains(needle.to_owned(), vm))
             }),
             ..PySequenceMethods::NOT_IMPLEMENTED
-        };
+        });
         &AS_SEQUENCE
     }
 }

@@ -22,6 +22,7 @@ use crate::{
 use indexmap::IndexMap;
 use itertools::Itertools;
 use std::fmt;
+use std::iter::zip;
 #[cfg(feature = "threading")]
 use std::sync::atomic;
 
@@ -193,7 +194,7 @@ impl FrameRef {
         let j = std::cmp::min(map.len(), code.varnames.len());
         if !code.varnames.is_empty() {
             let fastlocals = self.fastlocals.lock();
-            for (&k, v) in itertools::zip(&map[..j], &**fastlocals) {
+            for (&k, v) in zip(&map[..j], &**fastlocals) {
                 match locals.mapping().ass_subscript(k, v.clone(), vm) {
                     Ok(()) => {}
                     Err(e) if e.fast_isinstance(vm.ctx.exceptions.key_error) => {}
@@ -203,7 +204,7 @@ impl FrameRef {
         }
         if !code.cellvars.is_empty() || !code.freevars.is_empty() {
             let map_to_dict = |keys: &[&PyStrInterned], values: &[PyCellRef]| {
-                for (&k, v) in itertools::zip(keys, values) {
+                for (&k, v) in zip(keys, values) {
                     if let Some(value) = v.get() {
                         locals.mapping().ass_subscript(k, Some(value), vm)?;
                     } else {
@@ -471,15 +472,12 @@ impl ExecutingFrame<'_> {
         if let Some(&name) = self.code.cellvars.get(i) {
             vm.new_exception_msg(
                 vm.ctx.exceptions.unbound_local_error.to_owned(),
-                format!("local variable '{}' referenced before assignment", name),
+                format!("local variable '{name}' referenced before assignment"),
             )
         } else {
             let name = self.code.freevars[i - self.code.cellvars.len()];
             vm.new_name_error(
-                format!(
-                    "free variable '{}' referenced before assignment in enclosing scope",
-                    name
-                ),
+                format!("free variable '{name}' referenced before assignment in enclosing scope"),
                 name.to_owned(),
             )
         }
@@ -549,11 +547,14 @@ impl ExecutingFrame<'_> {
             }
             bytecode::Instruction::LoadNameAny(idx) => {
                 let name = self.code.names[*idx as usize];
-                let value = self.locals.mapping().subscript(name, vm).ok();
-                self.push_value(match value {
-                    Some(x) => x,
-                    None => self.load_global_or_builtin(name, vm)?,
-                });
+                let result = self.locals.mapping().subscript(name, vm);
+                match result {
+                    Ok(x) => self.push_value(x),
+                    Err(e) if e.fast_isinstance(vm.ctx.exceptions.key_error) => {
+                        self.push_value(self.load_global_or_builtin(name, vm)?);
+                    }
+                    Err(e) => return Err(e),
+                }
                 Ok(None)
             }
             bytecode::Instruction::LoadGlobal(idx) => {
@@ -991,44 +992,13 @@ impl ExecutingFrame<'_> {
                 self.jump(*target);
                 Ok(None)
             }
-            bytecode::Instruction::JumpIfTrue { target } => {
-                let obj = self.pop_value();
-                let value = obj.try_to_bool(vm)?;
-                if value {
-                    self.jump(*target);
-                }
-                Ok(None)
-            }
-
-            bytecode::Instruction::JumpIfFalse { target } => {
-                let obj = self.pop_value();
-                let value = obj.try_to_bool(vm)?;
-                if !value {
-                    self.jump(*target);
-                }
-                Ok(None)
-            }
-
+            bytecode::Instruction::JumpIfTrue { target } => self.jump_if(vm, *target, true),
+            bytecode::Instruction::JumpIfFalse { target } => self.jump_if(vm, *target, false),
             bytecode::Instruction::JumpIfTrueOrPop { target } => {
-                let obj = self.last_value();
-                let value = obj.try_to_bool(vm)?;
-                if value {
-                    self.jump(*target);
-                } else {
-                    self.pop_value();
-                }
-                Ok(None)
+                self.jump_if_or_pop(vm, *target, true)
             }
-
             bytecode::Instruction::JumpIfFalseOrPop { target } => {
-                let obj = self.last_value();
-                let value = obj.try_to_bool(vm)?;
-                if !value {
-                    self.jump(*target);
-                } else {
-                    self.pop_value();
-                }
-                Ok(None)
+                self.jump_if_or_pop(vm, *target, false)
             }
 
             bytecode::Instruction::Raise { kind } => self.execute_raise(vm, *kind),
@@ -1071,7 +1041,7 @@ impl ExecutingFrame<'_> {
         self.globals
             .get_chain(self.builtins, name, vm)?
             .ok_or_else(|| {
-                vm.new_name_error(format!("name '{}' is not defined", name), name.to_owned())
+                vm.new_name_error(format!("name '{name}' is not defined"), name.to_owned())
             })
     }
 
@@ -1111,7 +1081,7 @@ impl ExecutingFrame<'_> {
     fn import_from(&mut self, vm: &VirtualMachine, idx: bytecode::NameIdx) -> PyResult {
         let module = self.last_value();
         let name = self.code.names[idx as usize];
-        let err = || vm.new_import_error(format!("cannot import name '{}'", name), name);
+        let err = || vm.new_import_error(format!("cannot import name '{name}'"), name);
         // Load attribute, and transform any error into import error.
         if let Some(obj) = vm.get_attribute_opt(module.clone(), name)? {
             return Ok(obj);
@@ -1121,7 +1091,7 @@ impl ExecutingFrame<'_> {
             .get_attr(identifier!(vm, __name__), vm)
             .map_err(|_| err())?;
         let mod_name = mod_name.downcast::<PyStr>().map_err(|_| err())?;
-        let full_mod_name = format!("{}.{}", mod_name, name);
+        let full_mod_name = format!("{mod_name}.{name}");
         let sys_modules = vm
             .sys_module
             .clone()
@@ -1495,6 +1465,33 @@ impl ExecutingFrame<'_> {
         self.update_lasti(|i| *i = target_pc);
     }
 
+    #[inline]
+    fn jump_if(&mut self, vm: &VirtualMachine, target: bytecode::Label, flag: bool) -> FrameResult {
+        let obj = self.pop_value();
+        let value = obj.try_to_bool(vm)?;
+        if value == flag {
+            self.jump(target);
+        }
+        Ok(None)
+    }
+
+    #[inline]
+    fn jump_if_or_pop(
+        &mut self,
+        vm: &VirtualMachine,
+        target: bytecode::Label,
+        flag: bool,
+    ) -> FrameResult {
+        let obj = self.last_value();
+        let value = obj.try_to_bool(vm)?;
+        if value == flag {
+            self.jump(target);
+        } else {
+            self.pop_value();
+        }
+        Ok(None)
+    }
+
     /// The top of stack contains the iterator, lets push it forward
     fn execute_for_iter(&mut self, vm: &VirtualMachine, target: bytecode::Label) -> FrameResult {
         let top_of_stack = PyIter::new(self.last_value());
@@ -1714,7 +1711,7 @@ impl ExecutingFrame<'_> {
                 return Ok(None);
             }
             std::cmp::Ordering::Greater => {
-                format!("too many values to unpack (expected {})", size)
+                format!("too many values to unpack (expected {size})")
             }
             std::cmp::Ordering::Less => format!(
                 "not enough values to unpack (expected {}, got {})",
@@ -1898,14 +1895,14 @@ impl fmt::Debug for Frame {
                 if elem.payload_is::<Frame>() {
                     "\n  > {frame}".to_owned()
                 } else {
-                    format!("\n  > {:?}", elem)
+                    format!("\n  > {elem:?}")
                 }
             })
             .collect::<String>();
         let block_str = state
             .blocks
             .iter()
-            .map(|elem| format!("\n  > {:?}", elem))
+            .map(|elem| format!("\n  > {elem:?}"))
             .collect::<String>();
         // TODO: fix this up
         let locals = self.locals.clone();

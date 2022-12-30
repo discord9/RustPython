@@ -1109,7 +1109,7 @@ pub(super) mod _os {
         // TODO: replicate CPython's win32_xstat
         let [] = dir_fd.0;
         let meta = match file {
-            PathOrFd::Path(path) => super::fs_metadata(&path, follow_symlinks.0)?,
+            PathOrFd::Path(path) => super::fs_metadata(path, follow_symlinks.0)?,
             PathOrFd::Fd(fno) => {
                 use std::os::windows::io::FromRawHandle;
                 let handle = Fd(fno).to_raw_handle()?;
@@ -1521,9 +1521,10 @@ pub(super) mod _os {
             };
 
             let tick_for_second = unsafe { libc::sysconf(libc::_SC_CLK_TCK) } as f64;
-            let c = unsafe { libc::times(&mut t as *mut _) } as i64;
+            let c = unsafe { libc::times(&mut t as *mut _) };
 
-            if c == -1 {
+            // XXX: The signedness of `clock_t` varies from platform to platform.
+            if c == (-1i8) as libc::clock_t {
                 return Err(vm.new_os_error("Fail to get times".to_string()));
             }
 
@@ -1609,7 +1610,7 @@ pub(super) mod _os {
         // TODO: just call libc::truncate() on POSIX
         let f = OpenOptions::new()
             .write(true)
-            .open(&path)
+            .open(path)
             .map_err(|e| e.into_pyexception(vm))?;
         f.set_len(length as u64)
             .map_err(|e| e.into_pyexception(vm))?;
@@ -1637,7 +1638,7 @@ pub(super) mod _os {
     #[pyfunction]
     fn waitstatus_to_exitcode(status: i32, vm: &VirtualMachine) -> PyResult<i32> {
         let status = u32::try_from(status)
-            .map_err(|_| vm.new_value_error(format!("invalid WEXITSTATUS: {}", status)))?;
+            .map_err(|_| vm.new_value_error(format!("invalid WEXITSTATUS: {status}")))?;
 
         cfg_if::cfg_if! {
             if #[cfg(not(windows))] {
@@ -1650,7 +1651,7 @@ pub(super) mod _os {
                     return Ok(-libc::WTERMSIG(status));
                 }
 
-                Err(vm.new_value_error(format!("Invalid wait status: {}", status)))
+                Err(vm.new_value_error(format!("Invalid wait status: {status}")))
             } else {
                 i32::try_from(status.rotate_right(8))
                     .map_err(|_| vm.new_value_error(format!("invalid wait status: {}", status)))
