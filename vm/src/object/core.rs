@@ -86,22 +86,19 @@ pub static ID2TYPE: Lazy<std::sync::Mutex<std::collections::HashMap<TypeId, Stri
 /// A type to just represent "we've erased the type of this object, cast it before you use it"
 #[derive(Debug)]
 struct Erased;
-cfg_if::cfg_if! {
-    if #[cfg(feature = "gc_bacon")] {
-        struct PyObjVTable {
-            drop_dealloc: unsafe fn(*mut PyObject),
-            drop_only: unsafe fn(*mut PyObject),
-            dealloc_only: unsafe fn(*mut PyObject),
-            debug: unsafe fn(&PyObject, &mut fmt::Formatter) -> fmt::Result,
-            trace: Option<unsafe fn(&PyObject, &mut TracerFn)>
-        }
-    }
-    else{
-        struct PyObjVTable {
-            drop_dealloc: unsafe fn(*mut PyObject),
-            debug: unsafe fn(&PyObject, &mut fmt::Formatter) -> fmt::Result,
-        }
-    }
+#[cfg(feature = "gc_bacon")]
+struct PyObjVTable {
+    drop_dealloc: unsafe fn(*mut PyObject),
+    drop_only: unsafe fn(*mut PyObject),
+    dealloc_only: unsafe fn(*mut PyObject),
+    debug: unsafe fn(&PyObject, &mut fmt::Formatter) -> fmt::Result,
+    trace: Option<unsafe fn(&PyObject, &mut TracerFn)>,
+}
+
+#[cfg(not(feature = "gc_bacon"))]
+struct PyObjVTable {
+    drop_dealloc: unsafe fn(*mut PyObject),
+    debug: unsafe fn(&PyObject, &mut fmt::Formatter) -> fmt::Result,
 }
 
 unsafe fn drop_dealloc_obj<T: PyObjectPayload>(x: *mut PyObject) {
@@ -1087,14 +1084,10 @@ impl PyObject {
     #[cfg(feature = "gc_bacon")]
     /// only run `__del__`(or `slot_del` depends on the actual object), doesn't drop or dealloc
     pub(in crate::object) unsafe fn del_only(ptr: NonNull<Self>) -> bool {
-        if let Err(()) = ptr.as_ref().try_del() {
-            return false;
-        }
-        true
+        ptr.as_ref().try_del().is_ok()
     }
 
     /// Can only be called when ref_count has dropped to zero. `ptr` must be valid, it run __del__ then drop&dealloc
-    #[inline(never)]
     pub(in crate::object) unsafe fn drop_slow(ptr: NonNull<PyObject>) -> bool {
         if let Err(()) = ptr.as_ref().drop_slow_inner() {
             // abort drop for whatever reason

@@ -252,6 +252,7 @@ impl Collector {
         });
     }
 
+    /// TODO: change to use weak_ref count to prevent premature dealloc in cycles
     /// free everything in white, safe to use even when those objects form cycle refs
     fn free_cycles(&self, white: Vec<NonNull<PyObject>>) -> usize {
         // TODO: maybe never run __del__ anyway, for running a __del__ function is an implementation detail!!!!
