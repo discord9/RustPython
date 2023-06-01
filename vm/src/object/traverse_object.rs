@@ -2,7 +2,9 @@ use std::{fmt, marker::PhantomData};
 
 use crate::{
     object::{
-        debug_obj, drop_dealloc_obj, try_trace_obj, Erased, InstanceDict, PyInner, PyObjectPayload,
+        debug_obj, drop_dealloc_obj,
+        drop_object::{dealloc_only_obj, drop_only_obj},
+        try_trace_obj, Erased, InstanceDict, PyInner, PyObjectPayload,
     },
     PyObject,
 };
@@ -11,6 +13,8 @@ use super::{Traverse, TraverseFn};
 
 pub(in crate::object) struct PyObjVTable {
     pub(in crate::object) drop_dealloc: unsafe fn(*mut PyObject),
+    pub(in crate::object) drop_only: unsafe fn(*mut PyObject),
+    pub(in crate::object) dealloc_only: unsafe fn(*mut PyObject),
     pub(in crate::object) debug: unsafe fn(&PyObject, &mut fmt::Formatter) -> fmt::Result,
     pub(in crate::object) trace: Option<unsafe fn(&PyObject, &mut TraverseFn)>,
 }
@@ -24,6 +28,8 @@ impl PyObjVTable {
         impl<T: PyObjectPayload> VtableHelper for Helper<T> {
             const VTABLE: PyObjVTable = PyObjVTable {
                 drop_dealloc: drop_dealloc_obj::<T>,
+                drop_only: drop_only_obj::<T>,
+                dealloc_only: dealloc_only_obj::<T>,
                 debug: debug_obj::<T>,
                 trace: {
                     if T::IS_TRACE {

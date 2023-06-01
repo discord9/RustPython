@@ -102,9 +102,21 @@ unsafe impl<T: Traverse> Traverse for PyRwLock<T> {
         // if can't get a lock, this means something else is holding the lock,
         // but since gc stopped the world, during gc the lock is always held
         // so it is safe to ignore those in gc
-        if let Some(inner) = self.try_read_recursive() {
-            inner.traverse(traverse_fn)
+
+        let mut chs: Vec<NonNull<PyObject>> = Vec::new();
+        {
+            let obj = self.read();
+            obj.traverse(&mut |ch| {
+                chs.push(NonNull::from(ch));
+            })
         }
+        chs.iter()
+            .map(|ch| {
+                // Safety: during gc, this should be fine since it's shingle-thread, if not during gc, only header is access while is concurrent safe
+                let ch = unsafe { ch.as_ref() };
+                traverse_fn(ch);
+            })
+            .count();
     }
 }
 
@@ -116,14 +128,15 @@ unsafe impl<T: Traverse> Traverse for PyMutex<T> {
     #[inline]
     fn traverse(&self, traverse_fn: &mut TraverseFn) {
         let mut chs: Vec<NonNull<PyObject>> = Vec::new();
-        if let Some(obj) = self.try_lock() {
+        {
+            let obj = self.lock();
             obj.traverse(&mut |ch| {
                 chs.push(NonNull::from(ch));
             })
         }
         chs.iter()
             .map(|ch| {
-                // Safety: during gc, this should be fine, because nothing should write during gc's tracing?
+                // Safety: during gc, this should be fine since it's shingle-thread, if not during gc, only header is access while is concurrent safe
                 let ch = unsafe { ch.as_ref() };
                 traverse_fn(ch);
             })

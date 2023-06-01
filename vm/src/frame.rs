@@ -349,13 +349,24 @@ impl ExecutingFrame<'_> {
         // Execute until return or exception:
         let instrs = &self.code.instructions;
         let mut arg_state = bytecode::OpArgState::default();
+        let mut gc_count = 0;
         loop {
             let idx = self.lasti() as usize;
             self.update_lasti(|i| *i += 1);
             let bytecode::CodeUnit { op, arg } = instrs[idx];
             let arg = arg_state.extend(arg);
             let mut do_extend_arg = false;
+            crate::object::gc::pausing(vm);
+
             let result = self.execute_instruction(op, arg, &mut do_extend_arg, vm);
+
+            crate::object::gc::resuming(vm);
+
+            gc_count += 1;
+            if gc_count > 10_000 {
+                crate::object::gc::try_collect(vm);
+                gc_count = 0;
+            }
             match result {
                 Ok(None) => {}
                 Ok(Some(value)) => {

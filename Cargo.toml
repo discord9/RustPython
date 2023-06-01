@@ -81,7 +81,8 @@ unicode_names2 = "1.1.0"
 widestring = "0.5.1"
 
 [features]
-default = ["threading", "stdlib", "zlib", "importlib"]
+default = ["threading", "stdlib", "zlib", "importlib", "gc_bacon"]
+gc_bacon = ["rustpython-vm/gc_bacon", "rustpython-stdlib/gc"]
 importlib = ["rustpython-vm/importlib"]
 encodings = ["rustpython-vm/encodings"]
 stdlib = ["rustpython-stdlib", "rustpython-pylib", "encodings"]
