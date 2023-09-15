@@ -2,7 +2,7 @@ mod core;
 mod drop_object;
 mod ext;
 #[cfg(feature = "gc_bacon")]
-mod gc;
+pub mod gc;
 mod payload;
 mod traverse;
 mod traverse_object;

@@ -17,9 +17,9 @@ pub enum GcStatus {
 #[derive(Debug, Default)]
 pub struct GcResult {
     /// object that is not in cycle and is collected
-    acyclic_cnt: usize,
+    pub acyclic_cnt: usize,
     /// object that is in cycle and is collected
-    cyclic_cnt: usize,
+    pub cyclic_cnt: usize,
 }
 
 impl GcResult {

@@ -5,23 +5,25 @@ mod gc {
     use crate::vm::{function::FuncArgs, PyResult, VirtualMachine};
 
     #[pyfunction]
-    fn collect(_args: FuncArgs, _vm: &VirtualMachine) -> i32 {
-        0
+    fn collect(_args: FuncArgs, vm: &VirtualMachine) -> i32 {
+        rustpython_vm::object::gc::collect(vm) as i32
     }
 
     #[pyfunction]
-    fn isenabled(_args: FuncArgs, _vm: &VirtualMachine) -> bool {
-        false
+    fn isenabled(_args: FuncArgs, vm: &VirtualMachine) -> bool {
+        rustpython_vm::object::gc::isenabled(vm)
     }
 
     #[pyfunction]
     fn enable(_args: FuncArgs, vm: &VirtualMachine) -> PyResult {
-        Err(vm.new_not_implemented_error("".to_owned()))
+        rustpython_vm::object::gc::setenabled(vm, true);
+        Ok(vm.new_pyobj(()))
     }
 
     #[pyfunction]
     fn disable(_args: FuncArgs, vm: &VirtualMachine) -> PyResult {
-        Err(vm.new_not_implemented_error("".to_owned()))
+        rustpython_vm::object::gc::setenabled(vm, false);
+        Ok(vm.new_pyobj(()))
     }
 
     #[pyfunction]

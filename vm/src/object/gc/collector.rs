@@ -1,11 +1,11 @@
 use super::header::Color;
-use crate::common::lock::{PyMutex, PyMutexGuard, PyRwLock, PyRwLockWriteGuard};
+use crate::common::lock::{PyMutex, PyMutexGuard, PyRwLock, PyRwLockReadGuard, PyRwLockWriteGuard};
 use crate::common::rc::PyRc;
 use crate::object::gc::utils::{GcResult, GcStatus};
 use crate::object::gc::GcObj;
 use crate::object::gc::GcObjRef;
 use crate::object::Traverse;
-use crate::PyObject;
+use crate::{PyObject, VirtualMachine};
 use std::ptr::NonNull;
 use std::time::Instant;
 
@@ -436,4 +436,35 @@ impl Collector {
             }
         }
     }
+}
+
+/// TODO: maybe not use global collector
+pub fn pausing(vm: &VirtualMachine) -> PyRwLockReadGuard<()> {
+    GLOBAL_COLLECTOR.pause.read_recursive()
+}
+
+pub fn try_collect(vm: &VirtualMachine) -> usize {
+    if isenabled(vm) {
+        let res = GLOBAL_COLLECTOR.collect_cycles(false);
+        res.acyclic_cnt + res.cyclic_cnt
+    } else {
+        0
+    }
+}
+
+pub fn collect(vm: &VirtualMachine) -> usize {
+    if isenabled(vm) {
+        let res = GLOBAL_COLLECTOR.collect_cycles(true);
+        res.acyclic_cnt + res.cyclic_cnt
+    } else {
+        0
+    }
+}
+
+pub fn isenabled(vm: &VirtualMachine) -> bool {
+    *GLOBAL_COLLECTOR.is_enabled.lock()
+}
+
+pub fn setenabled(vm: &VirtualMachine, enabled: bool) {
+    *GLOBAL_COLLECTOR.is_enabled.lock() = enabled;
 }
