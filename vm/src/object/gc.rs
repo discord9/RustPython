@@ -36,11 +36,11 @@
 //! 4.3. CollectRoots, at this stage, there is no `Gray` object left, and all `White` object are garbage, we can simply go from root buffer and collect all `White` object for final garbage release,
 //! just need to note that when `CollectWhite` those `buffered` object do not need to be freed, since they are already buffered for later release.
 
-mod header;
 mod collector;
-
+mod drop_object;
+mod header;
+mod utils;
 use crate::PyObject;
-
 
 type GcObj = PyObject;
 type GcObjRef<'a> = &'a GcObj;

@@ -1,10 +1,10 @@
 mod core;
 mod ext;
+#[cfg(feature = "gc_bacon")]
+mod gc;
 mod payload;
 mod traverse;
 mod traverse_object;
-#[cfg(feature = "gc_bacon")]
-mod gc;
 
 pub use self::core::*;
 pub use self::ext::*;

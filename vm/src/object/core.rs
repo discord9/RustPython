@@ -479,7 +479,7 @@ cfg_if::cfg_if! {
 }
 
 #[repr(transparent)]
-pub struct PyObject(PyInner<Erased>);
+pub struct PyObject(pub(super) PyInner<Erased>);
 
 impl Deref for PyObjectRef {
     type Target = PyObject;
