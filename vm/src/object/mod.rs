@@ -1,4 +1,5 @@
 mod core;
+mod drop_object;
 mod ext;
 #[cfg(feature = "gc_bacon")]
 mod gc;

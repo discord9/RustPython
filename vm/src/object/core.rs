@@ -23,7 +23,6 @@ use crate::{
         atomic::{OncePtr, PyAtomic, Radium},
         linked_list::{Link, LinkedList, Pointers},
         lock::{PyMutex, PyMutexGuard, PyRwLock},
-        refcount::RefCount,
     },
     vm::VirtualMachine,
 };
@@ -39,6 +38,10 @@ use std::{
     ptr::{self, NonNull},
 };
 
+#[cfg(not(feature = "gc_bacon"))]
+use crate::common::refcount::RefCount;
+#[cfg(feature = "gc_bacon")]
+use crate::object::gc::GcHeader as RefCount;
 // so, PyObjectRef is basically equivalent to `PyRc<PyInner<dyn PyObjectPayload>>`, except it's
 // only one pointer in width rather than 2. We do that by manually creating a vtable, and putting
 // a &'static reference to it inside the `PyRc` rather than adjacent to it, like trait objects do.
@@ -768,7 +771,7 @@ impl PyObject {
     }
 
     #[inline(always)] // the outer function is never inlined
-    fn drop_slow_inner(&self) -> Result<(), ()> {
+    pub(super) fn drop_slow_inner(&self) -> Result<(), ()> {
         // __del__ is mostly not implemented
         #[inline(never)]
         #[cold]
@@ -810,7 +813,7 @@ impl PyObject {
 
     /// Can only be called when ref_count has dropped to zero. `ptr` must be valid
     #[inline(never)]
-    unsafe fn drop_slow(ptr: NonNull<PyObject>) {
+    pub(super) unsafe fn drop_slow(ptr: NonNull<PyObject>) {
         if let Err(()) = ptr.as_ref().drop_slow_inner() {
             // abort drop for whatever reason
             return;
@@ -870,9 +873,7 @@ impl<'a, T: PyObjectPayload> From<&'a Py<T>> for &'a PyObject {
 impl Drop for PyObjectRef {
     #[inline]
     fn drop(&mut self) {
-        if self.0.ref_count.dec() {
-            unsafe { PyObject::drop_slow(self.ptr) }
-        }
+        PyObject::dec_try_drop(self.ptr);
     }
 }
 
@@ -980,9 +981,7 @@ impl<T: PyObjectPayload> fmt::Debug for PyRef<T> {
 impl<T: PyObjectPayload> Drop for PyRef<T> {
     #[inline]
     fn drop(&mut self) {
-        if self.0.ref_count.dec() {
-            unsafe { PyObject::drop_slow(self.ptr.cast::<PyObject>()) }
-        }
+        PyObject::dec_try_drop(self.ptr.cast::<PyObject>());
     }
 }
 

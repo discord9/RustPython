@@ -54,6 +54,7 @@ pub struct Collector {
     roots: PyMutex<Vec<WrappedPtr>>,
     /// for stop the world, will be try to check lock every time deref ObjecteRef
     /// to achive pausing
+    /// TODO(discord9): stop-the-world with pausing between every bytecode execution
     pause: PyRwLock<()>,
     last_gc_time: PyMutex<Instant>,
     is_enabled: PyMutex<bool>,
@@ -154,9 +155,7 @@ impl Collector {
             .into_iter()
             .filter(|ptr| {
                 let obj = unsafe { ptr.as_ref() };
-                let header = obj.header();
-                if header.color() == Color::Purple {
-                    drop(header);
+                if obj.header().color() == Color::Purple {
                     Self::mark_gray(obj);
                     true
                 } else {
@@ -326,7 +325,7 @@ impl Collector {
         // drop all for once at seperate loop to avoid certain cycle ref double drop bug
         let can_deallocs: Vec<_> = white
             .iter()
-            .map(|i| unsafe { PyObject::drop_clr_wr(*i) })
+            .map(|i| unsafe { PyObject::drop_only(*i) })
             .collect();
         // drop first, deallocate later so to avoid heap corruption
         // cause by circular ref and therefore
@@ -363,8 +362,7 @@ impl Collector {
         // prevent starting a gc in the middle of change header state
         // let _lock_gc = obj.header().try_pausing();
 
-        let mut header = obj.header();
-        header.inc_black();
+        obj.header().inc_black();
     }
 
     /// if the last ref to a object call decrement() on object,
@@ -383,6 +381,7 @@ impl Collector {
         // prevent RAII Drop to drop below zero
         if header.rc() > 0 {
             let rc = header.dec();
+            drop(header);
             if rc == 0 {
                 self.release(obj)
             } else if obj.is_traceable() {

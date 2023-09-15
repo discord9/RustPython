@@ -37,10 +37,9 @@
 //! just need to note that when `CollectWhite` those `buffered` object do not need to be freed, since they are already buffered for later release.
 
 mod collector;
-mod drop_object;
 mod header;
-mod utils;
+pub(crate) mod utils;
 use crate::PyObject;
-
+pub(crate) use header::{GcHeader, GcHeaderInner};
 type GcObj = PyObject;
 type GcObjRef<'a> = &'a GcObj;

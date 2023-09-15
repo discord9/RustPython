@@ -1,8 +1,10 @@
 use crate::common::{
-    lock::{PyRwLock, PyRwLockReadGuard},
+    lock::{PyRwLock, PyRwLockReadGuard, PyRwLockWriteGuard},
     rc::PyRc,
 };
 use crate::object::gc::collector::Collector;
+
+use super::collector::GLOBAL_COLLECTOR;
 
 /// `GcAction` return by calling `decrement()`,
 /// which will tell the caller what to do next with current object
@@ -36,6 +38,51 @@ pub struct GcHeader {
     inner: PyRwLock<GcHeaderInner>,
 }
 
+// mimic RefCnt's API
+impl GcHeader {
+    pub fn new() -> Self {
+        Self {
+            inner: PyRwLock::new(GcHeaderInner::new()),
+        }
+    }
+    pub fn header(&self) -> PyRwLockWriteGuard<GcHeaderInner> {
+        self.inner.write()
+    }
+    pub fn get(&self) -> usize {
+        self.header().rc()
+    }
+
+    /// This is to mimic `RefCount::inc`
+    pub fn inc(&self) {
+        self.header().inc_black()
+    }
+
+    /// Returns true if successful
+    pub fn safe_inc(&self) -> bool {
+        let mut inner = self.header();
+        if inner.rc() == 0 {
+            return false;
+        } else {
+            inner.inc_black();
+            return true;
+        }
+    }
+
+    /// raw dec ref cnt, no shenanigans of adding buffer
+    /// useful after trying to run `__del__` while keeping the object alive
+    pub fn dec(&self) -> bool {
+        self.header().dec() == 0
+    }
+
+    pub fn leak(&self) {
+        self.header().set_leaked(true);
+    }
+
+    pub fn is_leaked(&self) -> bool {
+        self.header().is_leaked()
+    }
+}
+
 /// Garbage collect header, containing ref count and other info
 /// During Garbage Collection, no concurrent access occured, so accessing this is ok,
 /// but during normal operation, a mutex is needed hence `GcHeader`
@@ -52,6 +99,22 @@ pub struct GcHeaderInner {
 }
 
 impl GcHeaderInner {
+    pub fn gc(&self) -> PyRc<Collector> {
+        self.gc.clone()
+    }
+    pub fn new() -> Self {
+        Self {
+            ref_cnt: 1,
+            color: Color::Black,
+            buffered: false,
+            leak: false,
+            in_cycle: false,
+            gc: GLOBAL_COLLECTOR.clone(),
+        }
+    }
+    pub fn increment(&mut self) {
+        self.inc_black()
+    }
     /// inc ref cnt and set color to black, do nothing if leaked
     pub fn inc_black(&mut self) {
         if self.leak {
