@@ -1,5 +1,6 @@
 use super::header::Color;
-use crate::common::lock::{PyMutex, PyMutexGuard, PyRwLock, PyRwLockReadGuard, PyRwLockWriteGuard};
+use super::GCReadLock;
+use crate::common::lock::{PyMutex, PyMutexGuard, PyRwLock, PyRwLockWriteGuard};
 use crate::common::rc::PyRc;
 use crate::object::gc::utils::{GcResult, GcStatus};
 use crate::object::gc::GcObj;
@@ -142,6 +143,9 @@ impl Collector {
         let freed = Self::mark_roots(&mut *self.roots.lock());
         Self::scan_roots(&mut *self.roots.lock());
         let ret_cycle = self.collect_roots(self.roots.lock(), lock);
+        {
+            warn!("Garbage Cycle Object Collected: {}", ret_cycle);
+        }
         (freed, ret_cycle).into()
     }
 
@@ -439,13 +443,22 @@ impl Collector {
 }
 
 /// TODO: maybe not use global collector
-pub fn pausing(vm: &VirtualMachine) -> PyRwLockReadGuard<()> {
-    GLOBAL_COLLECTOR.pause.read_recursive()
+pub fn pausing(vm: &VirtualMachine) {
+    let lock = GLOBAL_COLLECTOR.pause.read_recursive();
+    *vm.pause_lock.borrow_mut() = GCReadLock(Some(lock));
+}
+
+pub fn resuming(vm: &VirtualMachine) {
+    let mut pause = vm.pause_lock.borrow_mut();
+    if pause.0.is_none() {
+        warn!("GC Pause lock resume without pause");
+    }
+    pause.0 = None;
 }
 
 pub fn try_collect(vm: &VirtualMachine) -> usize {
     if isenabled(vm) {
-        let res = GLOBAL_COLLECTOR.collect_cycles(false);
+        let res = upgrade_read_to_write(vm, false);
         res.acyclic_cnt + res.cyclic_cnt
     } else {
         0
@@ -454,17 +467,26 @@ pub fn try_collect(vm: &VirtualMachine) -> usize {
 
 pub fn collect(vm: &VirtualMachine) -> usize {
     if isenabled(vm) {
-        let res = GLOBAL_COLLECTOR.collect_cycles(true);
+        let res = upgrade_read_to_write(vm, true);
         res.acyclic_cnt + res.cyclic_cnt
     } else {
         0
     }
 }
 
-pub fn isenabled(vm: &VirtualMachine) -> bool {
+/// unlock current thread's read lock and acquire write lock
+fn upgrade_read_to_write(vm: &VirtualMachine, force: bool) -> GcResult {
+    // not using `unlocked` because might need to recursively check pause_lock
+    vm.pause_lock.borrow_mut().0 = None;
+    let res = GLOBAL_COLLECTOR.collect_cycles(force);
+    vm.pause_lock.borrow_mut().0 = Some(GLOBAL_COLLECTOR.pause.read_recursive());
+    res
+}
+
+pub fn isenabled(_vm: &VirtualMachine) -> bool {
     *GLOBAL_COLLECTOR.is_enabled.lock()
 }
 
-pub fn setenabled(vm: &VirtualMachine, enabled: bool) {
+pub fn setenabled(_vm: &VirtualMachine, enabled: bool) {
     *GLOBAL_COLLECTOR.is_enabled.lock() = enabled;
 }

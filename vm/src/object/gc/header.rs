@@ -1,24 +1,10 @@
 use crate::common::{
-    lock::{PyRwLock, PyRwLockReadGuard, PyRwLockWriteGuard},
+    lock::{PyRwLock, PyRwLockWriteGuard},
     rc::PyRc,
 };
 use crate::object::gc::collector::Collector;
 
 use super::collector::GLOBAL_COLLECTOR;
-
-/// `GcAction` return by calling `decrement()`,
-/// which will tell the caller what to do next with current object
-pub enum GcAction {
-    /// full drop means run `__del__` and run destructor, then dealloc this object
-    FullDrop,
-    /// no dealloc means run `__del__` and run destructor, but **NOT** dealloc this object
-    NoDealloc,
-    /// only run `__del__`, **NOT** run `drop()` and **NOT** dealloc this object
-    OnlyDel,
-    /// do nothing, either because rc!=0 or rc already reach zero(because previous call to `decrement()`)
-    /// or object is leaked and can't be drop
-    Nothing,
-}
 
 /// other color(Green, Red, Orange) in the paper is not in use for now, so remove them in this enum
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -168,19 +154,5 @@ impl GcHeaderInner {
 
     pub fn set_in_cycle(&mut self, in_cycle: bool) {
         self.in_cycle = in_cycle;
-    }
-
-    /// acquire a gc pausing lock, always success
-    pub fn gc_pause(&self) -> GcPauseGuard {
-        todo!()
-    }
-}
-
-/// a lock to GC, prevent GC from happening
-pub struct GcPauseGuard<'a>(Option<PyRwLockReadGuard<'a, ()>>);
-
-impl GcPauseGuard<'_> {
-    pub fn new() -> Self {
-        todo!()
     }
 }

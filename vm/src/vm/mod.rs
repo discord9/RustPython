@@ -29,6 +29,7 @@ use crate::{
     frozen::FrozenModule,
     function::{ArgMapping, FuncArgs, PySetterValue},
     import,
+    object::gc::GCReadLock,
     protocol::PyIterIter,
     scope::Scope,
     signal, stdlib,
@@ -77,6 +78,8 @@ pub struct VirtualMachine {
     pub state: PyRc<PyGlobalState>,
     pub initialized: bool,
     recursion_depth: Cell<usize>,
+    /// This is used to pause the Virtual Machine's thread if gc is happening
+    pub pause_lock: RefCell<GCReadLock>,
 }
 
 #[derive(Debug, Default)]
@@ -189,6 +192,7 @@ impl VirtualMachine {
             }),
             initialized: false,
             recursion_depth: Cell::new(0),
+            pause_lock: RefCell::new(GCReadLock(None)),
         };
 
         if vm.state.hash_secret.hash_str("")

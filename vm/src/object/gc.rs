@@ -39,8 +39,11 @@
 mod collector;
 mod header;
 pub(crate) mod utils;
-pub use crate::object::gc::collector::{collect, isenabled, pausing, setenabled, try_collect};
+pub use crate::object::gc::collector::{
+    collect, isenabled, pausing, resuming, setenabled, try_collect,
+};
 use crate::PyObject;
 pub(crate) use header::{GcHeader, GcHeaderInner};
+pub(crate) use utils::GCReadLock;
 type GcObj = PyObject;
 type GcObjRef<'a> = &'a GcObj;

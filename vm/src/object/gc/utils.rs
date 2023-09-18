@@ -1,3 +1,11 @@
+use crate::common::lock::PyRwLockReadGuard;
+
+/// This is safe to Send only because VirtualMachine is guaranteed to executed per-thread, and upon creation of virtual machine
+/// no read lock is acquired, see [`VirtualMachine::start_thread`]
+pub struct GCReadLock(pub Option<PyRwLockReadGuard<'static, ()>>);
+
+unsafe impl Send for GCReadLock {}
+
 #[derive(PartialEq, Eq)]
 pub enum GcStatus {
     /// should be drop by caller

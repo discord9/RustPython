@@ -356,9 +356,12 @@ impl ExecutingFrame<'_> {
             let bytecode::CodeUnit { op, arg } = instrs[idx];
             let arg = arg_state.extend(arg);
             let mut do_extend_arg = false;
-            let pause = crate::object::gc::pausing(vm);
+            crate::object::gc::pausing(vm);
+
             let result = self.execute_instruction(op, arg, &mut do_extend_arg, vm);
-            drop(pause);
+
+            crate::object::gc::resuming(vm);
+
             gc_count += 1;
             if gc_count > 10_000 {
                 crate::object::gc::try_collect(vm);
