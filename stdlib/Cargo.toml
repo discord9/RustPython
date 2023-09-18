@@ -11,6 +11,9 @@ edition = "2021"
 
 [features]
 threading = ["rustpython-common/threading", "rustpython-vm/threading"]
+# more types of gc are possible, but this is the only one we have for now
+gc = ["gc_bacon"]
+gc_bacon = []
 zlib = ["libz-sys", "flate2/zlib"]
 bz2 = ["bzip2"]
 ssl = ["openssl", "openssl-sys", "foreign-types-shared"]
