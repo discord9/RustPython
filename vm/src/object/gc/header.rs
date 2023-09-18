@@ -116,6 +116,9 @@ impl GcHeaderInner {
     }
 
     pub fn dec(&mut self) -> usize {
+        if self.ref_cnt == 0 {
+            panic!("dec ref cnt of 0")
+        }
         self.ref_cnt -= 1;
         self.ref_cnt
     }
