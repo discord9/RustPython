@@ -163,7 +163,7 @@ impl VirtualMachine {
             state: self.state.clone(),
             initialized: self.initialized,
             recursion_depth: Cell::new(0),
-            pause_lock: RefCell::new(GCReadLock(None)),
+            pause_lock: RefCell::new(GCReadLock::new()),
         };
         ThreadedVirtualMachine { vm }
     }

@@ -192,7 +192,7 @@ impl VirtualMachine {
             }),
             initialized: false,
             recursion_depth: Cell::new(0),
-            pause_lock: RefCell::new(GCReadLock(None)),
+            pause_lock: RefCell::new(GCReadLock::new()),
         };
 
         if vm.state.hash_secret.hash_str("")

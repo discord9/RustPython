@@ -1,5 +1,4 @@
 use super::header::Color;
-use super::GCReadLock;
 use crate::common::lock::{PyMutex, PyMutexGuard, PyRwLock, PyRwLockWriteGuard};
 use crate::common::rc::PyRc;
 use crate::object::gc::utils::{GcResult, GcStatus};
@@ -444,16 +443,29 @@ impl Collector {
 
 /// TODO: maybe not use global collector
 pub fn pausing(vm: &VirtualMachine) {
-    let lock = GLOBAL_COLLECTOR.pause.read_recursive();
-    *vm.pause_lock.borrow_mut() = GCReadLock(Some(lock));
+    let mut pause = vm.pause_lock.borrow_mut();
+    if pause.guard.is_some() {
+        pause.recursive += 1;
+    } else {
+        assert_eq!(pause.recursive, 0);
+        let lock = GLOBAL_COLLECTOR.pause.read_recursive();
+        pause.guard = Some(lock);
+    }
 }
 
 pub fn resuming(vm: &VirtualMachine) {
     let mut pause = vm.pause_lock.borrow_mut();
-    if pause.0.is_none() {
-        warn!("GC Pause lock resume without pause");
+    if pause.guard.is_some() {
+        if pause.recursive > 0 {
+            pause.recursive -= 1;
+        } else {
+            assert_eq!(pause.recursive, 0);
+            pause.guard = None;
+        }
+    } else {
+        assert_eq!(pause.recursive, 0);
+        warn!("resuming without pausing");
     }
-    pause.0 = None;
 }
 
 pub fn try_collect(vm: &VirtualMachine) -> usize {
@@ -477,9 +489,14 @@ pub fn collect(vm: &VirtualMachine) -> usize {
 /// unlock current thread's read lock and acquire write lock
 fn upgrade_read_to_write(vm: &VirtualMachine, force: bool) -> GcResult {
     // not using `unlocked` because might need to recursively check pause_lock
-    vm.pause_lock.borrow_mut().0 = None;
+    // which volatile the value of `RefCell`
+    let mut read_lock_stat = vm.pause_lock.borrow_mut().take();
+    read_lock_stat.guard = None;
+
     let res = GLOBAL_COLLECTOR.collect_cycles(force);
-    vm.pause_lock.borrow_mut().0 = Some(GLOBAL_COLLECTOR.pause.read_recursive());
+
+    read_lock_stat.guard = Some(GLOBAL_COLLECTOR.pause.read_recursive());
+    *vm.pause_lock.borrow_mut() = read_lock_stat;
     res
 }
 

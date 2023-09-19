@@ -2,7 +2,34 @@ use crate::common::lock::PyRwLockReadGuard;
 
 /// This is safe to Send only because VirtualMachine is guaranteed to executed per-thread, and upon creation of virtual machine
 /// no read lock is acquired, see [`VirtualMachine::start_thread`]
-pub struct GCReadLock(pub Option<PyRwLockReadGuard<'static, ()>>);
+pub struct GCReadLock{
+    pub guard: Option<PyRwLockReadGuard<'static, ()>>, 
+    pub recursive :usize
+}
+
+impl Default for GCReadLock{
+    fn default()->Self{
+        Self::new()
+    }
+}
+
+impl GCReadLock {
+    pub fn new()->Self{
+        Self{
+            guard: None,
+            recursive: 0
+        }
+    }
+    pub fn take(&mut self)->Self{
+        let guard = self.guard.take();
+        let recursive = self.recursive;
+        self.recursive = 0;
+        Self{
+            guard,
+            recursive
+        }
+    }
+}
 
 unsafe impl Send for GCReadLock {}
 
