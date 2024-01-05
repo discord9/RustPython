@@ -4,9 +4,6 @@ use crate::common::lock::PyMutex;
 
 use crate::common::lock::PyRwLockReadGuard;
 
-pub static TYPEID_TO_TYPENAME: once_cell::sync::Lazy<PyMutex<HashMap<std::any::TypeId, String>>> =
-    once_cell::sync::Lazy::new(|| PyMutex::new(HashMap::new()));
-
 /// This is safe to Send only because VirtualMachine is guaranteed to executed per-thread, and upon creation of virtual machine
 /// no read lock is acquired, see [`VirtualMachine::start_thread`]
 pub struct GCReadLock {
