@@ -40,7 +40,7 @@ mod collector;
 mod header;
 pub(crate) mod utils;
 pub use crate::object::gc::collector::{
-    collect, isenabled, pausing, resuming, setenabled, try_collect,
+    collect, isenabled, need_gc, pausing, resuming, setenabled, try_collect,
 };
 use crate::PyObject;
 pub(crate) use header::{GcHeader, GcHeaderInner};

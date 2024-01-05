@@ -362,10 +362,9 @@ impl ExecutingFrame<'_> {
 
             crate::object::gc::resuming(vm);
 
-            gc_count += 1;
-            if gc_count > 10_000 {
+            // TODO(discord9): only do gc after alloc - dealloc > threshold
+            if crate::object::gc::need_gc(vm) {
                 crate::object::gc::try_collect(vm);
-                gc_count = 0;
             }
             match result {
                 Ok(None) => {}

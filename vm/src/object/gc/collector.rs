@@ -7,17 +7,12 @@ use crate::object::gc::GcObjRef;
 use crate::object::Traverse;
 use crate::{PyObject, VirtualMachine};
 use std::ptr::NonNull;
+use std::sync::Arc;
 use std::time::Instant;
 
 /// The global cycle collector, which collect cycle references for PyInner<T>
-#[cfg(feature = "threading")]
-pub static GLOBAL_COLLECTOR: once_cell::sync::Lazy<PyRc<Collector>> =
-    once_cell::sync::Lazy::new(|| PyRc::new(Default::default()));
-
-#[cfg(not(feature = "threading"))]
-thread_local! {
-    pub static GLOBAL_COLLECTOR: PyRc<Collector> = PyRc::new(Default::default());
-}
+pub static GLOBAL_COLLECTOR: once_cell::sync::Lazy<Arc<Collector>> =
+    once_cell::sync::Lazy::new(|| Arc::new(Default::default()));
 
 /// only use for roots's pointer to object, mark `NonNull` as safe to send
 /// which is true only if when we are holding a gc pause lock
@@ -50,13 +45,41 @@ impl From<WrappedPtr> for NonNull<PyObject> {
     }
 }
 
+#[derive(Debug)]
+pub struct GcCond {
+    pub(crate) threshold: PyRwLock<usize>,
+    pub(crate) root_cleanup_size: PyRwLock<usize>,
+    pub(crate) alloc_cnt: PyRwLock<usize>,
+    pub(crate) dealloc_cnt: PyRwLock<usize>,
+}
+
+impl std::default::Default for GcCond {
+    fn default() -> Self {
+        Self {
+            threshold: PyRwLock::new(700),
+            root_cleanup_size: PyRwLock::new(10000),
+            alloc_cnt: Default::default(),
+            dealloc_cnt: Default::default(),
+        }
+    }
+}
+
+impl Collector {
+    pub fn inc_alloc_cnt(&self) {
+        *self.gc_cond.alloc_cnt.write() += 1;
+    }
+    pub fn inc_dealloc_cnt(&self) {
+        *self.gc_cond.dealloc_cnt.write() += 1;
+    }
+}
+
 pub struct Collector {
     roots: PyMutex<Vec<WrappedPtr>>,
     /// for stop the world, will be try to check lock every time deref ObjecteRef
     /// to achive pausing
     /// TODO(discord9): stop-the-world with pausing between every bytecode execution
     pause: PyRwLock<()>,
-    last_gc_time: PyMutex<Instant>,
+    gc_cond: GcCond,
     is_enabled: PyMutex<bool>,
     /// acquire this to prevent a new gc to happen before this gc is completed
     /// but also resume-the-world early
@@ -71,7 +94,7 @@ impl std::fmt::Debug for Collector {
                 &format!("[{} objects in buffer]", self.roots_len()),
             )
             .field("pause", &self.pause)
-            .field("last_gc_time", &self.last_gc_time)
+            .field("gc_cond", &self.gc_cond)
             .finish()
     }
 }
@@ -81,7 +104,7 @@ impl Default for Collector {
         Self {
             roots: Default::default(),
             pause: Default::default(),
-            last_gc_time: PyMutex::new(Instant::now()),
+            gc_cond: Default::default(),
             is_enabled: PyMutex::new(true),
             cleanup_cycle: PyMutex::new(()),
         }
@@ -114,7 +137,7 @@ impl Collector {
                     match self.pause.try_write() {
                         Some(v) => v,
                         None => {
-                            warn!("Fast GC fail to acquire write lock.");
+                            warn!("Fast-Path GC fail to acquire write lock.");
                             return (0, 0).into();
                         }
                     }
@@ -293,20 +316,21 @@ impl Collector {
             white.push(NonNull::from(obj));
         }
     }
-    /// TODO: change to use weak_ref count to prevent premature dealloc in cycles
+
     /// free everything in white, safe to use even when those objects form cycle refs
+    /// This is a very delicated process and very error-prone, see:
+    /// https://devguide.python.org/internals/garbage-collector/#destroying-unreachable-objects
+    /// for more details
     fn free_cycles(&self, white: Vec<NonNull<PyObject>>) -> usize {
         // TODO: maybe never run __del__ anyway, for running a __del__ function is an implementation detail!!!!
         // TODO: impl PEP 442
-        // 0. count&mark cycle with indexies
-        // 0.5. add back one ref for all thing in white
+        // 0. add back one ref for all thing in white
         // 1. clear weakref
-        // 2. run del
-        // 3. check if cycle is still isolated(using mark_roots&scan_roots), remember to acquire gc's exclusive lock to prevent graph from change
-        // (atomic op required, maybe acquire a lock on them?
-        //or if a object dead immediate before even incref, it will be wrongly revived, but if rc is added back, that should be ok)
-        // 4. drop the still isolated cycle(which is confirmed garbage), then dealloc them
-
+        // 2. PEP 442 deal with `__del__`: https://peps.python.org/pep-0442/
+        // 3. deal with resurrected object by run cycle detect on them one more times
+        // NOTE: require Stop-The-World lock
+        // 4. drop first, then dealloc to avoid access dealloced memory
+        // TODO: fix this function
         // Run drop on each of nodes.
         white.iter().for_each(|i| {
             // Calling drop() will decrement the reference count on any of our live children.
@@ -325,6 +349,8 @@ impl Collector {
                 }
             });
         });
+
+        
         // drop all for once at seperate loop to avoid certain cycle ref double drop bug
         let can_deallocs: Vec<_> = white
             .iter()
@@ -344,6 +370,7 @@ impl Collector {
             })
             .count();
         info!("Cyclic garbage collected, count={}", white.len());
+        
         white.len()
     }
 }
@@ -386,6 +413,7 @@ impl Collector {
             let rc = header.dec();
             drop(header);
             if rc == 0 {
+                self.inc_dealloc_cnt();
                 self.release(obj)
             } else if obj.is_traceable() {
                 // only buffer traceable(and not leaked) object for that is where we can detect cycles
@@ -441,7 +469,7 @@ impl Collector {
     }
 }
 
-/// TODO: maybe not use global collector
+/// Prevent STW lock to untimely trigger a GC in another thread
 pub fn pausing(vm: &VirtualMachine) {
     let mut pause = vm.pause_lock.borrow_mut();
     if pause.guard.is_some() {
@@ -453,6 +481,7 @@ pub fn pausing(vm: &VirtualMachine) {
     }
 }
 
+/// Allowing STW lock to start a GC
 pub fn resuming(vm: &VirtualMachine) {
     let mut pause = vm.pause_lock.borrow_mut();
     if pause.guard.is_some() {
@@ -468,9 +497,28 @@ pub fn resuming(vm: &VirtualMachine) {
     }
 }
 
+/// check if need to gc by checking if alloc_cnt > threshold + dealloc_cnt
+pub fn need_gc(vm: &VirtualMachine) -> bool {
+    let threshold = *GLOBAL_COLLECTOR.gc_cond.threshold.read();
+    let root_len = GLOBAL_COLLECTOR.roots_len();
+    let root_max_len = *GLOBAL_COLLECTOR.gc_cond.root_cleanup_size.read();
+    let mut alloc_cnt = GLOBAL_COLLECTOR.gc_cond.alloc_cnt.write();
+    let mut dealloc_cnt = GLOBAL_COLLECTOR.gc_cond.dealloc_cnt.write();
+    let gc_cond = (*alloc_cnt > threshold + *dealloc_cnt) || root_len > root_max_len;
+    // prevent stocking too many dealloced objects in roots buffer
+    let is_enabled = *GLOBAL_COLLECTOR.is_enabled.lock();
+    let ret = gc_cond && is_enabled;
+    if ret {
+        // reset counter
+        *alloc_cnt = 0;
+        *dealloc_cnt = 0;
+    }
+    ret
+}
+
 pub fn try_collect(vm: &VirtualMachine) -> usize {
     if isenabled(vm) {
-        let res = upgrade_read_to_write(vm, false);
+        let res = stop_the_world_gc(vm, false);
         res.acyclic_cnt + res.cyclic_cnt
     } else {
         0
@@ -479,15 +527,15 @@ pub fn try_collect(vm: &VirtualMachine) -> usize {
 
 pub fn collect(vm: &VirtualMachine) -> usize {
     if isenabled(vm) {
-        let res = upgrade_read_to_write(vm, true);
+        let res = stop_the_world_gc(vm, true);
         res.acyclic_cnt + res.cyclic_cnt
     } else {
         0
     }
 }
 
-/// unlock current thread's read lock and acquire write lock
-fn upgrade_read_to_write(vm: &VirtualMachine, force: bool) -> GcResult {
+/// unlock current thread's STW read lock and acquire write lock
+fn stop_the_world_gc(vm: &VirtualMachine, force: bool) -> GcResult {
     // not using `unlocked` because might need to recursively check pause_lock
     // which volatile the value of `RefCell`
     let mut read_lock_stat = vm.pause_lock.borrow_mut().take();

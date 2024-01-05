@@ -27,6 +27,8 @@ pub struct GcHeader {
 // mimic RefCnt's API
 impl GcHeader {
     pub fn new() -> Self {
+        // inc alloc_cnt
+        GLOBAL_COLLECTOR.inc_alloc_cnt();
         Self {
             inner: PyRwLock::new(GcHeaderInner::new()),
         }
