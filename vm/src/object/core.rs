@@ -217,7 +217,7 @@ impl WeakRefList {
         weak
     }
 
-    fn clear(&self) {
+    pub(crate) fn clear(&self) {
         let to_dealloc = {
             let ptr = match self.inner.get() {
                 Some(ptr) => ptr,
@@ -597,7 +597,7 @@ impl PyObjectRef {
 
 impl PyObject {
     #[inline(always)]
-    fn weak_ref_list(&self) -> Option<&WeakRefList> {
+    pub(in crate::object) fn weak_ref_list(&self) -> Option<&WeakRefList> {
         Some(&self.0.weak_list)
     }
 

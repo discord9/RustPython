@@ -144,6 +144,7 @@ impl VirtualMachine {
     pub fn new_thread(&self) -> ThreadedVirtualMachine {
         use std::cell::Cell;
 
+        #[cfg(feature = "gc_bacon")]
         use crate::object::gc::GCReadLock;
         let vm = VirtualMachine {
             builtins: self.builtins.clone(),
@@ -163,6 +164,7 @@ impl VirtualMachine {
             state: self.state.clone(),
             initialized: self.initialized,
             recursion_depth: Cell::new(0),
+            #[cfg(feature = "gc_bacon")]
             pause_lock: RefCell::new(GCReadLock::new()),
         };
         ThreadedVirtualMachine { vm }

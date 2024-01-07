@@ -349,22 +349,32 @@ impl ExecutingFrame<'_> {
         // Execute until return or exception:
         let instrs = &self.code.instructions;
         let mut arg_state = bytecode::OpArgState::default();
-        let mut gc_count = 0;
+        let mut gc_check_count = 0;
+        // quite arbitrary choice
+        // TODO: found better timing to do gc
+        let gc_check_period = 1000;
         loop {
             let idx = self.lasti() as usize;
             self.update_lasti(|i| *i += 1);
             let bytecode::CodeUnit { op, arg } = instrs[idx];
             let arg = arg_state.extend(arg);
             let mut do_extend_arg = false;
+            #[cfg(feature = "gc_bacon")]
             crate::object::gc::pausing(vm);
 
             let result = self.execute_instruction(op, arg, &mut do_extend_arg, vm);
 
+            #[cfg(feature = "gc_bacon")]
             crate::object::gc::resuming(vm);
 
             // TODO(discord9): only do gc after alloc - dealloc > threshold
-            if crate::object::gc::need_gc(vm) {
+            #[cfg(feature = "gc_bacon")]
+            if gc_check_count >= gc_check_period&& crate::object::gc::need_gc(vm) {
                 crate::object::gc::try_collect(vm);
+                gc_check_count+=1;
+                if gc_check_count >= gc_check_period{
+                    gc_check_count = 0;
+                }
             }
             match result {
                 Ok(None) => {}

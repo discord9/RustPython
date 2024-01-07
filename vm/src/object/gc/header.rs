@@ -1,7 +1,6 @@
-use crate::common::{
-    lock::{PyRwLock, PyRwLockWriteGuard},
-    rc::PyRc,
-};
+use std::sync::Arc;
+
+use crate::common::lock::{PyRwLock, PyRwLockWriteGuard};
 use crate::object::gc::collector::Collector;
 
 use super::collector::GLOBAL_COLLECTOR;
@@ -83,11 +82,11 @@ pub struct GcHeaderInner {
     /// this is for graceful dealloc object in cycle
     in_cycle: bool,
 
-    gc: PyRc<Collector>,
+    gc: Arc<Collector>,
 }
 
 impl GcHeaderInner {
-    pub fn gc(&self) -> PyRc<Collector> {
+    pub fn gc(&self) -> Arc<Collector> {
         self.gc.clone()
     }
     pub fn new() -> Self {

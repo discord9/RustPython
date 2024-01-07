@@ -29,13 +29,15 @@ use crate::{
     frozen::FrozenModule,
     function::{ArgMapping, FuncArgs, PySetterValue},
     import,
-    object::gc::GCReadLock,
     protocol::PyIterIter,
     scope::Scope,
     signal, stdlib,
     warn::WarningsState,
     AsObject, Py, PyObject, PyObjectRef, PyPayload, PyRef, PyResult,
 };
+
+#[cfg(feature = "gc_bacon")]
+use crate::object::gc::GCReadLock;
 use crossbeam_utils::atomic::AtomicCell;
 #[cfg(unix)]
 use nix::{
@@ -79,6 +81,7 @@ pub struct VirtualMachine {
     pub initialized: bool,
     recursion_depth: Cell<usize>,
     /// This is used to pause the Virtual Machine's thread if gc is happening
+    #[cfg(feature = "gc_bacon")]
     pub pause_lock: RefCell<GCReadLock>,
 }
 
@@ -192,6 +195,7 @@ impl VirtualMachine {
             }),
             initialized: false,
             recursion_depth: Cell::new(0),
+            #[cfg(feature = "gc_bacon")]
             pause_lock: RefCell::new(GCReadLock::new()),
         };
 

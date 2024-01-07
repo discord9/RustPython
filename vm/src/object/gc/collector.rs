@@ -1,18 +1,18 @@
 use super::header::Color;
-use crate::common::lock::{PyMutex, PyMutexGuard, PyRwLock, PyRwLockWriteGuard};
-use crate::common::rc::PyRc;
 use crate::object::gc::utils::{GcResult, GcStatus};
 use crate::object::gc::GcObj;
 use crate::object::gc::GcObjRef;
 use crate::object::Traverse;
 use crate::{PyObject, VirtualMachine};
+use itertools::Itertools;
+use parking_lot::{Mutex, MutexGuard, RwLock, RwLockWriteGuard};
 use std::ptr::NonNull;
 use std::sync::Arc;
-use std::time::Instant;
+
+use once_cell::sync::Lazy;
 
 /// The global cycle collector, which collect cycle references for PyInner<T>
-pub static GLOBAL_COLLECTOR: once_cell::sync::Lazy<Arc<Collector>> =
-    once_cell::sync::Lazy::new(|| Arc::new(Default::default()));
+pub static GLOBAL_COLLECTOR: Lazy<Arc<Collector>> = Lazy::new(|| Arc::new(Default::default()));
 
 /// only use for roots's pointer to object, mark `NonNull` as safe to send
 /// which is true only if when we are holding a gc pause lock
@@ -47,20 +47,33 @@ impl From<WrappedPtr> for NonNull<PyObject> {
 
 #[derive(Debug)]
 pub struct GcCond {
-    pub(crate) threshold: PyRwLock<usize>,
-    pub(crate) root_cleanup_size: PyRwLock<usize>,
-    pub(crate) alloc_cnt: PyRwLock<usize>,
-    pub(crate) dealloc_cnt: PyRwLock<usize>,
+    pub(crate) threshold: RwLock<usize>,
+    pub(crate) root_cleanup_size: RwLock<usize>,
+    pub(crate) alloc_cnt: RwLock<usize>,
+    pub(crate) dealloc_cnt: RwLock<usize>,
 }
 
 impl std::default::Default for GcCond {
     fn default() -> Self {
         Self {
-            threshold: PyRwLock::new(700),
-            root_cleanup_size: PyRwLock::new(10000),
+            threshold: RwLock::new(700),
+            root_cleanup_size: RwLock::new(10000),
             alloc_cnt: Default::default(),
             dealloc_cnt: Default::default(),
         }
+    }
+}
+
+#[cfg(feature = "threading")]
+impl Collector {
+    /// This is to mimic `LocalKey`'s api, to avoid using too many cfg in code
+    pub fn with<'r, F, R>(&'static self, f: F) -> R
+    where
+        F: FnOnce(&Self) -> R,
+        'r: 'static,
+        R: 'r,
+    {
+        f(self)
     }
 }
 
@@ -73,17 +86,23 @@ impl Collector {
     }
 }
 
+/// This is the singleton collector that manage all RustPython Garbage Collect
+/// within a process, which is a stop-the-world, mark-sweep, tracing collector
+///
+/// TODO: maybe using one per Virtual Machine/thread?
+///
+// Collector use thread-safe mutex because multiple non-thread vm use the same collector
 pub struct Collector {
-    roots: PyMutex<Vec<WrappedPtr>>,
+    roots: Mutex<Vec<WrappedPtr>>,
     /// for stop the world, will be try to check lock every time deref ObjecteRef
     /// to achive pausing
     /// TODO(discord9): stop-the-world with pausing between every bytecode execution
-    pause: PyRwLock<()>,
+    pause: RwLock<()>,
     gc_cond: GcCond,
-    is_enabled: PyMutex<bool>,
+    is_enabled: Mutex<bool>,
     /// acquire this to prevent a new gc to happen before this gc is completed
     /// but also resume-the-world early
-    cleanup_cycle: PyMutex<()>,
+    cleanup_cycle: Mutex<()>,
 }
 
 impl std::fmt::Debug for Collector {
@@ -105,19 +124,16 @@ impl Default for Collector {
             roots: Default::default(),
             pause: Default::default(),
             gc_cond: Default::default(),
-            is_enabled: PyMutex::new(true),
-            cleanup_cycle: PyMutex::new(()),
+            is_enabled: Mutex::new(true),
+            cleanup_cycle: Mutex::new(()),
         }
     }
 }
 
 // core of gc algorithm
 impl Collector {
-    /// `force` means a explicit call to `gc.collect()`, which will try to acquire a lock for a little longer
-    /// and have a higher chance to actually collect garbage
-    #[allow(unused)]
-    fn collect_cycles(&self, force: bool) -> GcResult {
-        // acquire stop-the-world lock
+    fn try_pause_self(&self, force: bool)->Option<RwLockWriteGuard<()>>
+    {
         let lock = {
             #[cfg(feature = "threading")]
             {
@@ -129,7 +145,7 @@ impl Collector {
                         Some(v) => v,
                         None => {
                             warn!("Can't acquire lock to stop the world after waiting.");
-                            return (0, 0).into();
+                            return None;
                         }
                     }
                 } else {
@@ -138,7 +154,7 @@ impl Collector {
                         Some(v) => v,
                         None => {
                             warn!("Fast-Path GC fail to acquire write lock.");
-                            return (0, 0).into();
+                            return None;
                         }
                     }
                 }
@@ -151,6 +167,19 @@ impl Collector {
                 let _force = force;
                 self.pause.try_write().unwrap()
             }
+        };
+        Some(lock)
+    }
+
+    /// `force` means a explicit call to `gc.collect()`, which will try to acquire a lock for a little longer
+    /// and have a higher chance to actually collect garbage
+    #[allow(unused)]
+    fn collect_cycles(&self, force: bool) -> GcResult {
+        // acquire stop-the-world lock
+        let lock = self.try_pause_self(force);
+        let lock = match lock{
+            Some(lock) => lock,
+            None => return (0,0).into()
         };
 
         // if is empty or last gc's cleanup is not done, return early
@@ -265,8 +294,8 @@ impl Collector {
 
     fn collect_roots(
         &self,
-        mut roots_lock: PyMutexGuard<Vec<WrappedPtr>>,
-        lock: PyRwLockWriteGuard<()>,
+        mut roots_lock: MutexGuard<Vec<WrappedPtr>>,
+        lock: RwLockWriteGuard<()>,
     ) -> usize {
         // Collecting the nodes into this Vec is difference from the original
         // Bacon-Rajan paper. We need this because we have destructors(RAII) and
@@ -295,7 +324,7 @@ impl Collector {
         let _cleanup_lock = self.cleanup_cycle.lock();
         // unlock fair so high freq gc wouldn't stop the world forever
         #[cfg(feature = "threading")]
-        PyRwLockWriteGuard::unlock_fair(lock);
+        RwLockWriteGuard::unlock_fair(lock);
         #[cfg(not(feature = "threading"))]
         drop(lock);
 
@@ -350,27 +379,46 @@ impl Collector {
             });
         });
 
-        
-        // drop all for once at seperate loop to avoid certain cycle ref double drop bug
-        let can_deallocs: Vec<_> = white
-            .iter()
-            .map(|i| unsafe { PyObject::drop_only(*i) })
-            .collect();
-        // drop first, deallocate later so to avoid heap corruption
-        // cause by circular ref and therefore
-        // access pointer of already dropped value's memory region
-        white
-            .iter()
-            .zip(can_deallocs)
-            .map(|(i, can_dealloc)| {
-                if can_dealloc {
-                    let ret = unsafe { PyObject::dealloc_only(*i) };
-                    debug_assert!(ret);
+        // 1. Handle and clean weak references
+        for i in white.iter() {
+            unsafe {
+                let zelf = i.as_ref();
+                if let Some(wrl) = zelf.weak_ref_list() {
+                    wrl.clear();
                 }
-            })
-            .count();
+            }
+        }
+
+        // 2. run __del__
+        let mut resurrected: Vec<WrappedPtr> = Vec::new();
+        let white = white.into_iter().filter(|i|{
+            unsafe {
+                let zelf = i.as_ref();
+                if let Err(()) = zelf.call_del() {
+                    resurrected.push(WrappedPtr::from(*i));
+                    false
+                }else{true}
+            }
+        }).collect_vec();
+
+        // 3. run cycle detect on resurrected one more times
+        Self::mark_roots(&mut resurrected);
+        Self::scan_roots(&mut resurrected);
+        let roots = Mutex::new(resurrected);
+        let lock = self.try_pause_self(true).unwrap();
+        self.collect_roots(roots.lock(), lock);
+
+        for i in white.iter(){
+            unsafe { PyObject::call_vtable_drop_only(*i) }
+        }
+
+        for i in white.iter(){
+            let ret = unsafe { PyObject::dealloc_only(*i) };
+                    debug_assert!(ret);
+        }
+
         info!("Cyclic garbage collected, count={}", white.len());
-        
+
         white.len()
     }
 }
