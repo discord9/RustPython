@@ -64,19 +64,6 @@ impl std::default::Default for GcCond {
     }
 }
 
-#[cfg(feature = "threading")]
-impl Collector {
-    /// This is to mimic `LocalKey`'s api, to avoid using too many cfg in code
-    pub fn with<'r, F, R>(&'static self, f: F) -> R
-    where
-        F: FnOnce(&Self) -> R,
-        'r: 'static,
-        R: 'r,
-    {
-        f(self)
-    }
-}
-
 impl Collector {
     pub fn inc_alloc_cnt(&self) {
         *self.gc_cond.alloc_cnt.write() += 1;
@@ -132,8 +119,7 @@ impl Default for Collector {
 
 // core of gc algorithm
 impl Collector {
-    fn try_pause_self(&self, force: bool)->Option<RwLockWriteGuard<()>>
-    {
+    fn try_pause_self(&self, force: bool) -> Option<RwLockWriteGuard<()>> {
         let lock = {
             #[cfg(feature = "threading")]
             {
@@ -177,9 +163,9 @@ impl Collector {
     fn collect_cycles(&self, force: bool) -> GcResult {
         // acquire stop-the-world lock
         let lock = self.try_pause_self(force);
-        let lock = match lock{
+        let lock = match lock {
             Some(lock) => lock,
-            None => return (0,0).into()
+            None => return (0, 0).into(),
         };
 
         // if is empty or last gc's cleanup is not done, return early
@@ -321,7 +307,8 @@ impl Collector {
 
         // mark the end of GC, but another gc can only begin after acquire cleanup_cycle lock
         // because a dead cycle can't actively change object graph anymore
-        let _cleanup_lock = self.cleanup_cycle.lock();
+        // TODO: is clean up lock necessary?
+        // let _cleanup_lock = self.cleanup_cycle.lock();
         // unlock fair so high freq gc wouldn't stop the world forever
         #[cfg(feature = "threading")]
         RwLockWriteGuard::unlock_fair(lock);
@@ -391,30 +378,32 @@ impl Collector {
 
         // 2. run __del__
         let mut resurrected: Vec<WrappedPtr> = Vec::new();
-        let white = white.into_iter().filter(|i|{
-            unsafe {
+        let white = white
+            .into_iter()
+            .filter(|i| unsafe {
                 let zelf = i.as_ref();
                 if let Err(()) = zelf.call_del() {
                     resurrected.push(WrappedPtr::from(*i));
                     false
-                }else{true}
-            }
-        }).collect_vec();
+                } else {
+                    true
+                }
+            })
+            .collect_vec();
 
-        // 3. run cycle detect on resurrected one more times
-        Self::mark_roots(&mut resurrected);
-        Self::scan_roots(&mut resurrected);
-        let roots = Mutex::new(resurrected);
-        let lock = self.try_pause_self(true).unwrap();
-        self.collect_roots(roots.lock(), lock);
-
-        for i in white.iter(){
+        // 3. run cycle detect and gc on resurrected one more times
+        // and save resurrected object for next gc
+        {
+            let mut roots = self.roots.lock();
+            roots.extend(resurrected);
+        }
+        for i in white.iter() {
             unsafe { PyObject::call_vtable_drop_only(*i) }
         }
 
-        for i in white.iter(){
+        for i in white.iter() {
             let ret = unsafe { PyObject::dealloc_only(*i) };
-                    debug_assert!(ret);
+            debug_assert!(ret);
         }
 
         info!("Cyclic garbage collected, count={}", white.len());
