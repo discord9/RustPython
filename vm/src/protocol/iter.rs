@@ -15,9 +15,9 @@ pub struct PyIter<O = PyObjectRef>(O)
 where
     O: Borrow<PyObject>;
 
-unsafe impl<O: Borrow<PyObject>> Traverse for PyIter<O> {
+unsafe impl<O: Borrow<PyObject> + Traverse> Traverse for PyIter<O> {
     fn traverse(&self, tracer_fn: &mut TraverseFn) {
-        self.0.borrow().traverse(tracer_fn);
+        self.0.traverse(tracer_fn);
     }
 }
 
