@@ -1,6 +1,7 @@
-use std::ptr::NonNull;
+use std::{ptr::NonNull, collections::VecDeque};
 
 use rustpython_common::lock::{PyMutex, PyRwLock};
+use thread_local::ThreadLocal;
 
 use crate::{function::Either, object::PyObjectPayload, AsObject, PyObject, PyObjectRef, PyRef};
 
@@ -91,6 +92,30 @@ where
     #[inline]
     fn traverse(&self, traverse_fn: &mut TraverseFn) {
         for elem in self {
+            elem.traverse(traverse_fn);
+        }
+    }
+}
+
+unsafe impl<T> Traverse for VecDeque<T>
+where
+    T: Traverse,
+{
+    #[inline]
+    fn traverse(&self, traverse_fn: &mut TraverseFn) {
+        for elem in self {
+            elem.traverse(traverse_fn);
+        }
+    }
+}
+
+unsafe impl<T> Traverse for ThreadLocal<T>
+where
+    T: Traverse+Sync+Send,
+{
+    #[inline]
+    fn traverse(&self, traverse_fn: &mut TraverseFn) {
+        for elem in self.iter() {
             elem.traverse(traverse_fn);
         }
     }

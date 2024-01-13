@@ -27,17 +27,19 @@ mod _collections {
     use std::collections::VecDeque;
 
     #[pyattr]
-    #[pyclass(name = "deque", unhashable = true)]
+    #[pyclass(name = "deque", unhashable = true, traverse)]
     #[derive(Debug, Default, PyPayload)]
     struct PyDeque {
         deque: PyRwLock<VecDeque<PyObjectRef>>,
+        #[pytraverse(skip)]
         maxlen: Option<usize>,
+        #[pytraverse(skip)]
         state: AtomicCell<usize>, // incremented whenever the indices move
     }
 
     type PyDequeRef = PyRef<PyDeque>;
 
-    #[derive(FromArgs)]
+    #[derive(FromArgs, Traverse)]
     struct PyDequeOptions {
         #[pyarg(any, optional)]
         iterable: OptionalArg<PyObjectRef>,
@@ -590,18 +592,19 @@ mod _collections {
     }
 
     #[pyattr]
-    #[pyclass(name = "_deque_iterator")]
+    #[pyclass(name = "_deque_iterator", traverse)]
     #[derive(Debug, PyPayload)]
     struct PyDequeIterator {
+        #[pytraverse(skip)]
         state: usize,
         internal: PyMutex<PositionIterInternal<PyDequeRef>>,
     }
 
-    #[derive(FromArgs)]
+    #[derive(FromArgs, Traverse)]
     struct DequeIterArgs {
         #[pyarg(positional)]
         deque: PyDequeRef,
-
+        #[pytraverse(skip)]
         #[pyarg(positional, optional)]
         index: OptionalArg<isize>,
     }
@@ -670,9 +673,10 @@ mod _collections {
     }
 
     #[pyattr]
-    #[pyclass(name = "_deque_reverse_iterator")]
+    #[pyclass(name = "_deque_reverse_iterator", traverse)]
     #[derive(Debug, PyPayload)]
     struct PyReverseDequeIterator {
+        #[pytraverse(skip)]
         state: usize,
         // position is counting from the tail
         internal: PyMutex<PositionIterInternal<PyDequeRef>>,
