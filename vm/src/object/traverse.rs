@@ -42,6 +42,9 @@ unsafe impl Traverse for PyObjectRef {
     }
 }
 
+// traverse is not impl for PyRc because the semantics of PyRc is that it's not owned by gc, so it's not gc-able
+// and PyRc-ed type should not form a cycle, so it's not needed to traverse it's children
+
 unsafe impl<T: PyObjectPayload> Traverse for PyRef<T> {
     fn traverse(&self, traverse_fn: &mut TraverseFn) {
         traverse_fn(self.as_object())

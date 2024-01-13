@@ -350,7 +350,7 @@ mod _operator {
     /// After h = attrgetter('name.first', 'name.last'), the call h(r) returns
     /// (r.name.first, r.name.last).
     #[pyattr]
-    #[pyclass(name = "attrgetter")]
+    #[pyclass(name = "attrgetter", traverse)]
     #[derive(Debug, PyPayload)]
     struct PyAttrGetter {
         attrs: Vec<PyStrRef>,
@@ -449,7 +449,7 @@ mod _operator {
     /// After f = itemgetter(2), the call f(r) returns r[2].
     /// After g = itemgetter(2, 5, 3), the call g(r) returns (r[2], r[5], r[3])
     #[pyattr]
-    #[pyclass(name = "itemgetter")]
+    #[pyclass(name = "itemgetter", traverse)]
     #[derive(Debug, PyPayload)]
     struct PyItemGetter {
         items: Vec<PyObjectRef>,
@@ -519,7 +519,7 @@ mod _operator {
     /// After g = methodcaller('name', 'date', foo=1), the call g(r) returns
     /// r.name('date', foo=1).
     #[pyattr]
-    #[pyclass(name = "methodcaller")]
+    #[pyclass(name = "methodcaller", traverse)]
     #[derive(Debug, PyPayload)]
     struct PyMethodCaller {
         name: PyStrRef,

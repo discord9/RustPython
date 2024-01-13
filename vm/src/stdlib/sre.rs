@@ -129,15 +129,19 @@ mod _sre {
     }
 
     #[pyattr]
-    #[pyclass(name = "Pattern")]
+    #[pyclass(name = "Pattern", traverse)]
     #[derive(Debug, PyPayload)]
     pub(crate) struct Pattern {
         pub pattern: PyObjectRef,
+        #[pytraverse(skip)]
         pub flags: SreFlag,
+        #[pytraverse(skip)]
         pub code: Vec<u32>,
+        #[pytraverse(skip)]
         pub groups: usize,
         pub groupindex: PyDictRef,
         pub indexgroup: Vec<Option<PyStrRef>>,
+        #[pytraverse(skip)]
         pub isbytes: bool,
     }
 
@@ -515,14 +519,18 @@ mod _sre {
     }
 
     #[pyattr]
-    #[pyclass(name = "Match")]
+    #[pyclass(name = "Match", traverse)]
     #[derive(Debug, PyPayload)]
     pub(crate) struct Match {
         string: PyObjectRef,
         pattern: PyRef<Pattern>,
+        #[pytraverse(skip)]
         pos: usize,
+        #[pytraverse(skip)]
         endpos: usize,
+        #[pytraverse(skip)]
         lastindex: isize,
+        #[pytraverse(skip)]
         regs: Vec<(isize, isize)>,
     }
 
@@ -773,13 +781,16 @@ mod _sre {
     }
 
     #[pyattr]
-    #[pyclass(name = "SRE_Scanner")]
+    #[pyclass(name = "SRE_Scanner", traverse)]
     #[derive(Debug, PyPayload)]
     struct SreScanner {
         pattern: PyRef<Pattern>,
         string: PyObjectRef,
+        #[pytraverse(skip)]
         start: AtomicCell<usize>,
+        #[pytraverse(skip)]
         end: usize,
+        #[pytraverse(skip)]
         must_advance: AtomicCell<bool>,
     }
 
