@@ -1094,6 +1094,12 @@ pub struct PyWeakRef<T: PyObjectPayload> {
     _marker: PhantomData<T>,
 }
 
+unsafe impl<T: PyObjectPayload> Traverse for PyWeakRef<T> {
+    fn traverse(&self,traverse_fn: &mut TraverseFn) {
+        traverse_fn(self.weak.as_object());
+    }
+}
+
 impl<T: PyObjectPayload> PyWeakRef<T> {
     pub fn upgrade(&self) -> Option<PyRef<T>> {
         self.weak
