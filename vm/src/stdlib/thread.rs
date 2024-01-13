@@ -377,7 +377,7 @@ pub(crate) mod _thread {
     }
 
     #[pyattr]
-    #[pyclass(module = "thread", name = "_local")]
+    #[pyclass(module = "thread", name = "_local", traverse)]
     #[derive(Debug, PyPayload)]
     struct Local {
         data: ThreadLocal<PyDictRef>,
