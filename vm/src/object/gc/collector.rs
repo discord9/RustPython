@@ -302,7 +302,7 @@ impl Collector {
             .count();
         let len_white = white.len();
         if !white.is_empty() {
-            info!("Cyclic garbage collected, count={}", white.len());
+            info!("Cyclic garbage founded, count={}", white.len());
         }
 
         // mark the end of GC, but another gc can only begin after acquire cleanup_cycle lock
@@ -338,7 +338,6 @@ impl Collector {
     /// https://devguide.python.org/internals/garbage-collector/#destroying-unreachable-objects
     /// for more details
     fn free_cycles(&self, white: Vec<NonNull<PyObject>>) -> usize {
-        // TODO: maybe never run __del__ anyway, for running a __del__ function is an implementation detail!!!!
         // TODO: impl PEP 442
         // 0. add back one ref for all thing in white
         // 1. clear weakref
@@ -390,7 +389,6 @@ impl Collector {
                 }
             })
             .collect_vec();
-
         // 3. run cycle detect and gc on resurrected one more times
         // and save resurrected object for next gc
         {
@@ -485,10 +483,9 @@ impl Collector {
         // TODO(discord9): just drop in here, not by the caller, which is cleaner
         // before it is free in here,
         // but now change to passing message to allow it to drop outside
-        match (header.buffered(), header.in_cycle()) {
-            (true, _) => GcStatus::BufferedDrop,
-            (_, true) => GcStatus::GarbageCycle,
-            (false, false) => GcStatus::ShouldDrop,
+        match header.buffered() {
+            true=> GcStatus::BufferedDrop,
+            false => GcStatus::ShouldDrop,
         }
     }
 

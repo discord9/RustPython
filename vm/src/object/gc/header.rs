@@ -55,10 +55,16 @@ impl GcHeader {
         }
     }
 
-    /// raw dec ref cnt, no shenanigans of adding buffer
+    /// raw dec ref cnt, no shenanigans of adding to buffer
     /// useful after trying to run `__del__` while keeping the object alive
     pub fn dec(&self) -> bool {
-        self.header().dec() == 0
+        if self.header().dec() == 0 {
+            // mark object as free
+            self.header().set_color(Color::Black);
+            true
+        } else {
+            false
+        }
     }
 
     pub fn leak(&self) {

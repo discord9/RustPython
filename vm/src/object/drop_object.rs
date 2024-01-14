@@ -11,6 +11,7 @@ use crate::object::gc::{utils::GcStatus, GcHeaderInner};
 use crate::object::{core::PyInner, payload::PyObjectPayload, PyObject};
 use std::ptr::NonNull;
 
+/// partially drop(without deallocate) a object's field using `drop_in_place`
 macro_rules! partially_drop {
     ($OBJ: ident. $($(#[$attr:meta])? $FIELD: ident),*) => {
         $(
@@ -35,7 +36,8 @@ pub(super) unsafe fn drop_only_obj<T: PyObjectPayload>(x: *mut PyObject) {
 pub(super) unsafe fn dealloc_only_obj<T: PyObjectPayload>(x: *mut PyObject) {
     {
         let obj = &*x.cast::<PyInner<T>>();
-        partially_drop!(obj.ref_count, vtable, weak_list);
+        // no need to drop weak list or vtable, it's a pointer
+        partially_drop!(obj.ref_count);
     } // don't want keep a ref to a to be deallocated object
     std::alloc::dealloc(
         x.cast(),
@@ -71,7 +73,7 @@ impl PyObject {
                 GcStatus::BufferedDrop => unsafe {
                     PyObject::drop_only(ptr);
                 },
-                GcStatus::GarbageCycle | GcStatus::ShouldKeep | GcStatus::DoNothing => (),
+                GcStatus::ShouldKeep | GcStatus::DoNothing => (),
             }
         }
     }
@@ -91,7 +93,7 @@ impl PyObject {
     /// might fail to drop due to been resurrected by __del__ which return false
     pub(in crate::object) unsafe fn drop_only(ptr: NonNull<PyObject>) -> bool {
         if let Err(()) = ptr.as_ref().drop_slow_inner() {
-            // abort drop for whatever reason
+            // abort drop because it's resurrected by __del__, hence rc is not zero
             return false;
         }
         let drop_only = ptr.as_ref().0.vtable.drop_only;

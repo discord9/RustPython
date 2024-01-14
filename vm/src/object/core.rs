@@ -814,8 +814,16 @@ impl PyObject {
     /// Can only be called when ref_count has dropped to zero. `ptr` must be valid
     #[inline(never)]
     pub(super) unsafe fn drop_slow(ptr: NonNull<PyObject>) {
+        debug_assert!(!ptr.as_ref().header().buffered());
         if let Err(()) = ptr.as_ref().drop_slow_inner() {
             // abort drop for whatever reason
+            return;
+        }
+        
+        if ptr.as_ref().header().buffered(){
+            info!("dropping buffered object");
+            let drop_only = ptr.as_ref().0.vtable.drop_only;
+            drop_only(ptr.as_ptr());
             return;
         }
         let drop_dealloc = ptr.as_ref().0.vtable.drop_dealloc;
