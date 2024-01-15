@@ -365,6 +365,23 @@ impl Collector {
             });
         });
 
+        // 2. run __del__
+        let mut resurrected_not_buffered: Vec<WrappedPtr> = Vec::new();
+        let white = white
+            .into_iter()
+            .filter(|i| unsafe {
+                let zelf = i.as_ref();
+                if let Err(()) = zelf.call_del() {
+                    if !zelf.header().buffered(){
+                        resurrected_not_buffered.push(WrappedPtr::from(*i));
+                    }
+                    false
+                } else {
+                    true
+                }
+            })
+            .collect_vec();
+
         // 1. Handle and clean weak references
         for i in white.iter() {
             unsafe {
@@ -375,25 +392,11 @@ impl Collector {
             }
         }
 
-        // 2. run __del__
-        let mut resurrected: Vec<WrappedPtr> = Vec::new();
-        let white = white
-            .into_iter()
-            .filter(|i| unsafe {
-                let zelf = i.as_ref();
-                if let Err(()) = zelf.call_del() {
-                    resurrected.push(WrappedPtr::from(*i));
-                    false
-                } else {
-                    true
-                }
-            })
-            .collect_vec();
         // 3. run cycle detect and gc on resurrected one more times
         // and save resurrected object for next gc
         {
             let mut roots = self.roots.lock();
-            roots.extend(resurrected);
+            roots.extend(resurrected_not_buffered);
         }
         for i in white.iter() {
             unsafe { PyObject::call_vtable_drop_only(*i) }
