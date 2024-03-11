@@ -180,9 +180,7 @@ impl Collector {
         let freed = Self::mark_roots(&mut *self.roots.lock());
         Self::scan_roots(&mut *self.roots.lock());
         let ret_cycle = self.collect_roots(self.roots.lock(), lock);
-        {
-            warn!("Garbage Cycle Object Collected: {}", ret_cycle);
-        }
+
         (freed, ret_cycle).into()
     }
 
@@ -347,6 +345,15 @@ impl Collector {
         // 4. drop first, then dealloc to avoid access dealloced memory
         // TODO: fix this function
         // Run drop on each of nodes.
+        #[cfg(debug_assertions)]
+        {
+            // check if the pointers are not same
+            let mut ptrs = white.iter().map(|i| i.as_ptr()).collect_vec();
+            ptrs.sort_unstable();
+            ptrs.dedup();
+            debug_assert_eq!(ptrs.len(), white.len());
+        }
+        info!("Before inc ref count: white.len()={}", white.len());
         white.iter().for_each(|i| {
             // Calling drop() will decrement the reference count on any of our live children.
             // However, during trial deletion the reference count was already decremented
@@ -372,7 +379,9 @@ impl Collector {
             .filter(|i| unsafe {
                 let zelf = i.as_ref();
                 if let Err(()) = zelf.call_del() {
-                    if !zelf.header().buffered(){
+                    let mut header = zelf.header();
+                    if !header.buffered() {
+                        header.set_buffered(true);
                         resurrected_not_buffered.push(WrappedPtr::from(*i));
                     }
                     false
@@ -382,6 +391,7 @@ impl Collector {
             })
             .collect_vec();
 
+        info!("Before clear weakref: white.len()={}", white.len());
         // 1. Handle and clean weak references
         for i in white.iter() {
             unsafe {
@@ -392,6 +402,7 @@ impl Collector {
             }
         }
 
+        info!("Before rebuffer resurrected: resurrected_not_buffered.len()={}", resurrected_not_buffered.len());
         // 3. run cycle detect and gc on resurrected one more times
         // and save resurrected object for next gc
         {
@@ -453,12 +464,8 @@ impl Collector {
             if rc == 0 {
                 self.inc_dealloc_cnt();
                 self.release(obj)
-            } else if obj.is_traceable() {
-                // only buffer traceable(and not leaked) object for that is where we can detect cycles
-                self.possible_root(obj);
-                GcStatus::ShouldKeep
             } else {
-                // if is not traceable, which could be actually acyclic or not, keep them anyway
+                self.possible_root(obj);
                 GcStatus::ShouldKeep
             }
         } else {
@@ -487,7 +494,7 @@ impl Collector {
         // before it is free in here,
         // but now change to passing message to allow it to drop outside
         match header.buffered() {
-            true=> GcStatus::BufferedDrop,
+            true => GcStatus::BufferedDrop,
             false => GcStatus::ShouldDrop,
         }
     }
